@@ -1,0 +1,9 @@
+{
+  "name": "rainwood-system",
+  "private": true,
+  "scripts": {
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "build:all": "npm --prefix backend run build && npm --prefix frontend run build",
+    "test:backend": "npm --prefix backend test"
+  }
+}

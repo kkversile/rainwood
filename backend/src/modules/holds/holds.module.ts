@@ -1,0 +1,1 @@
+import { Module } from '@nestjs/common';import { HoldsService } from './holds.service';import { HoldsController } from './holds.controller';import { AvailabilityModule } from '../availability/availability.module';@Module({imports:[AvailabilityModule],providers:[HoldsService],controllers:[HoldsController],exports:[HoldsService]})export class HoldsModule{}

@@ -1,0 +1,3 @@
+import { AdminLayout } from '../../../components/Shell';
+export const metadata = { title: 'AxisRooms', robots: { index: false, follow: false } };
+export default function Page() { return <AdminLayout title="AxisRooms"><section className="panel"><h2>Channel integration</h2><p className="notice">Local mock mode validates property, room and rate-plan mappings and processes retryable outbox jobs. Official AxisRooms field certification and staging credentials remain external dependencies.</p><p>Operational sync status is visible on each reservation and in Background Jobs.</p></section></AdminLayout>; }
