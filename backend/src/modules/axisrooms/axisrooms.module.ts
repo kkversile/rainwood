@@ -1,0 +1,1 @@
+import { Module } from '@nestjs/common';import { AxisRoomsService } from './axisrooms.service';import { AxisRoomsController } from './axisrooms.controller';@Module({providers:[AxisRoomsService],controllers:[AxisRoomsController],exports:[AxisRoomsService]})export class AxisRoomsModule{}

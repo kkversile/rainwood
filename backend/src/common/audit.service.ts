@@ -1,0 +1,1 @@
+import { Injectable } from '@nestjs/common';import { PrismaService } from './prisma.service';@Injectable() export class AuditService{constructor(private p:PrismaService){}log(data:{actorUserId?:string;action:string;entityType:string;entityId?:string;before?:any;after?:any;ipAddress?:string;userAgent?:string;correlationId?:string}){return this.p.auditLog.create({data})}}
