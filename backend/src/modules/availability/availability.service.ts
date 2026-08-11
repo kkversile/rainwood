@@ -16,8 +16,8 @@ export class AvailabilityService {
     const to = parseDateOnly(query.checkOut, 'checkOut');
     this.validateStay(from, to, query.rooms, query.adults, query.children);
     const nights = nightsBetween(from, to);
-    const hotel = await this.prisma.hotel.findFirst({
-      where: { id: query.hotelId, active: true },
+    const hotels = await this.prisma.hotel.findMany({
+      where: query.hotelId ? { id: query.hotelId, active: true } : { active: true },
       include: {
         rooms: {
           where: { active: true },
@@ -28,8 +28,8 @@ export class AvailabilityService {
         },
       },
     });
-    if (!hotel) throw new BadRequestException('Hotel is unavailable');
-    const options = hotel.rooms.flatMap((room) => room.ratePlans.map((plan) => this.calculate(room, plan, query, from, to, nights)));
+    if (!hotels.length) throw new BadRequestException('Hotel is unavailable');
+    const options = hotels.flatMap((hotel) => hotel.rooms.flatMap((room) => room.ratePlans.map((plan) => this.calculate(room, plan, query, from, to, nights))));
     return options.filter((option) => option.available).map(({ available, ...option }) => option);
   }
 
