@@ -16,8 +16,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
 function StaffDashboardLink() {
   const [signedIn, setSignedIn] = useState(false);
-  useEffect(() => { const sync = () => setSignedIn(Boolean(window.sessionStorage.getItem('rainwood_access_token'))); sync(); window.addEventListener('rainwood-auth-change', sync); return () => window.removeEventListener('rainwood-auth-change', sync); }, []);
-  const role = typeof window !== 'undefined' ? window.sessionStorage.getItem('rainwood_user_role') : null;
+  useEffect(() => { const sync = () => setSignedIn(Boolean(window.localStorage.getItem('rainwood_access_token'))); sync(); window.addEventListener('rainwood-auth-change', sync); window.addEventListener('storage', sync); return () => { window.removeEventListener('rainwood-auth-change', sync); window.removeEventListener('storage', sync); }; }, []);
+  const role = typeof window !== 'undefined' ? window.localStorage.getItem('rainwood_user_role') : null;
   return <Link href={signedIn ? (role === 'AGENT' ? '/agent' : '/admin/dashboard') : '/login'}>{signedIn ? 'Dashboard' : 'Staff Login'}</Link>;
 }
 

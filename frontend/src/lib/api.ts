@@ -4,18 +4,18 @@ let accessToken: string | null = null;
 
 function browserToken() {
   if (typeof window === 'undefined') return accessToken;
-  return accessToken ?? window.sessionStorage.getItem('rainwood_access_token');
+  return accessToken ?? window.localStorage.getItem('rainwood_access_token');
 }
 
 export function setAccessToken(token: string | null, role?: string) {
   accessToken = token;
   if (typeof window !== 'undefined') {
-    if (token) window.sessionStorage.setItem('rainwood_access_token', token);
+    if (token) window.localStorage.setItem('rainwood_access_token', token);
     else {
-      window.sessionStorage.removeItem('rainwood_access_token');
-      window.sessionStorage.removeItem('rainwood_user_role');
+      window.localStorage.removeItem('rainwood_access_token');
+      window.localStorage.removeItem('rainwood_user_role');
     }
-    if (token && role) window.sessionStorage.setItem('rainwood_user_role', role);
+    if (token && role) window.localStorage.setItem('rainwood_user_role', role);
     window.dispatchEvent(new Event('rainwood-auth-change'));
   }
 }
