@@ -20,6 +20,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { ReconciliationModule } from './modules/reconciliation/reconciliation.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { ContactModule } from './modules/contact/contact.module';
+import { SiteSettingsModule } from './modules/site-settings/site-settings.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ContactModule } from './modules/contact/contact.module';
     ReconciliationModule,
     WalletModule,
     ContactModule,
+    SiteSettingsModule,
   ],
 })
 export class AppModule {}
