@@ -7,11 +7,15 @@ function browserToken() {
   return accessToken ?? window.sessionStorage.getItem('rainwood_access_token');
 }
 
-export function setAccessToken(token: string | null) {
+export function setAccessToken(token: string | null, role?: string) {
   accessToken = token;
   if (typeof window !== 'undefined') {
     if (token) window.sessionStorage.setItem('rainwood_access_token', token);
-    else window.sessionStorage.removeItem('rainwood_access_token');
+    else {
+      window.sessionStorage.removeItem('rainwood_access_token');
+      window.sessionStorage.removeItem('rainwood_user_role');
+    }
+    if (token && role) window.sessionStorage.setItem('rainwood_user_role', role);
     window.dispatchEvent(new Event('rainwood-auth-change'));
   }
 }
