@@ -6,7 +6,7 @@ import { AdminAuthGate } from './AdminData';
 import { apiRequest, clearAccessToken } from '../lib/api';
 
 const links = [['/', 'Home'], ['/hotels', 'Hotels'], ['/booking', 'Book'], ['/contact', 'Contact'], ['/agent/login', 'Agent Login']];
-const adminLinks = [['/admin/dashboard', 'Dashboard'], ['/admin/hotels/new', 'Add Hotel'], ['/admin/hotels', 'Manage Hotels'], ['/admin/rate-plans', 'Rate Plans'], ['/admin/agents', 'Agents'], ['/admin/agent-mappings', 'Agent Mappings'], ['/admin/reservations', 'Reservations'], ['/admin/contact-requests', 'Contact Requests'], ['/admin/payments', 'Payments'], ['/admin/reports', 'Reports'], ['/admin/axisrooms', 'AxisRooms'], ['/admin/jobs', 'Jobs'], ['/admin/users', 'Users'], ['/admin/settings', 'Site Settings'], ['/admin/audit-logs', 'Audit Logs']];
+const adminLinks = [['/admin/dashboard', 'Dashboard'], ['/admin/hotels', 'Manage Hotels'], ['/admin/rate-plans', 'Rate Plans'], ['/admin/agents', 'Agents'], ['/admin/agent-mappings', 'Agent Mappings'], ['/admin/reservations', 'Reservations'], ['/admin/contact-requests', 'Contact Requests'], ['/admin/payments', 'Payments'], ['/admin/reports', 'Reports'], ['/admin/axisrooms', 'AxisRooms'], ['/admin/jobs', 'Jobs'], ['/admin/users', 'Users'], ['/admin/settings', 'Site Settings'], ['/admin/audit-logs', 'Audit Logs']];
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
