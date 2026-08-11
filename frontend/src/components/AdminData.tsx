@@ -7,8 +7,8 @@ let refreshInFlight: Promise<string> | null = null;
 
 function refreshStaffSession() {
   if (!refreshInFlight) {
-    refreshInFlight = apiRequest<{ accessToken: string }>('/auth/refresh', { method: 'POST' })
-      .then((body) => { setAccessToken(body.accessToken); return body.accessToken; })
+    refreshInFlight = apiRequest<{ accessToken: string; user: { role: string } }>('/auth/refresh', { method: 'POST' })
+      .then((body) => { if (body.user.role === 'AGENT') throw new Error('AGENT_SESSION'); setAccessToken(body.accessToken, body.user.role); return body.accessToken; })
       .finally(() => { refreshInFlight = null; });
   }
   return refreshInFlight;
@@ -17,7 +17,7 @@ function refreshStaffSession() {
 export function AdminAuthGate({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    refreshStaffSession().then(() => setReady(true)).catch(() => { window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login?next=${encodeURIComponent(window.location.pathname)}`; });
+    refreshStaffSession().then(() => setReady(true)).catch((reason) => { window.location.href = reason instanceof Error && reason.message === 'AGENT_SESSION' ? `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/agent` : `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login?next=${encodeURIComponent(window.location.pathname)}`; });
   }, []);
   if (!ready) return <main className="page"><p className="loading">Checking staff session - </p></main>;
   return <>{children}</>;
