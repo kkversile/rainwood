@@ -17,7 +17,7 @@ function refreshStaffSession() {
 export function AdminAuthGate({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    refreshStaffSession().then(() => setReady(true)).catch(() => { window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`; });
+    refreshStaffSession().then(() => setReady(true)).catch(() => { window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login?next=${encodeURIComponent(window.location.pathname)}`; });
   }, []);
   if (!ready) return <main className="page"><p className="loading">Checking staff session - </p></main>;
   return <>{children}</>;

@@ -29,7 +29,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.holds.releaseExpired();
       await this.p.outboxJob.updateMany({ where: { status: 'PROCESSING', lockedAt: { lt: new Date(Date.now() - 10 * 60_000) } }, data: { status: 'FAILED', lockedAt: null, lockedBy: null, availableAt: new Date(), lastError: 'Recovered abandoned worker lease' } });
-      const jobs = await this.p.$queryRaw<any[]>(Prisma.sql`UPDATE "OutboxJob" SET status = 'PROCESSING', "lockedAt" = now(), "lockedBy" = ${this.worker}, attempts = attempts + 1 WHERE id IN (SELECT id FROM "OutboxJob" WHERE status IN ('PENDING', 'FAILED') AND "availableAt" <= now() ORDER BY "createdAt" FOR UPDATE SKIP LOCKED LIMIT 10) RETURNING *`);
+      const jobs = await this.p.$queryRaw<any[]>(Prisma.sql`UPDATE public."OutboxJob" SET status = 'PROCESSING', "lockedAt" = now(), "lockedBy" = ${this.worker}, attempts = attempts + 1 WHERE id IN (SELECT id FROM public."OutboxJob" WHERE status IN ('PENDING', 'FAILED') AND "availableAt" <= now() ORDER BY "createdAt" FOR UPDATE SKIP LOCKED LIMIT 10) RETURNING *`);
       for (const job of jobs) await this.process(job);
       return { claimed: jobs.length };
     } finally {
