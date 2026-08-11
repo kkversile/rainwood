@@ -70,8 +70,28 @@ export class ModificationDto {
   guestName?: string;
 
   @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
   @IsString()
   mobile?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  gstin?: string;
+
+  @IsOptional()
+  @IsEnum(BookingSource)
+  source?: BookingSource;
+
+  @IsOptional()
+  @IsString()
+  sourceName?: string;
 
   @IsOptional()
   @IsString()
@@ -80,6 +100,10 @@ export class ModificationDto {
   @IsOptional()
   @IsString()
   billingInstruction?: string;
+
+  @IsOptional()
+  @IsString()
+  internalRemark?: string;
 
   @IsOptional()
   @IsString()

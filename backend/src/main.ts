@@ -22,7 +22,7 @@ async function bootstrap() {
   app.use(cookieParser());
   app.use(json({ limit: config.get<string>('REQUEST_BODY_LIMIT', '1mb'), verify: (req: any, _res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
   app.use(urlencoded({ extended: true, limit: config.get<string>('REQUEST_BODY_LIMIT', '1mb') }));
-  app.use(helmet());
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.enableCors({ origin: [frontendUrl], credentials: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] });
   app.setGlobalPrefix(config.get<string>('API_PREFIX', 'api/v1'));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true, transformOptions: { enableImplicitConversion: true } }));

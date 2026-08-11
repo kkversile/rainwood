@@ -1,7 +1,7 @@
 import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
-import { LoginDto, LogoutDto, RefreshDto } from './auth.dto';
+import { AgentRegisterDto, LoginDto, LogoutDto, RefreshDto } from './auth.dto';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { CurrentUser } from '../../common/current-user.decorator';
 
@@ -18,6 +18,11 @@ export class AuthController {
     const result = await this.s.login(body.email, body.password, { ip: request.ip, ua: request.headers['user-agent'] });
     this.setRefreshCookie(response, result.refreshToken);
     return { accessToken: result.accessToken, user: result.user };
+  }
+
+  @Post('agent/register')
+  async registerAgent(@Body() body: AgentRegisterDto) {
+    return this.s.registerAgent(body.name, body.email, body.password);
   }
 
   @Post('refresh')

@@ -9,7 +9,7 @@ import { dateInDays, validateSearchInput } from '../lib/booking-helpers';
 type Hold = { token: string; expiresAt: string; lines: { quotedTotal: number | string }[] };
 type Step = 'search' | 'room' | 'guest' | 'payment' | 'confirmation';
 
-export function BookingFlow() {
+export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {}) {
   const params = useSearchParams();
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [hotelId, setHotelId] = useState('');
@@ -82,7 +82,7 @@ export function BookingFlow() {
     if (!hold) return;
     setError(''); setBusy(true);
     try {
-      const created = await apiRequest<{ reference: string }>('/reservations/from-hold/' + encodeURIComponent(hold.token), { method: 'POST', body: JSON.stringify({ guestName: guest.name, email: guest.email, mobile: guest.mobile, source: 'WEBSITE' }) });
+      const created = await apiRequest<{ reference: string }>('/reservations/from-hold/' + encodeURIComponent(hold.token), { method: 'POST', body: JSON.stringify({ guestName: guest.name, email: guest.email, mobile: guest.mobile, source: agentMode ? 'AGENT' : 'WEBSITE' }) });
       const order = await apiRequest<{ providerOrderId: string }>('/payments/' + encodeURIComponent(created.reference) + '/order', { method: 'POST', headers: { 'idempotency-key': `web:${created.reference}:${crypto.randomUUID()}` } });
       void order;
       setReservation(await apiRequest<ReservationSummary>('/reservations/' + encodeURIComponent(created.reference)));
@@ -102,7 +102,7 @@ export function BookingFlow() {
     finally { setBusy(false); }
   }
 
-  return <main className="page">
+  return <div className="page bookingWorkspace">
     <div className="pageTitle public"><span>Secure direct reservation</span><h1>Book your stay</h1><p>{selectedHotel?.name ?? 'Live availability, transparent pricing and confirmation in one flow.'}</p></div>
     <ol className="steps horizontal" aria-label="Booking progress">{[['search', 'Search'], ['room', 'Room'], ['guest', 'Guest'], ['payment', 'Payment'], ['confirmation', 'Confirmation']].map(([value, label]) => <li className={step === value ? 'active' : ''} key={value}>{label}</li>)}</ol>
     {error && <p className="error" role="alert">{error}</p>}
@@ -117,5 +117,5 @@ export function BookingFlow() {
     {step === 'guest' && hold && <form className="formCard" onSubmit={submitGuest}><h2>Guest details</h2><p className="notice">Inventory is held until {new Date(hold.expiresAt).toLocaleTimeString()}.</p><label>Full name<input value={guest.name} onChange={(event) => setGuest({ ...guest, name: event.target.value })} required minLength={2} autoComplete="name" /></label><label>Email<input type="email" value={guest.email} onChange={(event) => setGuest({ ...guest, email: event.target.value })} required autoComplete="email" /></label><label>Mobile<input value={guest.mobile} onChange={(event) => setGuest({ ...guest, mobile: event.target.value })} required autoComplete="tel" /></label><button className="btn full" disabled={busy}>{busy ? 'Creating reservation…' : 'Review and continue to payment'}</button></form>}
     {step === 'payment' && reservation && <section className="formCard"><h2>Payment</h2><p>Reservation <b>{reservation.reference}</b> is ready for secure payment.</p><div className="summary"><p>Total <strong>INR {Number(reservation.totalAmount).toFixed(2)}</strong></p><p>Balance due <strong>INR {Number(reservation.balanceAmount).toFixed(2)}</strong></p></div><button className="btn full" onClick={completeMockPayment} disabled={busy}>{busy ? 'Processing payment…' : 'Complete mock payment'}</button><p className="hint">Local mock mode sends a signed provider event through the backend webhook processor.</p></section>}
     {step === 'confirmation' && reservation && <section className="formCard confirmation"><span className="status ok">Confirmed</span><h2>Booking confirmed</h2><p>Thank you, {reservation.guestName}. Your reference is <b>{reservation.reference}</b>.</p><p>{reservation.hotel.name} · {reservation.checkIn} to {reservation.checkOut}</p><p>Payment status: <b>{reservation.paymentStatus}</b></p><a className="btn" href={`/booking/confirmation?reference=${encodeURIComponent(reservation.reference)}`}>View confirmation</a></section>}
-  </main>;
+  </div>;
 }

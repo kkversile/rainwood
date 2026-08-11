@@ -23,12 +23,21 @@ export class ReservationsService {
       const liveHold = await tx.inventoryHold.updateMany({ where: { id: hold.id, status: 'ACTIVE', expiresAt: { gt: new Date() } }, data: { status: 'CONVERTED' } });
       if (liveHold.count !== 1) throw new BadRequestException('Hold expired or already converted');
       const hotelId = hold.hotelId;
+      const reservationReference = this.reference();
+      const bookingTotal = hold.lines.reduce((sum, line) => sum + Number(line.quotedTotal), 0);
+      let walletDebit: { walletId: string; balanceAfter: any } | undefined;
+      if (user) {
+        const wallet = await tx.agentWallet.findUnique({ where: { agentId: user.id } });
+        if (!wallet || Number(wallet.balance) < bookingTotal) throw new BadRequestException(`Insufficient wallet balance. Required INR ${bookingTotal.toFixed(2)}.`);
+        const updatedWallet = await tx.agentWallet.update({ where: { id: wallet.id }, data: { balance: { decrement: bookingTotal } } });
+        walletDebit = { walletId: wallet.id, balanceAfter: updatedWallet.balance };
+      }
       const reservation = await tx.reservation.create({
         data: {
-          reference: this.reference(),
+          reference: reservationReference,
           hotelId,
           source: body.source ?? 'WEBSITE',
-          sourceName: body.sourceName,
+          sourceName: body.sourceName ?? (user ? 'Agent booking' : undefined),
           status: 'PENDING_PAYMENT',
           paymentStatus: 'UNPAID',
           syncStatus: 'PENDING',
@@ -67,6 +76,7 @@ export class ReservationsService {
         },
         include: { lines: { include: { nights: true, roomType: true, ratePlan: true } }, hotel: true },
       });
+      if (walletDebit) await tx.walletTransaction.create({ data: { walletId: walletDebit.walletId, type: 'BOOKING_DEBIT', amount: -bookingTotal, balanceAfter: walletDebit.balanceAfter, reference: reservation.reference, description: `Booking debit for ${reservation.reference}` } });
       for (const line of hold.lines) {
         for (const night of line.nights) {
           const row = lockRows.find((candidate) => candidate.roomTypeId === line.roomTypeId && toDateOnly(candidate.date) === toDateOnly(night.date));
@@ -91,6 +101,15 @@ export class ReservationsService {
       this.p.reservation.count({ where }),
     ]);
     return { items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
+  }
+
+  async listForUser(userId: string) {
+    return this.p.reservation.findMany({ where: { createdById: userId }, orderBy: { createdAt: 'desc' }, take: 100, select: { reference: true, guestName: true, checkIn: true, checkOut: true, source: true, status: true, paymentStatus: true, totalAmount: true, balanceAmount: true, hotel: { select: { name: true } }, lines: { select: { roomType: { select: { name: true } }, ratePlan: { select: { name: true } }, rooms: true } } } });
+  }
+
+  async listRatePlansForUser(userId: string) {
+    const assignments = await this.p.agentRatePlan.findMany({ where: { agentId: userId, ratePlan: { active: true } }, orderBy: { ratePlan: { name: 'asc' } }, include: { ratePlan: { include: { roomType: { include: { hotel: { select: { name: true, city: true } } } }, rates: { orderBy: { date: 'asc' }, take: 31 } } } } });
+    return assignments.map(({ ratePlan }) => ({ id: ratePlan.id, code: ratePlan.code, name: ratePlan.name, mealPlan: ratePlan.mealPlan, description: ratePlan.description, hotel: ratePlan.roomType.hotel, room: { id: ratePlan.roomType.id, name: ratePlan.roomType.name, code: ratePlan.roomType.code }, rates: ratePlan.rates }));
   }
 
   async get(reference: string, full = false) {
@@ -140,12 +159,12 @@ export class ReservationsService {
       const idempotencyKey = body.idempotencyKey ?? `modify:${reservation.id}:${reservation.version + 1}`;
       const existing = await tx.reservationModification.findUnique({ where: { idempotencyKey } });
       if (existing) return existing;
-      const changes = { guestName: body.guestName ?? reservation.guestName, mobile: body.mobile ?? reservation.mobile, specialRequest: body.specialRequest ?? reservation.specialRequest, billingInstruction: body.billingInstruction ?? reservation.billingInstruction };
+      const changes = { guestName: body.guestName ?? reservation.guestName, email: body.email?.toLowerCase() ?? reservation.email, mobile: body.mobile ?? reservation.mobile, address: body.address ?? reservation.address, gstin: body.gstin ?? reservation.gstin, source: body.source ?? reservation.source, sourceName: body.sourceName ?? reservation.sourceName, specialRequest: body.specialRequest ?? reservation.specialRequest, billingInstruction: body.billingInstruction ?? reservation.billingInstruction, internalRemark: body.internalRemark ?? reservation.internalRemark };
       const nextVersion = reservation.version + 1;
       const nextStatus = reservation.status === 'CONFIRMED' ? 'MODIFIED' : reservation.status;
       if (nextStatus !== reservation.status) assertReservationTransition(reservation.status, nextStatus);
       const updated = await tx.reservation.update({ where: { id: reservation.id, version: reservation.version }, data: { ...changes, status: nextStatus, version: nextVersion, syncStatus: 'PENDING' } });
-      const modification = await tx.reservationModification.create({ data: { reservationId: reservation.id, fromVersion: reservation.version, toVersion: nextVersion, type: body.type ?? 'GUEST_DETAILS', status: 'APPLIED', changes: { before: { guestName: reservation.guestName, mobile: reservation.mobile, specialRequest: reservation.specialRequest, billingInstruction: reservation.billingInstruction }, after: changes }, priceDifference: 0, idempotencyKey, createdById: user.id } });
+      const modification = await tx.reservationModification.create({ data: { reservationId: reservation.id, fromVersion: reservation.version, toVersion: nextVersion, type: body.type ?? 'GUEST_DETAILS', status: 'APPLIED', changes: { before: { guestName: reservation.guestName, email: reservation.email, mobile: reservation.mobile, address: reservation.address, gstin: reservation.gstin, source: reservation.source, sourceName: reservation.sourceName, specialRequest: reservation.specialRequest, billingInstruction: reservation.billingInstruction, internalRemark: reservation.internalRemark }, after: changes }, priceDifference: 0, idempotencyKey, createdById: user.id } });
       await tx.outboxJob.create({ data: { type: 'AXIS_BOOKING_MODIFY', aggregateType: 'Reservation', aggregateId: reservation.id, idempotencyKey: `axis:modify:${reservation.id}:v${nextVersion}`, payload: { reservationId: reservation.id, version: nextVersion } } });
       await tx.auditLog.create({ data: { actorUserId: user.id, action: 'RESERVATION_MODIFIED', entityType: 'Reservation', entityId: reservation.id, before: { version: reservation.version }, after: { version: nextVersion, changes } } });
       return { reservation: updated, modification };

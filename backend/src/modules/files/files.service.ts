@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { ConfigService } from '@nestjs/config';
 import { FileKind } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
-import { mkdir, readFile, writeFile } from 'fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import { isAbsolute, join, resolve, sep } from 'path';
 import { PrismaService } from '../../common/prisma.service';
 
@@ -32,6 +32,14 @@ export class FilesService {
     const file = await this.p.storedFile.findUnique({ where: { id: fileId } });
     if (!file) throw new NotFoundException('File not found');
     return { file, buffer: await readFile(this.safePath(file.storageKey)) };
+  }
+
+  async remove(fileId: string) {
+    const file = await this.p.storedFile.findUnique({ where: { id: fileId } });
+    if (!file) return false;
+    try { await unlink(this.safePath(file.storageKey)); } catch (error: any) { if (error?.code !== 'ENOENT') throw error; }
+    await this.p.storedFile.delete({ where: { id: fileId } });
+    return true;
   }
 
   async authorize(fileId: string, user: { role: string }) {

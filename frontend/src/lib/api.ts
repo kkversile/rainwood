@@ -12,6 +12,7 @@ export function setAccessToken(token: string | null) {
   if (typeof window !== 'undefined') {
     if (token) window.sessionStorage.setItem('rainwood_access_token', token);
     else window.sessionStorage.removeItem('rainwood_access_token');
+    window.dispatchEvent(new Event('rainwood-auth-change'));
   }
 }
 
