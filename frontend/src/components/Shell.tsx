@@ -18,7 +18,7 @@ function StaffDashboardLink() {
 }
 
 export function AdminNav() {
-  async function signOut() { try { await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({ allDevices: false }) }); } catch { /* The local session is still cleared below. */ } finally { clearAccessToken(); window.location.href = '/login'; } }
+  async function signOut() { try { await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({ allDevices: false }) }); } catch { /* The local session is still cleared below. */ } finally { clearAccessToken(); window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login`; } }
   return <aside className="adminNav" aria-label="Operations navigation">{adminLinks.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}<button className="adminSignOut" type="button" onClick={() => void signOut()}>Sign out</button></aside>;
 }
 

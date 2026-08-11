@@ -113,7 +113,7 @@ export class HoldsService {
     for (const roomTypeId of roomIds) {
       const dates = [...keys].filter((key) => key.startsWith(`${roomTypeId}:`)).map((key) => key.slice(roomTypeId.length + 1)).sort();
       if (!dates.length) continue;
-      const locked = await tx.$queryRaw<LockRow[]>(Prisma.sql`SELECT id, "roomTypeId", date, available, held, sold, "stopSell" FROM "InventoryDay" WHERE "roomTypeId" = ${roomTypeId} AND date >= ${dates[0]}::date AND date <= ${dates[dates.length - 1]}::date ORDER BY date FOR UPDATE`);
+      const locked = await tx.$queryRaw<LockRow[]>(Prisma.sql`SELECT id, "roomTypeId", date, available, held, sold, "stopSell" FROM public."InventoryDay" WHERE "roomTypeId" = ${roomTypeId} AND date >= ${dates[0]}::date AND date <= ${dates[dates.length - 1]}::date ORDER BY date FOR UPDATE`);
       rows.push(...locked.filter((row) => keys.has(`${row.roomTypeId}:${row.date.toISOString().slice(0, 10)}`)));
     }
     return rows.sort((a, b) => `${a.roomTypeId}:${a.date.toISOString()}`.localeCompare(`${b.roomTypeId}:${b.date.toISOString()}`));

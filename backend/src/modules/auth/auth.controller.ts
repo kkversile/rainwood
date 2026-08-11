@@ -10,7 +10,7 @@ export class AuthController {
   constructor(private s: AuthService) {}
 
   private setRefreshCookie(response: Response, token: string) {
-    response.cookie('rainwood_refresh', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/api/v1/auth', maxAge: 30 * 86_400_000 });
+    response.cookie('rainwood_refresh', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: process.env.AUTH_COOKIE_PATH ?? '/api/v1/auth', maxAge: 30 * 86_400_000 });
   }
 
   @Post('login')
@@ -37,7 +37,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async logout(@Body() body: LogoutDto, @Req() request: Request, @Res({ passthrough: true }) response: Response, @CurrentUser() user: any) {
     await this.s.logout(body.refreshToken ?? request.cookies?.rainwood_refresh, body.allDevices, user.id);
-    response.clearCookie('rainwood_refresh', { httpOnly: true, sameSite: 'lax', path: '/api/v1/auth' });
+    response.clearCookie('rainwood_refresh', { httpOnly: true, sameSite: 'lax', path: process.env.AUTH_COOKIE_PATH ?? '/api/v1/auth' });
     return { ok: true };
   }
 }
