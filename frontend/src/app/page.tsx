@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { publicApi } from '../lib/api';
 import type { Hotel } from '../lib/types';
 import homepage from '../data/homepage.mock.json';
+import { dateInDays, nextDate } from '../lib/booking-helpers';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +48,7 @@ export default async function Home() {
           <p>Live availability and direct rates for your next stay.</p>
           <form action="/booking">
             <label>Destination / hotel<select name="hotel" defaultValue=""><option value="">Select a hotel</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.slug}>{hotel.name}</option>)}</select></label>
-            <div className="two"><label>Check-in<input type="date" name="checkIn" required /></label><label>Check-out<input type="date" name="checkOut" required /></label></div>
+            <div className="two"><label>Check-in<input type="date" name="checkIn" min={dateInDays(0)} defaultValue={dateInDays(0)} required /></label><label>Check-out<input type="date" name="checkOut" min={nextDate(dateInDays(0))} defaultValue={nextDate(dateInDays(0))} required /></label></div>
             <div className="two"><label>Rooms<select name="rooms" defaultValue="1"><option value="1">1 room</option><option value="2">2 rooms</option></select></label><label>Guests<select name="guests" defaultValue="2"><option value="2">2 adults</option><option value="3">2 adults, 1 child</option><option value="4">4 adults</option></select></label></div>
             <button className="btn full" disabled={!hotels.length}>Search rooms</button>
             {unavailable && <p className="error">Hotel availability is temporarily unavailable. Please try again shortly.</p>}

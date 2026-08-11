@@ -3,6 +3,7 @@ import { PrismaService } from '../../common/prisma.service';
 import { AmenityDto, HotelContentDto, HotelImageDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
 import { FilesService } from '../files/files.service';
 import ExcelJS from 'exceljs';
+import { todayUtc } from '../../common/dates';
 
 @Injectable()
 export class HotelsService {
@@ -131,12 +132,14 @@ export class HotelsService {
     const room = await this.prisma.roomType.findUnique({ where: { id: roomTypeId } });
     if (!room) throw new NotFoundException('Room type not found');
     if (body.days.some((day) => day.available < 0)) throw new BadRequestException('Inventory cannot be negative');
+    if (body.days.some((day) => new Date(`${day.date}T00:00:00.000Z`) < todayUtc())) throw new BadRequestException('Inventory dates cannot be in the past');
     return this.prisma.$transaction(body.days.map((day) => this.prisma.inventoryDay.upsert({ where: { roomTypeId_date: { roomTypeId, date: new Date(`${day.date}T00:00:00.000Z`) } }, create: { roomTypeId, date: new Date(`${day.date}T00:00:00.000Z`), available: day.available, stopSell: Boolean(day.stopSell) }, update: { available: day.available, stopSell: Boolean(day.stopSell), version: { increment: 1 } } })));
   }
 
   async saveRates(ratePlanId: string, body: RateBatchDto) {
     const plan = await this.prisma.ratePlan.findUnique({ where: { id: ratePlanId } });
     if (!plan) throw new NotFoundException('Rate plan not found');
+    if (body.days.some((day) => new Date(`${day.date}T00:00:00.000Z`) < todayUtc())) throw new BadRequestException('Rate dates cannot be in the past');
     return this.prisma.$transaction(body.days.map((day) => this.prisma.rateDay.upsert({ where: { ratePlanId_date: { ratePlanId, date: new Date(`${day.date}T00:00:00.000Z`) } }, create: { ratePlanId, date: new Date(`${day.date}T00:00:00.000Z`), amount: day.amount, taxAmount: day.taxAmount ?? 0, childAmount: day.childAmount ?? 0, extraAdultAmount: day.extraAdultAmount ?? 0, occupancyPrices: day.occupancyPrices ?? undefined, cta: Boolean(day.cta), ctd: Boolean(day.ctd), minLos: day.minLos ?? 1, maxLos: day.maxLos }, update: { amount: day.amount, taxAmount: day.taxAmount ?? 0, childAmount: day.childAmount ?? 0, extraAdultAmount: day.extraAdultAmount ?? 0, occupancyPrices: day.occupancyPrices ?? undefined, cta: Boolean(day.cta), ctd: Boolean(day.ctd), minLos: day.minLos ?? 1, maxLos: day.maxLos } })));
   }
 }

@@ -14,7 +14,8 @@ type Room = { id: string; code: string; name: string; description?: string | nul
 type Catalog = { id: string; name: string; rooms: Room[] };
 
 function dateKeys(start: string, end: string) {
-  if (!start || !end || start > end) return [] as string[];
+  const today = new Date().toISOString().slice(0, 10);
+  if (!start || !end || start < today || end < today || start > end) return [] as string[];
   const result: string[] = [];
   const cursor = new Date(`${start}T00:00:00.000Z`);
   const last = new Date(`${end}T00:00:00.000Z`);

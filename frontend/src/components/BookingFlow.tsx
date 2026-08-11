@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { apiRequest } from '../lib/api';
 import type { AvailabilityOption, Hotel, ReservationSummary } from '../lib/types';
-import { dateInDays, validateSearchInput } from '../lib/booking-helpers';
+import { dateInDays, nextDate, validateSearchInput } from '../lib/booking-helpers';
 
 type Hold = { token: string; expiresAt: string; lines: { quotedTotal: number | string }[] };
 type Step = 'search' | 'room' | 'guest' | 'payment' | 'confirmation';
@@ -32,8 +32,8 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
       setHotels(items);
       const requestedSlug = params.get('hotel');
       setHotelId(items.find((item) => item.slug === requestedSlug)?.id ?? items[0]?.id ?? '');
-      if (params.get('checkIn')) setCheckIn(params.get('checkIn')!);
-      if (params.get('checkOut')) setCheckOut(params.get('checkOut')!);
+      if (params.get('checkIn')) { const requested = params.get('checkIn')!; setCheckIn(requested < dateInDays(0) ? dateInDays(1) : requested); }
+      if (params.get('checkOut')) { const requested = params.get('checkOut')!; setCheckOut(requested <= (params.get('checkIn') ?? dateInDays(0)) ? nextDate(params.get('checkIn') ?? dateInDays(0)) : requested); }
       if (params.get('adults')) setAdults(Number(params.get('adults')));
       if (params.get('children')) setChildren(Number(params.get('children')));
       if (params.get('rooms')) setRooms(Number(params.get('rooms')));
@@ -109,7 +109,7 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
     {step === 'search' && <form className="formCard bookingForm" onSubmit={search}>
       <h2>Find your stay</h2>
       <label>Hotel<select value={hotelId} onChange={(event) => setHotelId(event.target.value)} required><option value="">Select a hotel</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name} · {hotel.city}</option>)}</select></label>
-      <div className="two"><label>Check-in<input type="date" min={dateInDays(0)} value={checkIn} onChange={(event) => setCheckIn(event.target.value)} required /></label><label>Check-out<input type="date" min={checkIn} value={checkOut} onChange={(event) => setCheckOut(event.target.value)} required /></label></div>
+      <div className="two"><label>Check-in<input type="date" min={dateInDays(0)} value={checkIn} onChange={(event) => { const value = event.target.value < dateInDays(0) ? dateInDays(0) : event.target.value; setCheckIn(value); if (checkOut <= value) setCheckOut(nextDate(value)); }} required /></label><label>Check-out<input type="date" min={nextDate(checkIn)} value={checkOut} onChange={(event) => setCheckOut(event.target.value < nextDate(checkIn) ? nextDate(checkIn) : event.target.value)} required /></label></div>
       <div className="three"><label>Adults<input type="number" min="1" max="100" value={adults} onChange={(event) => setAdults(Number(event.target.value))} required /></label><label>Children<input type="number" min="0" max="100" value={children} onChange={(event) => setChildren(Number(event.target.value))} /></label><label>Rooms<input type="number" min="1" max="20" value={rooms} onChange={(event) => setRooms(Number(event.target.value))} required /></label></div>
       <button className="btn full" disabled={busy || !hotelId}>{busy ? 'Checking…' : 'Check live availability'}</button>
     </form>}

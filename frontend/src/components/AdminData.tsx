@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { apiRequest, setAccessToken } from '../lib/api';
+import { dateInDays, nextDate } from '../lib/booking-helpers';
 
 let refreshInFlight: Promise<string> | null = null;
 
@@ -49,6 +50,7 @@ export function ReservationData() {
   const { data: hotels, error: hotelError } = useData<ReservationHotel[]>('/hotels');
   const [form, setForm] = useState<ReservationForm>(blankReservation); const [detail, setDetail] = useState<ReservationDetail | null>(null); const [editReference, setEditReference] = useState(''); const [showForm, setShowForm] = useState(false); const [busy, setBusy] = useState(false); const [formError, setFormError] = useState('');
   const selectedHotel = hotels?.find((item) => item.id === form.hotelId); const selectedRoom = selectedHotel?.rooms.find((item) => item.id === form.roomTypeId); const plans = selectedRoom?.ratePlans ?? [];
+  const today = dateInDays(0); const checkoutMinimum = nextDate(form.checkIn || today);
   useEffect(() => { if (hotels?.[0] && !form.hotelId && !editReference) setForm((current) => ({ ...current, hotelId: hotels[0].id })); }, [hotels, form.hotelId, editReference]);
   useEffect(() => { if (selectedHotel && !selectedHotel.rooms.some((item) => item.id === form.roomTypeId)) setForm((current) => ({ ...current, roomTypeId: selectedHotel.rooms[0]?.id ?? '', ratePlanId: '' })); }, [selectedHotel, form.roomTypeId]);
   useEffect(() => { if (selectedRoom && !plans.some((item) => item.id === form.ratePlanId)) setForm((current) => ({ ...current, ratePlanId: plans[0]?.id ?? '' })); }, [selectedRoom, plans, form.ratePlanId]);
@@ -61,6 +63,7 @@ export function ReservationData() {
         await apiRequest(`/reservations/${encodeURIComponent(editReference)}`, { method: 'PATCH', body: JSON.stringify({ type: 'GUEST_DETAILS', guestName: form.guestName, email: form.email, mobile: form.mobile, address: form.address, gstin: form.gstin, source: form.source, sourceName: form.sourceName, specialRequest: form.specialRequest, billingInstruction: form.billingInstruction, internalRemark: form.internalRemark }) });
       } else {
         if (!form.hotelId || !form.roomTypeId || !form.ratePlanId || !form.checkIn || !form.checkOut) throw new Error('Select hotel, room, rate plan, and stay dates.');
+        if (form.checkIn < today || form.checkOut < checkoutMinimum) throw new Error('Check-in cannot be in the past and check-out must be after check-in.');
         const hold = await apiRequest<{ token: string }>('/holds', { method: 'POST', body: JSON.stringify({ hotelId: form.hotelId, roomTypeId: form.roomTypeId, ratePlanId: form.ratePlanId, checkIn: form.checkIn, checkOut: form.checkOut, rooms: Number(form.rooms), adults: Number(form.adults), children: Number(form.children), guestEmail: form.email }) });
         await apiRequest('/reservations/manual', { method: 'POST', body: JSON.stringify({ holdToken: hold.token, guestName: form.guestName, email: form.email, mobile: form.mobile, address: form.address, gstin: form.gstin, source: form.source, sourceName: form.sourceName || 'Admin UI', specialRequest: form.specialRequest, billingInstruction: form.billingInstruction, internalRemark: form.internalRemark }) });
       }
