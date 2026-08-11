@@ -13,6 +13,7 @@ enum UserRole {
   RESERVATION
   ACCOUNTS
   VIEWER
+  AGENT
 }
 
 enum BookingSource {
@@ -75,6 +76,12 @@ enum PaymentAttemptStatus {
   REFUNDED
 }
 
+enum WalletTransactionType {
+  RECHARGE
+  BOOKING_DEBIT
+  BOOKING_REFUND
+}
+
 enum SyncStatus {
   NOT_REQUIRED
   PENDING
@@ -105,6 +112,12 @@ enum FileKind {
   PAYMENT_PROOF
   VOUCHER
   OTHER
+}
+
+enum ContactRequestStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
 }
 
 enum CancellationStatus {
@@ -162,6 +175,8 @@ model User {
   requestedCancellations CancellationRequest[]     @relation("CancellationRequester")
   approvedCancellations  CancellationRequest[]     @relation("CancellationApprover")
   createdModifications   ReservationModification[] @relation("ModificationCreator")
+  assignedRatePlans      AgentRatePlan[]
+  wallet                 AgentWallet?
   createdAt              DateTime                  @default(now())
   updatedAt              DateTime                  @updatedAt
 }
@@ -306,10 +321,60 @@ model RatePlan {
   lines             ReservationLine[]
   holdLines         InventoryHoldLine[]
   cancellationRules CancellationRule[]
+  assignedAgents    AgentRatePlan[]
 
   @@unique([roomTypeId, code])
   @@unique([roomTypeId, axisRatePlanId])
   @@index([roomTypeId, active])
+}
+
+model ContactRequest {
+  id        String               @id @default(cuid())
+  name      String
+  email     String
+  message   String
+  status    ContactRequestStatus @default(NEW)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model AgentRatePlan {
+  id         String   @id @default(cuid())
+  agentId    String
+  agent      User     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  ratePlanId String
+  ratePlan   RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([agentId, ratePlanId])
+  @@index([ratePlanId])
+}
+
+model AgentWallet {
+  id           String             @id @default(cuid())
+  agentId      String             @unique
+  agent        User               @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  currency     String             @default("INR")
+  balance      Decimal            @default(0) @db.Decimal(14, 2)
+  transactions WalletTransaction[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+}
+
+model WalletTransaction {
+  id           String                @id @default(cuid())
+  walletId     String
+  wallet       AgentWallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  type         WalletTransactionType
+  amount       Decimal               @db.Decimal(14, 2)
+  balanceAfter Decimal               @db.Decimal(14, 2)
+  reference    String?
+  description  String?
+  createdAt    DateTime              @default(now())
+
+  @@index([walletId, createdAt])
 }
 
 model CancellationRule {
@@ -373,6 +438,7 @@ model RateDay {
   taxAmount         Decimal   @default(0) @db.Decimal(12, 2)
   childAmount       Decimal   @default(0) @db.Decimal(12, 2)
   extraAdultAmount  Decimal   @default(0) @db.Decimal(12, 2)
+  occupancyPrices   Json?
   cta               Boolean   @default(false)
   ctd               Boolean   @default(false)
   minLos            Int       @default(1)

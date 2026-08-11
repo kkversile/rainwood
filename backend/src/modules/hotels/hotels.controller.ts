@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, ConflictException, Controller, Delete, Get, Header, Param, Patch, Post, Query, StreamableFile, UseGuards } from '@nestjs/common';
 import { HotelsService } from './hotels.service';
-import { HotelContentDto, HotelUpdateDto } from './hotels.dto';
+import { AmenityDto, HotelContentDto, HotelImageDto, HotelUpdateDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -11,6 +11,11 @@ export class HotelsController {
 
   @Get()
   list() { return this.service.list(); }
+
+  @Get('rate-plans')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  ratePlans() { return this.service.ratePlans(); }
 
   @Get(':slug')
   detail(@Param('slug') slug: string) { return this.service.detail(slug); }
@@ -24,4 +29,68 @@ export class HotelsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   update(@Param('id') id: string, @Body() body: HotelUpdateDto) { return this.service.update(id, body); }
+
+  @Get(':hotelId/catalog')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  catalog(@Param('hotelId') hotelId: string, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string) { return this.service.catalog(hotelId, startDate, endDate); }
+
+  @Get(':hotelId/pricebook.xlsx')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="rainwood-pricebook.xlsx"')
+  async pricebook(@Param('hotelId') hotelId: string) { return new StreamableFile(await this.service.pricebookExport(hotelId)); }
+
+  @Post(':hotelId/amenities')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  addAmenity(@Param('hotelId') hotelId: string, @Body() body: AmenityDto) { return this.service.addAmenity(hotelId, body); }
+
+  @Post(':hotelId/images')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  addImage(@Param('hotelId') hotelId: string, @Body() body: HotelImageDto) { return this.service.addImage(hotelId, body); }
+
+  @Delete(':hotelId/images/:imageId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  deleteImage(@Param('hotelId') hotelId: string, @Param('imageId') imageId: string) { return this.service.deleteImage(hotelId, imageId); }
+
+  @Post(':hotelId/rooms')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  createRoom(@Param('hotelId') hotelId: string, @Body() body: RoomTypeDto) { return this.service.createRoom(hotelId, body); }
+
+  @Patch('rooms/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  updateRoom(@Param('id') id: string, @Body() body: Partial<RoomTypeDto>) { return this.service.updateRoom(id, body); }
+
+  @Post('rooms/:roomId/rate-plans')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  createRatePlan(@Param('roomId') roomId: string, @Body() body: RatePlanDto) { return this.service.createRatePlan(roomId, body); }
+
+  @Patch('rate-plans/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  updateRatePlan(@Param('id') id: string, @Body() body: Partial<RatePlanDto>) { return this.service.updateRatePlan(id, body); }
+
+  @Delete('rate-plans/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  async deleteRatePlan(@Param('id') id: string) {
+    try { return await this.service.deleteRatePlan(id); } catch (error) { if (error instanceof ConflictException) throw error; throw error; }
+  }
+
+  @Post('rooms/:roomId/inventory')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  saveInventory(@Param('roomId') roomId: string, @Body() body: InventoryBatchDto) { return this.service.saveInventory(roomId, body); }
+
+  @Post('rate-plans/:ratePlanId/rates')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  saveRates(@Param('ratePlanId') ratePlanId: string, @Body() body: RateBatchDto) { return this.service.saveRates(ratePlanId, body); }
 }

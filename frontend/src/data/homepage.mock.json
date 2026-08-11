@@ -1,0 +1,15 @@
+{
+  "positioningCards": [
+    { "number": "01", "title": "Website Booking", "text": "Hotel search, room selection and a direct confirmation journey for RainWood guests.", "tags": ["Search", "Voucher"] },
+    { "number": "02", "title": "Reservation Management", "text": "Admin-created bookings for phone, email, WhatsApp, agent, company and OTA requests.", "tags": ["Manual entry", "Source tracking"] },
+    { "number": "03", "title": "Payment Workflow", "text": "Online payments plus advance, balance, payment proof and verification workflows.", "tags": ["Advance", "Balance"] },
+    { "number": "04", "title": "Reports", "text": "Hotel-wise, source-wise, payment-wise, arrival/departure, room-night and revenue reporting.", "tags": ["Excel/PDF", "MVP reports"] },
+    { "number": "05", "title": "Admin Dashboard", "text": "Booking status, guest details, payment status, vouchers, remarks and internal instructions.", "tags": ["Operations", "Accounts"] },
+    { "number": "06", "title": "AxisRooms Sync", "text": "Inventory, rates, restrictions and confirmed booking synchronization where applicable.", "tags": ["Mapping", "Sync status"] }
+  ],
+  "featuredHotels": [
+    { "name": "RainWood Aurum", "place": "Munnar", "description": "Premium mountain stay with direct booking enabled.", "image": "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80", "tags": ["Munnar", "MAP", "AxisRooms mapped"] },
+    { "name": "Spices Lap Resort", "place": "Thekkady", "description": "Resort room availability with restriction-aware display.", "image": "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=1200&q=80", "tags": ["Thekkady", "CP", "Restriction aware"] },
+    { "name": "Lakeshore Resort", "place": "Alleppey", "description": "Waterfront rooms with voucher and email confirmation.", "image": "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80", "tags": ["Alleppey", "AP", "Voucher ready"] }
+  ]
+}

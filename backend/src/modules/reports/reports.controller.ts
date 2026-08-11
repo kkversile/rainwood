@@ -12,6 +12,8 @@ export class ReportsController {
   constructor(private service: ReportsService) {}
   @Get('dashboard') dashboard() { return this.service.dashboard(); }
   @Get('reservations') reservations(@Query() query: ReportQueryDto) { return this.service.reservations(query); }
+  @Get('summary') summary(@Query() query: ReportQueryDto) { return this.service.summary(query); }
+  @Get('expected-arrivals') expectedArrivals(@Query() query: ReportQueryDto) { return this.service.expectedArrivals(query); }
   @Get('arrivals') arrivals(@Query() query: ReportQueryDto) { return this.service.arrivals(query); }
   @Get('departures') departures(@Query() query: ReportQueryDto) { return this.service.departures(query); }
   @Get('payments') payments(@Query() query: ReportQueryDto) { return this.service.payments(query); }

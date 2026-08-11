@@ -11,7 +11,7 @@ type Selection = { hotelId: string; roomTypeId: string; ratePlanId: string; chec
 export class AvailabilityService {
   constructor(private prisma: PrismaService) {}
 
-  async search(query: AvailabilityQueryDto) {
+  async search(query: AvailabilityQueryDto, agentId?: string) {
     const from = parseDateOnly(query.checkIn, 'checkIn');
     const to = parseDateOnly(query.checkOut, 'checkOut');
     this.validateStay(from, to, query.rooms, query.adults, query.children);
@@ -23,7 +23,7 @@ export class AvailabilityService {
           where: { active: true },
           include: {
             inventory: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } },
-            ratePlans: { where: { active: true }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } } } },
+            ratePlans: { where: { active: true, ...(agentId ? { assignedAgents: { some: { agentId } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } } } },
           },
         },
       },
@@ -33,7 +33,7 @@ export class AvailabilityService {
     return options.filter((option) => option.available).map(({ available, ...option }) => option);
   }
 
-  async quoteSelection(db: Database, input: Selection, options: { checkInventory?: boolean } = {}) {
+  async quoteSelection(db: Database, input: Selection, options: { checkInventory?: boolean; agentId?: string } = {}) {
     const from = parseDateOnly(input.checkIn, 'checkIn');
     const to = parseDateOnly(input.checkOut, 'checkOut');
     this.validateStay(from, to, input.rooms, input.adults, input.children);
@@ -41,7 +41,7 @@ export class AvailabilityService {
       where: { id: input.roomTypeId, hotelId: input.hotelId, active: true, hotel: { active: true } },
       include: {
         inventory: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } },
-        ratePlans: { where: { id: input.ratePlanId, active: true }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } } } },
+        ratePlans: { where: { id: input.ratePlanId, active: true, ...(options.agentId ? { assignedAgents: { some: { agentId: options.agentId } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } } } },
       },
     });
     const plan = room?.ratePlans[0];

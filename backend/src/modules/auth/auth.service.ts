@@ -1,4 +1,4 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
@@ -12,6 +12,19 @@ export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(private p: PrismaService, private jwt: JwtService, private c: ConfigService) {}
+
+  async registerAgent(name: string, email: string, password: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const passwordHash = await bcrypt.hash(password, 12);
+    try {
+      const user = await this.p.user.create({ data: { name: name.trim(), email: normalizedEmail, passwordHash, role: 'AGENT' as any, active: true }, select: { id: true, email: true, name: true, role: true, active: true } });
+      await this.p.auditLog.create({ data: { action: 'AGENT_REGISTERED', entityType: 'User', entityId: user.id, after: { email: user.email, role: user.role } } });
+      return { user };
+    } catch (error: any) {
+      if (error?.code === 'P2002') throw new ConflictException('An account with this email already exists');
+      throw error;
+    }
+  }
 
   async login(email: string, password: string, meta: { ip?: string; ua?: string } = {}) {
     const normalizedEmail = email.trim().toLowerCase();

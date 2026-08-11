@@ -13,7 +13,7 @@ type LockRow = { id: string; roomTypeId: string; date: Date; available: number; 
 export class HoldsService {
   constructor(private p: PrismaService, private availability: AvailabilityService, private c: ConfigService) {}
 
-  async create(input: HoldCreateDto) {
+  async create(input: HoldCreateDto, agentId?: string) {
     const lines = input.lines?.length ? input.lines : [input];
     const sortedLines = [...lines].sort((a, b) => `${a.roomTypeId}:${a.checkIn}`.localeCompare(`${b.roomTypeId}:${b.checkIn}`));
     const rawToken = randomToken();
@@ -23,7 +23,7 @@ export class HoldsService {
       await this.expireStaleHoldsForLockedRows(tx, lockRows);
       const quotes = [] as any[];
       for (const line of sortedLines) {
-        const quote = await this.availability.quoteSelection(tx, line, { checkInventory: true });
+        const quote = await this.availability.quoteSelection(tx, line, { checkInventory: true, agentId });
         quotes.push(quote);
       }
       for (const line of sortedLines) {
