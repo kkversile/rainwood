@@ -13,11 +13,11 @@ export class AuthService {
 
   constructor(private p: PrismaService, private jwt: JwtService, private c: ConfigService) {}
 
-  async registerAgent(name: string, email: string, password: string) {
+  async registerAgent(profile: { companyName: string; contactPerson: string; mobile: string; gstin?: string; place?: string; addressLine1: string; addressLine2?: string; state?: string; pinCode?: string; additionalInformation?: string }, email: string, password: string) {
     const normalizedEmail = email.trim().toLowerCase();
     const passwordHash = await bcrypt.hash(password, 12);
     try {
-      const user = await this.p.user.create({ data: { name: name.trim(), email: normalizedEmail, passwordHash, role: 'AGENT' as any, active: true }, select: { id: true, email: true, name: true, role: true, active: true } });
+      const user = await this.p.user.create({ data: { name: profile.contactPerson.trim(), companyName: profile.companyName.trim(), contactPerson: profile.contactPerson.trim(), mobile: profile.mobile.trim(), gstin: profile.gstin?.trim() || undefined, place: profile.place?.trim() || undefined, addressLine1: profile.addressLine1.trim(), addressLine2: profile.addressLine2?.trim() || undefined, state: profile.state?.trim() || undefined, pinCode: profile.pinCode?.trim() || undefined, additionalInformation: profile.additionalInformation?.trim() || undefined, email: normalizedEmail, passwordHash, role: 'AGENT' as any, active: false }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true } });
       await this.p.auditLog.create({ data: { action: 'AGENT_REGISTERED', entityType: 'User', entityId: user.id, after: { email: user.email, role: user.role } } });
       return { user };
     } catch (error: any) {
@@ -31,6 +31,7 @@ export class AuthService {
     const user = await this.p.user.findUnique({ where: { email: normalizedEmail } });
     const locked = user?.lockedUntil && user.lockedUntil > new Date();
     const valid = Boolean(user?.active && !locked && user && await bcrypt.compare(password, user.passwordHash));
+    if (user?.role === 'AGENT' && !user.active) throw new UnauthorizedException('Your agent registration is pending admin approval.');
     if (!user || !valid) {
       if (user) {
         const failedLoginCount = user.failedLoginCount + 1;

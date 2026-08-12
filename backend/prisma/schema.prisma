@@ -162,6 +162,16 @@ model User {
   email                  String                    @unique
   passwordHash           String
   name                   String
+  companyName            String?
+  contactPerson          String?
+  mobile                 String?
+  gstin                  String?
+  place                  String?
+  addressLine1           String?
+  addressLine2           String?
+  state                  String?
+  pinCode                String?
+  additionalInformation  String?
   role                   UserRole                  @default(RESERVATION)
   active                 Boolean                   @default(true)
   tokenVersion           Int                       @default(0)
