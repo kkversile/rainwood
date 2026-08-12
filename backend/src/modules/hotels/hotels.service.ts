@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
-import { AmenityDto, HotelContentDto, HotelImageDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
+import { AmenityDto, HotelContentDto, HotelImageDto, HotelReviewDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
 import { FilesService } from '../files/files.service';
 import ExcelJS from 'exceljs';
 
@@ -49,7 +49,7 @@ export class HotelsService {
     const from = startDate ? new Date(`${startDate}T00:00:00.000Z`) : undefined;
     const to = endDate ? new Date(`${endDate}T00:00:00.000Z`) : undefined;
     const validRange = from && to && !Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime()) && from <= to;
-    return this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId }, include: { images: { where: { published: true, url: { not: '/rainwood-placeholder.svg' } }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }] }, amenities: { include: { amenity: true } }, rooms: { orderBy: { name: 'asc' }, include: { ratePlans: { orderBy: { name: 'asc' }, include: { rates: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } }, inventory: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } } } });
+    return this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId }, include: { images: { where: { published: true, url: { not: '/rainwood-placeholder.svg' } }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }] }, amenities: { include: { amenity: true } }, rooms: { orderBy: { name: 'asc' }, include: { images: { where: { published: true }, orderBy: { sortOrder: 'asc' } }, ratePlans: { orderBy: { name: 'asc' }, include: { rates: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } }, inventory: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } } } });
   }
 
   async pricebookExport(hotelId: string) {
@@ -78,7 +78,35 @@ export class HotelsService {
   async addAmenity(hotelId: string, body: AmenityDto) {
     await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
     const amenity = await this.prisma.amenity.upsert({ where: { code: body.code.trim().toUpperCase() }, update: { name: body.name.trim() }, create: { code: body.code.trim().toUpperCase(), name: body.name.trim() } });
-    return this.prisma.hotelAmenity.upsert({ where: { hotelId_amenityId: { hotelId, amenityId: amenity.id } }, update: {}, create: { hotelId, amenityId: amenity.id }, include: { amenity: true } });
+    return this.prisma.hotelAmenity.upsert({ where: { hotelId_amenityId: { hotelId, amenityId: amenity.id } }, update: { quantity: body.quantity ?? 1, availabilityType: body.availabilityType ?? '24/7', startTime: body.startTime || null, endTime: body.endTime || null, active: body.active ?? true }, create: { hotelId, amenityId: amenity.id, quantity: body.quantity ?? 1, availabilityType: body.availabilityType ?? '24/7', startTime: body.startTime || null, endTime: body.endTime || null, active: body.active ?? true }, include: { amenity: true } });
+  }
+
+  async deleteAmenity(hotelId: string, amenityId: string) {
+    const link = await this.prisma.hotelAmenity.findUnique({ where: { hotelId_amenityId: { hotelId, amenityId } } });
+    if (!link) throw new NotFoundException('Hotel amenity not found');
+    await this.prisma.hotelAmenity.delete({ where: { hotelId_amenityId: { hotelId, amenityId } } });
+    return { deleted: true, amenityId: link.amenityId };
+  }
+
+  async listReviews(hotelId: string) {
+    await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
+    return this.prisma.hotelReview.findMany({ where: { hotelId }, orderBy: [{ createdAt: 'desc' }] });
+  }
+
+  async createReview(hotelId: string, body: HotelReviewDto) {
+    await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
+    return this.prisma.hotelReview.create({ data: { hotelId, rating: body.rating, description: body.description.trim() } });
+  }
+
+  async updateReview(id: string, body: HotelReviewDto) {
+    await this.prisma.hotelReview.findUniqueOrThrow({ where: { id } });
+    return this.prisma.hotelReview.update({ where: { id }, data: { rating: body.rating, description: body.description.trim() } });
+  }
+
+  async deleteReview(id: string) {
+    await this.prisma.hotelReview.findUniqueOrThrow({ where: { id } });
+    await this.prisma.hotelReview.delete({ where: { id } });
+    return { deleted: true, id };
   }
 
   async addImage(hotelId: string, body: HotelImageDto) {
@@ -103,6 +131,20 @@ export class HotelsService {
   async updateRoom(id: string, body: Partial<RoomTypeDto>) {
     await this.prisma.roomType.findUniqueOrThrow({ where: { id } });
     return this.prisma.roomType.update({ where: { id }, data: { ...body, axisRoomId: body.axisRoomId || undefined } });
+  }
+
+  async addRoomImage(roomTypeId: string, body: HotelImageDto) {
+    await this.prisma.roomType.findUniqueOrThrow({ where: { id: roomTypeId } });
+    return this.prisma.roomImage.create({ data: { roomTypeId, url: body.url.trim(), altText: body.altText?.trim() || 'RainWood room image', sortOrder: body.sortOrder ?? 0, published: body.published ?? true } });
+  }
+
+  async deleteRoomImage(roomTypeId: string, imageId: string) {
+    const image = await this.prisma.roomImage.findFirst({ where: { id: imageId, roomTypeId } });
+    if (!image) throw new NotFoundException('Room image not found');
+    const fileId = image.url.match(/\/files\/public\/([^/?#]+)/)?.[1];
+    await this.prisma.roomImage.delete({ where: { id: image.id } });
+    if (fileId) await this.files.remove(fileId);
+    return { deleted: true, imageId: image.id, fileId: fileId ?? null };
   }
 
   async createRatePlan(roomTypeId: string, body: RatePlanDto) {

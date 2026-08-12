@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { AdminAuthGate } from './AdminData';
+import { AdminAuthGate, invalidateStaffSession } from './AdminData';
 import { apiRequest, clearAccessToken } from '../lib/api';
 
 const links = [['/', 'Home'], ['/hotels', 'Hotels'], ['/booking', 'Book'], ['/contact', 'Contact'], ['/agent/login', 'Agent Login']];
@@ -33,7 +33,7 @@ function StaffDashboardLink() {
 }
 
 export function AdminNav() {
-  async function signOut() { try { await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({ allDevices: false }) }); } catch { /* The local session is still cleared below. */ } finally { clearAccessToken(); window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login`; } }
+  async function signOut() { try { await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({ allDevices: false }) }); } catch { /* The local session is still cleared below. */ } finally { invalidateStaffSession(); clearAccessToken(); window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login`; } }
   return <aside className="adminNav" aria-label="Operations navigation">{adminLinks.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}<button className="adminSignOut" type="button" onClick={() => void signOut()}>Sign out</button></aside>;
 }
 
@@ -43,5 +43,6 @@ export function AgentShell({ title, user, onLogout, children }: { title: string;
 }
 
 export function AdminLayout({ title, children }: { title: string; children: React.ReactNode }) {
-  return <AdminAuthGate><main className="adminShell"><AdminNav /><section className="adminContent"><div className="pageTitle"><div><span>Operations</span><h1>{title}</h1></div></div>{children}</section></main></AdminAuthGate>;
+  const editClass = title === 'Edit Hotel' ? ' hotelEditShell' : '';
+  return <AdminAuthGate><main className={`adminShell${editClass}`}><AdminNav /><section className="adminContent"><div className="pageTitle"><div><span>Operations</span><h1>{title}</h1></div></div>{children}</section></main></AdminAuthGate>;
 }

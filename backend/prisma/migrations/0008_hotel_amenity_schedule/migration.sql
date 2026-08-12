@@ -1,0 +1,5 @@
+ALTER TABLE "HotelAmenity" ADD COLUMN "quantity" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "HotelAmenity" ADD COLUMN "availabilityType" TEXT NOT NULL DEFAULT '24/7';
+ALTER TABLE "HotelAmenity" ADD COLUMN "startTime" TEXT;
+ALTER TABLE "HotelAmenity" ADD COLUMN "endTime" TEXT;
+ALTER TABLE "HotelAmenity" ADD COLUMN "active" BOOLEAN NOT NULL DEFAULT true;

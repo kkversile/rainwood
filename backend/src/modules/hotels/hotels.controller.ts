@@ -1,6 +1,6 @@
 import { Body, ConflictException, Controller, Delete, Get, Header, Param, Patch, Post, Query, StreamableFile, UseGuards } from '@nestjs/common';
 import { HotelsService } from './hotels.service';
-import { AmenityDto, HotelContentDto, HotelImageDto, HotelUpdateDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
+import { AmenityDto, HotelContentDto, HotelImageDto, HotelReviewDto, HotelUpdateDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -19,6 +19,26 @@ export class HotelsController {
 
   @Get(':slug')
   detail(@Param('slug') slug: string) { return this.service.detail(slug); }
+
+  @Get(':hotelId/reviews')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  listReviews(@Param('hotelId') hotelId: string) { return this.service.listReviews(hotelId); }
+
+  @Post(':hotelId/reviews')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  createReview(@Param('hotelId') hotelId: string, @Body() body: HotelReviewDto) { return this.service.createReview(hotelId, body); }
+
+  @Patch('reviews/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  updateReview(@Param('id') id: string, @Body() body: HotelReviewDto) { return this.service.updateReview(id, body); }
+
+  @Delete('reviews/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  deleteReview(@Param('id') id: string) { return this.service.deleteReview(id); }
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -47,6 +67,11 @@ export class HotelsController {
   @Roles('SUPER_ADMIN', 'ADMIN')
   addAmenity(@Param('hotelId') hotelId: string, @Body() body: AmenityDto) { return this.service.addAmenity(hotelId, body); }
 
+  @Delete(':hotelId/amenities/:amenityId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  deleteAmenity(@Param('hotelId') hotelId: string, @Param('amenityId') amenityId: string) { return this.service.deleteAmenity(hotelId, amenityId); }
+
   @Post(':hotelId/images')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
@@ -66,6 +91,16 @@ export class HotelsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   updateRoom(@Param('id') id: string, @Body() body: Partial<RoomTypeDto>) { return this.service.updateRoom(id, body); }
+
+  @Post('rooms/:roomId/images')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  addRoomImage(@Param('roomId') roomId: string, @Body() body: HotelImageDto) { return this.service.addRoomImage(roomId, body); }
+
+  @Delete('rooms/:roomId/images/:imageId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  deleteRoomImage(@Param('roomId') roomId: string, @Param('imageId') imageId: string) { return this.service.deleteRoomImage(roomId, imageId); }
 
   @Post('rooms/:roomId/rate-plans')
   @UseGuards(JwtAuthGuard, RolesGuard)

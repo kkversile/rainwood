@@ -4,15 +4,23 @@ import { FormEvent, useEffect, useState } from 'react';
 import { apiRequest, setAccessToken } from '../lib/api';
 
 let refreshInFlight: Promise<string> | null = null;
+let staffSessionCheckedAt = 0;
+const STAFF_SESSION_CACHE_MS = 5 * 60 * 1000;
 
 function refreshStaffSession() {
+  if (staffSessionCheckedAt && Date.now() - staffSessionCheckedAt < STAFF_SESSION_CACHE_MS) {
+    return Promise.resolve('cached-staff-session');
+  }
   if (!refreshInFlight) {
     refreshInFlight = apiRequest<{ accessToken: string; user: { role: string } }>('/auth/refresh', { method: 'POST' })
-      .then((body) => { if (body.user.role === 'AGENT') throw new Error('AGENT_SESSION'); setAccessToken(body.accessToken, body.user.role); return body.accessToken; })
+      .then((body) => { if (body.user.role === 'AGENT') throw new Error('AGENT_SESSION'); setAccessToken(body.accessToken, body.user.role); staffSessionCheckedAt = Date.now(); return body.accessToken; })
+      .catch((reason) => { staffSessionCheckedAt = 0; throw reason; })
       .finally(() => { refreshInFlight = null; });
   }
   return refreshInFlight;
 }
+
+export function invalidateStaffSession() { staffSessionCheckedAt = 0; }
 
 export function AdminAuthGate({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);

@@ -16,6 +16,18 @@ export class HotelContentDto {
 
   @IsString()
   city!: string;
+  @IsOptional() @IsString() mobile?: string;
+  @IsOptional() @IsString() email?: string;
+  @IsOptional() @IsString() place?: string;
+  @IsOptional() @IsString() country?: string;
+  @IsOptional() @IsString() state?: string;
+  @IsOptional() @IsString() address?: string;
+  @IsOptional() @IsString() pincode?: string;
+  @IsOptional() @IsString() latitude?: string;
+  @IsOptional() @IsString() longitude?: string;
+  @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() margin?: string;
+  @IsOptional() @IsBoolean() powerBackup?: boolean;
 
   @IsOptional()
   @IsString()
@@ -52,6 +64,18 @@ export class HotelUpdateDto {
   @IsOptional() @IsString() @MinLength(2) name?: string;
   @IsOptional() @IsString() @MinLength(2) slug?: string;
   @IsOptional() @IsString() city?: string;
+  @IsOptional() @IsString() mobile?: string;
+  @IsOptional() @IsString() email?: string;
+  @IsOptional() @IsString() place?: string;
+  @IsOptional() @IsString() country?: string;
+  @IsOptional() @IsString() state?: string;
+  @IsOptional() @IsString() address?: string;
+  @IsOptional() @IsString() pincode?: string;
+  @IsOptional() @IsString() latitude?: string;
+  @IsOptional() @IsString() longitude?: string;
+  @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() margin?: string;
+  @IsOptional() @IsBoolean() powerBackup?: boolean;
   @IsOptional() @IsString() @MaxLength(10_000) description?: string;
   @IsOptional() @IsBoolean() active?: boolean;
   @IsOptional() @IsString() seoTitle?: string;
@@ -64,10 +88,22 @@ export class HotelUpdateDto {
 export class RoomTypeDto {
   @IsString() @MinLength(2) code!: string;
   @IsString() @MinLength(2) name!: string;
+  @IsOptional() @IsString() roomTypeTitle?: string;
+  @IsOptional() @IsInt() @Min(0) roomsAvailable?: number;
+  @IsOptional() @IsString() preferredFor?: string;
+  @IsOptional() @IsBoolean() acAvailable?: boolean;
   @IsOptional() @IsString() @MaxLength(10_000) description?: string;
   @IsOptional() @IsInt() maxAdults?: number;
   @IsOptional() @IsInt() maxChildren?: number;
   @IsOptional() @IsInt() maxOccupancy?: number;
+  @IsOptional() @IsString() checkInTime?: string;
+  @IsOptional() @IsString() checkOutTime?: string;
+  @IsOptional() @IsString() gstType?: string;
+  @IsOptional() @IsString() gstPercentage?: string;
+  @IsOptional() @IsString() inbuiltAmenities?: string;
+  @IsOptional() @IsBoolean() breakfastIncluded?: boolean;
+  @IsOptional() @IsBoolean() lunchIncluded?: boolean;
+  @IsOptional() @IsBoolean() dinnerIncluded?: boolean;
   @IsOptional() @IsBoolean() active?: boolean;
   @IsOptional() @IsString() axisRoomId?: string;
 }
@@ -102,5 +138,17 @@ export class RateDayDto {
 
 export class InventoryBatchDto { @IsArray() @ValidateNested({ each: true }) @Type(() => InventoryDayDto) days!: InventoryDayDto[]; }
 export class RateBatchDto { @IsArray() @ValidateNested({ each: true }) @Type(() => RateDayDto) days!: RateDayDto[]; }
-export class AmenityDto { @IsString() @MinLength(2) code!: string; @IsString() @MinLength(2) name!: string; }
+export class AmenityDto {
+  @IsString() @MinLength(2) code!: string;
+  @IsString() @MinLength(2) name!: string;
+  @IsOptional() @IsInt() @Min(1) quantity?: number;
+  @IsOptional() @IsString() availabilityType?: string;
+  @IsOptional() @IsString() startTime?: string;
+  @IsOptional() @IsString() endTime?: string;
+  @IsOptional() @IsBoolean() active?: boolean;
+}
 export class HotelImageDto { @IsString() @MinLength(1) url!: string; @IsOptional() @IsString() altText?: string; @IsOptional() @IsInt() @Min(0) sortOrder?: number; @IsOptional() @IsBoolean() published?: boolean; }
+export class HotelReviewDto {
+  @IsInt() @Min(1) @Max(5) rating!: number;
+  @IsString() @MinLength(1) @MaxLength(5000) description!: string;
+}

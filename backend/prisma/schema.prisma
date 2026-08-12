@@ -230,6 +230,18 @@ model Hotel {
   name              String
   slug              String             @unique
   city              String
+  mobile            String?
+  email             String?
+  place             String?
+  country           String?
+  state             String?
+  address           String?
+  pincode           String?
+  latitude          String?
+  longitude         String?
+  category          String?
+  margin            String?
+  powerBackup       Boolean            @default(false)
   description       String?
   active            Boolean            @default(true)
   seoTitle          String?
@@ -240,6 +252,7 @@ model Hotel {
   rooms             RoomType[]
   images            HotelImage[]
   amenities         HotelAmenity[]
+  reviews           HotelReview[]
   taxes             Tax[]
   charges           Charge[]
   cancellationRules CancellationRule[]
@@ -250,6 +263,18 @@ model Hotel {
   updatedAt         DateTime           @updatedAt
 
   @@index([active, slug])
+}
+
+model HotelReview {
+  id          String   @id @default(cuid())
+  hotelId     String
+  hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  rating      Int
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([hotelId, createdAt])
 }
 
 model HotelImage {
@@ -275,6 +300,11 @@ model Amenity {
 model HotelAmenity {
   hotelId   String
   amenityId String
+  quantity  Int      @default(1)
+  availabilityType String @default("24/7")
+  startTime String?
+  endTime   String?
+  active    Boolean  @default(true)
   hotel     Hotel   @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   amenity   Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
 
@@ -287,10 +317,22 @@ model RoomType {
   hotel        Hotel               @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   code         String
   name         String
+  roomTypeTitle String?
+  roomsAvailable Int                 @default(0)
+  preferredFor String                @default("")
+  acAvailable Boolean                @default(false)
   description  String?
   maxAdults    Int                 @default(2)
   maxChildren  Int                 @default(1)
   maxOccupancy Int                 @default(3)
+  checkInTime String?
+  checkOutTime String?
+  gstType String                       @default("Included")
+  gstPercentage String                 @default("GST - 0%")
+  inbuiltAmenities String              @default("")
+  breakfastIncluded Boolean            @default(false)
+  lunchIncluded Boolean                @default(false)
+  dinnerIncluded Boolean               @default(false)
   active       Boolean             @default(true)
   axisRoomId   String?
   images       RoomImage[]
