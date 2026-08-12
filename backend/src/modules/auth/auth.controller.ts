@@ -22,7 +22,7 @@ export class AuthController {
 
   @Post('agent/register')
   async registerAgent(@Body() body: AgentRegisterDto) {
-    return this.s.registerAgent(body.name, body.email, body.password);
+    return this.s.registerAgent(body, body.email, body.password);
   }
 
   @Post('refresh')

@@ -1,0 +1,10 @@
+ALTER TABLE "User" ADD COLUMN "companyName" TEXT;
+ALTER TABLE "User" ADD COLUMN "contactPerson" TEXT;
+ALTER TABLE "User" ADD COLUMN "mobile" TEXT;
+ALTER TABLE "User" ADD COLUMN "gstin" TEXT;
+ALTER TABLE "User" ADD COLUMN "place" TEXT;
+ALTER TABLE "User" ADD COLUMN "addressLine1" TEXT;
+ALTER TABLE "User" ADD COLUMN "addressLine2" TEXT;
+ALTER TABLE "User" ADD COLUMN "state" TEXT;
+ALTER TABLE "User" ADD COLUMN "pinCode" TEXT;
+ALTER TABLE "User" ADD COLUMN "additionalInformation" TEXT;
