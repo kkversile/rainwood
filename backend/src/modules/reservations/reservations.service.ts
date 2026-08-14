@@ -7,6 +7,7 @@ import { HoldsService } from '../holds/holds.service';
 import { CancellationDto, CreateReservationDto, ModificationDto, ReservationListQueryDto } from './reservations.dto';
 import { parseDateOnly, toDateOnly } from '../../common/dates';
 import { sha256 } from '../../common/security';
+import { serializable } from '../../common/transactions';
 import { assertReservationTransition } from './reservation-state';
 
 @Injectable()
@@ -16,7 +17,7 @@ export class ReservationsService {
   private reference() { return `RW-${new Date().getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`; }
 
   async createFromHold(token: string, body: CreateReservationDto, user?: { id: string }) {
-    return this.p.$transaction(async (tx) => {
+    return serializable(this.p, async (tx) => {
       const hold = await tx.inventoryHold.findUnique({ where: { tokenHash: sha256(token) }, include: { lines: { include: { nights: true } } } });
       if (!hold) throw new BadRequestException('Hold expired or invalid');
       const lockRows = await this.holds.lockInventoryForLines(tx, hold.lines.map((line) => ({ roomTypeId: line.roomTypeId, checkIn: toDateOnly(line.checkIn), checkOut: toDateOnly(line.checkOut) })));
@@ -88,7 +89,7 @@ export class ReservationsService {
       await tx.outboxJob.create({ data: { type: 'AXIS_BOOKING_PUSH', aggregateType: 'Reservation', aggregateId: reservation.id, idempotencyKey: `axis:booking:${reservation.id}:v${reservation.version}`, payload: { reservationId: reservation.id, version: reservation.version } } });
       await tx.auditLog.create({ data: { actorUserId: user?.id, action: 'RESERVATION_CREATED', entityType: 'Reservation', entityId: reservation.id, after: { reference: reservation.reference, source: reservation.source } } });
       return reservation;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
   }
 
   async list(query: ReservationListQueryDto) {
