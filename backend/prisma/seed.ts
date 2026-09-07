@@ -1,7 +1,10 @@
 import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: true } });
+const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
 async function main() {
   const seedPassword = process.env.SEED_ADMIN_PASSWORD ?? 'change_me_after_seed';
@@ -100,4 +103,4 @@ async function main() {
   console.log(`Seeded development data for ${admin.email}`);
 }
 
-main().catch((error) => { console.error(error); process.exitCode = 1; }).finally(() => prisma.$disconnect());
+main().catch((error) => { console.error(error); process.exitCode = 1; }).finally(async () => { await prisma.$disconnect(); await pool.end(); });

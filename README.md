@@ -5,6 +5,19 @@ RainWood is a separate-application hotel direct-booking and reservation system:
 - frontend/: Next.js App Router, React and TypeScript.
 - backend/: NestJS REST API, Prisma and PostgreSQL.
 
+## Current-role project context
+
+This project is part of Kiran Kumar Sabhapathi's current DVi Travel product-development work. It demonstrates the same end-to-end product engineering responsibilities described in his resume: designing a production-oriented hotel booking platform, shaping the React/Next.js experience, building modular NestJS APIs, modeling hotel inventory and reservations with Prisma, and coordinating reliable booking and payment workflows.
+
+Key resume-aligned contributions represented here include:
+
+- hotel discovery, room availability, pricing, temporary holds, reservations, vouchers and cancellation flows;
+- role-based admin and agent workflows for hotels, rate plans, payments, reports and operational support;
+- transactional inventory protection, idempotent payment/webhook handling, audit events and durable outbox jobs;
+- third-party integration boundaries, health/readiness endpoints, metrics and automated backend validation.
+
+The repository uses PostgreSQL for this direct-booking application. The separate DVi Travel Management System described on the resume uses a related React + TypeScript / NestJS + Prisma architecture with MySQL for its operational travel workflows.
+
 The system uses native Node/npm processes and host PostgreSQL. It does not use Docker, a monorepo, PNPM workspaces or a Vite replacement.
 
 ## Quick start

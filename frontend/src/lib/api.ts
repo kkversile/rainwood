@@ -33,7 +33,12 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, retry 
   const headers = new Headers(init.headers);
   if (init.body && !headers.has('Content-Type') && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  const response = await fetch(`${API}${path}`, { ...init, headers, credentials: 'include', cache: 'no-store' });
+  let response: Response;
+  try {
+    response = await fetch(`${API}${path}`, { ...init, headers, credentials: 'include', cache: 'no-store' });
+  } catch {
+    throw new Error(`RainWood API is unavailable. Start the backend and confirm it is listening at ${API}.`);
+  }
   if (response.status === 401 && retry && !path.startsWith('/auth/')) {
     const refreshed = await fetch(`${API}/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
     if (refreshed.ok) {

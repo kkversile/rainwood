@@ -14,6 +14,6 @@ export default async function Hotels() {
 
   return <main className="page demoHotelsPage"><div className="demoHotelsContainer">
     <div className="demoHotelsSectionHead"><div><div className="demoHotelsKicker">Hotel Listing</div><h1>Browse RainWood hotels and start a direct booking journey.</h1></div><p>Published properties, live availability and direct booking paths from the reservation platform.</p></div>
-    {error ? <p className="error" role="alert">{error}</p> : !hotels.length ? <p className="empty">No published hotels are available right now.</p> : <HotelListing hotels={hotels} />}
+    {error ? <div className="dataUnavailable" role="alert"><p className="error">{error}</p><Link className="smallBtn" href="/hotels">Try again</Link></div> : !hotels.length ? <p className="empty">No published hotels are available right now.</p> : <HotelListing hotels={hotels} />}
   </div></main>;
 }

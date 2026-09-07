@@ -33,8 +33,9 @@ function StaffDashboardLink() {
 }
 
 export function AdminNav() {
+  const pathname = usePathname();
   async function signOut() { try { await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({ allDevices: false }) }); } catch { /* The local session is still cleared below. */ } finally { invalidateStaffSession(); clearAccessToken(); window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login`; } }
-  return <aside className="adminNav" aria-label="Operations navigation">{adminLinks.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}<button className="adminSignOut" type="button" onClick={() => void signOut()}>Sign out</button></aside>;
+  return <aside className="adminNav" aria-label="Operations navigation">{adminLinks.map(([href, label]) => { const active = pathname === href || (href !== '/admin/dashboard' && pathname.startsWith(`${href}/`)); return <Link key={href} href={href} className={active ? 'active' : undefined} aria-current={active ? 'page' : undefined}>{label}</Link>; })}<button className="adminSignOut" type="button" onClick={() => void signOut()}>Sign out</button></aside>;
 }
 
 export function AgentShell({ title, user, onLogout, children }: { title: string; user: { name: string; email: string }; onLogout: () => void; children: React.ReactNode }) {
