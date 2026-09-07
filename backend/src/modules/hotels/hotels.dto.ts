@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsDateString, IsInt, IsNumber, IsObject, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsEmail, IsInt, IsNumber, IsObject, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 
 export class HotelContentDto {
   @IsString()
@@ -152,3 +152,17 @@ export class HotelReviewDto {
   @IsInt() @Min(1) @Max(5) rating!: number;
   @IsString() @MinLength(1) @MaxLength(5000) description!: string;
 }
+export class HotelPolicyDto {
+  @IsOptional() @IsString() checkInTime?: string; @IsOptional() @IsString() checkOutTime?: string;
+  @IsOptional() @IsInt() @Min(0) childMinAge?: number; @IsOptional() @IsInt() @Min(0) childMaxAge?: number;
+  @IsOptional() @IsString() childPolicyType?: string; @IsOptional() @IsString() houseRules?: string;
+  @IsOptional() @IsString() noShowPolicy?: string; @IsOptional() @IsString() amendmentPolicy?: string; @IsOptional() @IsString() termsAndConditions?: string;
+  @IsOptional() @IsBoolean() allowEarlyCheckIn?: boolean; @IsOptional() @IsBoolean() allowLateCheckOut?: boolean; @IsOptional() @IsBoolean() allowExtraBed?: boolean;
+  @IsOptional() @IsBoolean() allowPets?: boolean; @IsOptional() @IsBoolean() allowOutsideFood?: boolean; @IsOptional() @IsBoolean() smokingAllowed?: boolean; @IsOptional() @IsBoolean() alcoholAllowed?: boolean;
+}
+export class HotelContactDto {
+  @IsString() @MinLength(2) contactType!: string; @IsString() @MinLength(2) name!: string; @IsOptional() @IsString() designation?: string; @IsOptional() @IsString() department?: string;
+  @IsEmail() email!: string; @IsOptional() @IsString() phone?: string; @IsOptional() @IsString() mobile?: string; @IsOptional() @IsString() preferredMode?: string;
+  @IsOptional() @IsBoolean() primary?: boolean; @IsOptional() @IsString() remarks?: string; @IsOptional() @IsBoolean() active?: boolean;
+}
+export class HotelDocumentDto { @IsString() documentType!: string; @IsString() name!: string; @IsString() fileId!: string; @IsString() fileName!: string; @IsOptional() @IsDateString() expiryDate?: string; }

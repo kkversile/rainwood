@@ -5,14 +5,19 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AdminLayout } from "../../../../components/Shell";
 import { API, apiRequest } from "../../../../lib/api";
+import { HotelExtendedSections } from "../../../../components/HotelExtendedSections";
 
 const steps = [
-  "Basic Info",
-  "Rooms",
-  "Amenities",
+  "Basic Details",
+  "Rooms & Inventory",
+  "Facilities & Amenities",
   "Price Book",
-  "Review",
+  "Reviews",
   "Preview",
+  "Policies",
+  "Contacts",
+  "Location",
+  "Documents",
 ];
 type OccupancyKey =
   | "single"
@@ -172,6 +177,15 @@ const occupancyFields: { key: OccupancyKey; label: string }[] = [
   { key: "extrachild3", label: "Extra child 3 (INR)" },
   { key: "extrainfant", label: "Extra infant (INR)" },
 ];
+const amenityGroups = [
+  { title: "Property Amenities", subtitle: "General facilities available at the property", icon: "▥", control: "switch", items: ["24x7 Front Desk", "Lift", "Power Backup", "Banquet Hall", "Conference Room", "Business Centre", "Luggage Storage", "Laundry", "Travel Desk", "Valet Parking", "EV Charging", "Garden", "Terrace", "Doctor on Call"] },
+  { title: "Room Amenities", subtitle: "In-room facilities and services", icon: "▱", control: "check", items: ["Air Conditioning", "Smart TV", "Tea/Coffee Maker", "Mini Bar", "Wardrobe", "Work Desk", "Safe Locker", "Hair Dryer", "Balcony", "Bathtub", "Iron on Request", "Complimentary Water"] },
+  { title: "Food & Dining", subtitle: "Dining options available at the property", icon: "♜", control: "check", items: ["Multi-cuisine Restaurant", "Breakfast Buffet", "Coffee Shop", "In-room Dining", "Barbecue", "Kids Menu"] },
+  { title: "Wellness & Recreation", subtitle: "Wellness and leisure facilities", icon: "♨", control: "check", items: ["Spa", "Fitness Centre", "Indoor Games", "Outdoor Activities", "Campfire", "Bonfire Area", "Yoga Space"] },
+  { title: "Accessibility & Safety", subtitle: "Safety and accessibility features", icon: "♢", control: "check", items: ["Wheelchair Access", "Accessible Rooms", "CCTV", "Fire Extinguishers", "Smoke Alarms", "First Aid", "Security Guard"] },
+];
+const popularAmenities = ["Free Wi-Fi", "Free Parking", "Restaurant", "Spa", "Swimming Pool", "Room Service", "Family Rooms", "Mountain View"];
+function groupContains(item: string, groupTitle: string) { return amenityGroups.find((group) => group.title === groupTitle)?.items.includes(item) ?? false; }
 const blankHotel = {
   code: "",
   name: "",
@@ -342,11 +356,40 @@ function emptyPricing(): PricingValues {
   };
 }
 
+const hotelCategoryOptions = ["5 Star", "4 Star", "3 Star", "Budget"];
+function StarCategorySelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => { if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", close); document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", escape); };
+  }, [open]);
+  const rating = value === "5 Star" ? 5 : value === "4 Star" ? 4 : value === "3 Star" ? 3 : value === "Budget" ? 2 : 0;
+  return <div className="starCategorySelect" ref={containerRef}><button type="button" className="starCategoryButton" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)}><span className="categoryStars">{rating ? <>{[1, 2, 3, 4, 5].map((star) => <i className={star <= rating ? "filled" : ""} key={star}>★</i>)}</> : <span className="categoryPlaceholder">Select category</span>}</span>{value && <b>{value}</b>}<span className="selectChevron">⌄</span></button>{open && <div className="starCategoryMenu" role="listbox">{hotelCategoryOptions.map((option) => { const optionRating = option === "5 Star" ? 5 : option === "4 Star" ? 4 : option === "3 Star" ? 3 : option === "Budget" ? 2 : 0; return <button type="button" role="option" aria-selected={value === option} key={option} onClick={() => { onChange(option); setOpen(false); }}><span className="categoryStars">{optionRating ? [1, 2, 3, 4, 5].map((star) => <i className={star <= optionRating ? "filled" : ""} key={star}>★</i>) : <span className="categoryPlaceholder">—</span>}</span><b>{option}</b></button>; })}</div>}</div>;
+}
+const propertyTypeOptions = ["Resort", "Hotel", "Villa", "Homestay"];
+function PropertyTypeSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => { if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", close); document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", escape); };
+  }, [open]);
+  const iconName = (option: string) => option.toLowerCase().replace(" ", "-");
+  return <div className="propertyTypeSelect" ref={containerRef}><button type="button" className="propertyTypeButton" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((current) => !current)}><span className={`propertyOptionIcon ${value ? iconName(value) : "default"}`} aria-hidden="true" /> <b>{value || "Select property type"}</b><span className="selectChevron">⌄</span></button>{open && <div className="propertyTypeMenu" role="listbox">{propertyTypeOptions.map((option) => <button type="button" role="option" aria-selected={value === option} key={option} onClick={() => { onChange(option); setOpen(false); }}><span className={`propertyOptionIcon ${iconName(option)}`} aria-hidden="true" /><b>{option}</b></button>)}</div>}</div>;
+}
+
 export default function NewHotelWizard() {
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit") ?? "";
   const initialStep = Number(searchParams.get("step") ?? 0);
-  const [step, setStep] = useState(
+  const [step, setWizardStep] = useState(
     Number.isFinite(initialStep) ? initialStep : 0,
   );
   const [hotel, setHotel] = useState(blankHotel);
@@ -356,6 +399,7 @@ export default function NewHotelWizard() {
   const [roomRows, setRoomRows] = useState<RoomRow[]>([]);
   const [amenity, setAmenity] = useState({ code: "", name: "" });
   const [amenityRows, setAmenityRows] = useState<AmenityRow[]>([]);
+  const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<AmenityRow | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState("ALL");
   const [selectedPlanKey, setSelectedPlanKey] = useState("");
@@ -389,6 +433,10 @@ export default function NewHotelWizard() {
   const [reviewPageSize, setReviewPageSize] = useState(10);
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewDeleteTarget, setReviewDeleteTarget] = useState<HotelReview | null>(null);
+  function setStep(next: number) {
+    if (step === 2 && next === 3) { void saveReferenceAmenities(); return; }
+    setWizardStep(next);
+  }
   async function loadCatalog(id = hotelId) {
     if (id) setCatalog(await apiRequest<Hotel>(`/hotels/${id}/catalog`));
   }
@@ -397,6 +445,7 @@ export default function NewHotelWizard() {
   }, [hotelId]);
   useEffect(() => {
     if (catalog?.amenities) {
+      setSelectedAmenities(catalog.amenities.map((item) => item.amenity.name));
       const drafts = amenityRows.filter((item) => !item.saved);
       setAmenityRows([
         ...drafts,
@@ -824,6 +873,19 @@ export default function NewHotelWizard() {
       await loadCatalog();
     }
   }
+  async function saveReferenceAmenities() {
+    if (!hotelId) { setError("Save the hotel details before configuring amenities."); return; }
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const existing = catalog?.amenities ?? [];
+      const existingNames = new Set(existing.map((item) => item.amenity.name));
+      const selected = new Set(selectedAmenities);
+      await Promise.all(selectedAmenities.filter((name) => !existingNames.has(name)).map((name) => apiRequest(`/hotels/${hotelId}/amenities`, { method: "POST", body: JSON.stringify({ code: `AMN_${name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`, name, quantity: 1, availabilityType: "24/7", active: true }) })));
+      await Promise.all(existing.filter((item) => !selected.has(item.amenity.name)).map((item) => apiRequest(`/hotels/${hotelId}/amenities/${item.amenityId}`, { method: "DELETE" })));
+      await loadCatalog(); setMessage("Amenities saved successfully."); setWizardStep(3);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save amenities"); }
+    finally { setBusy(false); }
+  }
   async function deleteAmenity(row: AmenityRow) {
     if (!hotelId) return;
     if (!row.saved) {
@@ -1052,16 +1114,11 @@ export default function NewHotelWizard() {
       <div className="wizard">
         <div className="wizardHeader">
           <div>
-            <span>Hotel setup</span>
-            <h2>
-              {editId
-                ? "Edit property step by step"
-                : "Create property step by step"}
-            </h2>
+            <span>Hotels <b>›</b> {editId ? "Add / Edit Hotel" : "Add Hotel"}</span>
+            <h2>{editId ? "Edit Hotel" : "Add Hotel"}</h2>
+            <p>Manage hotel details, facilities, images and policies</p>
           </div>
-          <Link className="btn secondary" href="/admin/hotels">
-            Manage Hotels
-          </Link>
+          <div className="hotelHeaderActions"><Link className="btn secondary" href="/admin/hotels">Cancel</Link><button className="btn" form="hotel-basic-form" type="submit">Save Hotel</button></div>
         </div>
         <div className="wizardSteps">
           {steps.map((label, index) => (
@@ -1088,11 +1145,12 @@ export default function NewHotelWizard() {
           </p>
         )}
         {step === 0 && (
-          <form className="formCard wizardCard" onSubmit={nextFromBasic}>
-            <h2>Basic Info</h2>
+          <div className="hotelBasicLayout">
+          <form id="hotel-basic-form" className="formCard wizardCard basicInfoCard" onSubmit={nextFromBasic}>
+            <div className="basicInfoHeading"><div><h2>Basic Information</h2><p>Provide the main details of your hotel</p></div><label className="hotelStatusToggle"><span>Status</span><span className="statusSwitch"><input type="checkbox" checked={hotel.active} onChange={(e) => setHotel({ ...hotel, active: e.target.checked })} /><i /></span><b>{hotel.active ? "Active" : "Inactive"}</b></label></div>
             <div className="two">
               <label>
-                Hotel name
+                Hotel Name <em>*</em>
                 <input
                   value={hotel.name}
                   onChange={(e) => setHotel({ ...hotel, name: e.target.value })}
@@ -1100,17 +1158,7 @@ export default function NewHotelWizard() {
                 />
               </label>
               <label>
-                Place / city
-                <input
-                  value={hotel.city}
-                  onChange={(e) => setHotel({ ...hotel, city: e.target.value })}
-                  required
-                />
-              </label>
-            </div>
-            <div className="two">
-              <label>
-                Hotel code
+                Hotel Code <em>*</em>
                 <input
                   value={hotel.code}
                   onChange={(e) => setHotel({ ...hotel, code: e.target.value })}
@@ -1118,108 +1166,49 @@ export default function NewHotelWizard() {
                   required
                 />
               </label>
+            </div>
+            <div className="two">
               <label>
-                Slug
+                Hotel Category <em>*</em>
+                <StarCategorySelect value={hotel.category} onChange={(value) => setHotel({ ...hotel, category: value })} />
+              </label>
+              <label>
+                Property Type
+                <PropertyTypeSelect value={hotel.place} onChange={(value) => setHotel({ ...hotel, place: value })} />
+              </label>
+            </div>
+            <div className="two">
+              <label>
+                City / Destination <em>*</em>
                 <input
-                  value={hotel.slug}
-                  onChange={(e) => setHotel({ ...hotel, slug: e.target.value })}
+                  value={hotel.city}
+                  onChange={(e) => setHotel({ ...hotel, city: e.target.value })}
                   required
                 />
               </label>
-            </div>
-            <div className="two">
-              <label>Hotel mobile<input value={hotel.mobile} onChange={(e) => setHotel({ ...hotel, mobile: e.target.value })} /></label>
-              <label>Hotel email<input type="email" value={hotel.email} onChange={(e) => setHotel({ ...hotel, email: e.target.value })} /></label>
-            </div>
-            <div className="two">
-              <label>Hotel place<input value={hotel.place} onChange={(e) => setHotel({ ...hotel, place: e.target.value })} /></label>
-              <label>Hotel category<input value={hotel.category} onChange={(e) => setHotel({ ...hotel, category: e.target.value })} /></label>
-            </div>
-            <div className="two">
-              <label>Country<input value={hotel.country} onChange={(e) => setHotel({ ...hotel, country: e.target.value })} /></label>
-              <label>State<input value={hotel.state} onChange={(e) => setHotel({ ...hotel, state: e.target.value })} /></label>
-            </div>
-            <div className="two">
-              <label>Pincode<input value={hotel.pincode} onChange={(e) => setHotel({ ...hotel, pincode: e.target.value })} /></label>
-              <label>Address<input value={hotel.address} onChange={(e) => setHotel({ ...hotel, address: e.target.value })} /></label>
-            </div>
-            <div className="two">
-              <label>Latitude<input value={hotel.latitude} onChange={(e) => setHotel({ ...hotel, latitude: e.target.value })} /></label>
-              <label>Longitude<input value={hotel.longitude} onChange={(e) => setHotel({ ...hotel, longitude: e.target.value })} /></label>
-            </div>
-            <label className="checkLabel"><input type="checkbox" checked={hotel.powerBackup} onChange={(e) => setHotel({ ...hotel, powerBackup: e.target.checked })} /> Power backup</label>
-            <label>
-              Description
-              <textarea
-                value={hotel.description}
-                onChange={(e) =>
-                  setHotel({ ...hotel, description: e.target.value })
-                }
-              />
-            </label>
-            <div className="two">
               <label>
-                SEO title
-                <input
-                  value={hotel.seoTitle}
-                  onChange={(e) =>
-                    setHotel({ ...hotel, seoTitle: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                Legacy hero image URL (optional)
-                <input
-                  type="url"
-                  value={hotel.ogImageUrl}
-                  onChange={(e) =>
-                    setHotel({ ...hotel, ogImageUrl: e.target.value })
-                  }
-                />
+                State <em>*</em>
+                <input value={hotel.state} onChange={(e) => setHotel({ ...hotel, state: e.target.value })} required />
               </label>
             </div>
+            <div className="two">
+              <label>Country <em>*</em><select value={hotel.country} onChange={(e) => setHotel({ ...hotel, country: e.target.value })} required><option value="">Select country</option><option>India</option><option>United Arab Emirates</option><option>Singapore</option></select></label>
+              <label>Pincode <em>*</em><input value={hotel.pincode} onChange={(e) => setHotel({ ...hotel, pincode: e.target.value })} required /></label>
+            </div>
             <label>
-              Hotel gallery images (JPEG or PNG)
-              <input
-                type="file"
-                accept="image/jpeg,image/png"
-                multiple
-                onChange={(e) =>
-                  setImageFiles(Array.from(e.target.files ?? []))
-                }
-              />
-              <small className="muted">
-                These images are uploaded by Admin and used on public hotel
-                cards and detail pages.
-              </small>
+              Address <em>*</em><textarea value={hotel.address} onChange={(e) => setHotel({ ...hotel, address: e.target.value })} required />
             </label>
-            {catalog?.images?.length ? (
-              <div className="hotelImagePreview">
-                <b>Uploaded images</b>
-                <div className="hotelImageThumbs">
-                  {catalog.images.map((image) => (
-                    <div className="hotelImageThumb" key={image.id}>
-                      <img
-                        src={image.url}
-                        alt={image.altText}
-                        title={image.altText}
-                      />
-                      <button
-                        type="button"
-                        className="hotelImageDelete"
-                        aria-label={`Delete ${image.altText}`}
-                        title="Delete image"
-                        onClick={() => void deleteHotelImage(image)}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+            <div className="locationField"><label>Location</label><button type="button" onClick={() => setMessage("Map picker is ready when coordinates are entered.")}>⌖ Get from Map</button><input value={hotel.place} onChange={(e) => setHotel({ ...hotel, place: e.target.value })} placeholder="Enter location or landmark" /></div>
+            <div className="two">
+              <label>Latitude<input value={hotel.latitude} onChange={(e) => setHotel({ ...hotel, latitude: e.target.value })} placeholder="10.2381" /></label>
+              <label>Longitude<input value={hotel.longitude} onChange={(e) => setHotel({ ...hotel, longitude: e.target.value })} placeholder="77.4892" /></label>
+            </div>
+            <label className="descriptionField">Description<textarea value={hotel.description} onChange={(e) => setHotel({ ...hotel, description: e.target.value })} maxLength={1000} placeholder="Describe the hotel, its location and key highlights..." /><small>{hotel.description.length}/1000</small></label>
+            <div className="hotelAdvancedFields"><div className="two"><label>Hotel mobile<input value={hotel.mobile} onChange={(e) => setHotel({ ...hotel, mobile: e.target.value })} /></label><label>Hotel email<input type="email" value={hotel.email} onChange={(e) => setHotel({ ...hotel, email: e.target.value })} /></label></div><div className="two"><label>Slug<input value={hotel.slug} onChange={(e) => setHotel({ ...hotel, slug: e.target.value })} required /></label><label>SEO title<input value={hotel.seoTitle} onChange={(e) => setHotel({ ...hotel, seoTitle: e.target.value })} /></label></div><label className="checkLabel"><input type="checkbox" checked={hotel.powerBackup} onChange={(e) => setHotel({ ...hotel, powerBackup: e.target.checked })} /> Power backup</label></div>
             <WizardButtons busy={busy} next="Save & Continue" />
           </form>
+          <aside className="hotelBasicAside"><section className="hotelSideCard hotelImagesCard"><h2>Hotel Images</h2><p>Add high quality images <small>(Recommended size: 1280 x 720)</small></p><div className="hotelImageMosaic">{catalog?.images?.slice(0, 3).map((image, index) => <div className={index === 0 ? "mainImage" : "smallImage"} key={image.id}><img src={image.url} alt={image.altText} /><button type="button" onClick={() => void deleteHotelImage(image)} aria-label="Delete image">▣</button>{index === 0 && <b>Main Photo</b>}</div>)}{!catalog?.images?.length && <div className="imagePlaceholder">No images uploaded</div>}</div><label className="uploadImagesButton">⇧ &nbsp; Upload Images<input type="file" accept="image/jpeg,image/png" multiple onChange={(e) => setImageFiles(Array.from(e.target.files ?? []))} /></label><small className="uploadHint">JPEG, PNG up to 5MB each</small></section><section className="hotelSideCard hotelLocationCard"><h2>Location on Map</h2><div className="mapPreview"><span>●</span><b>{hotel.name || "Hotel location"}</b><small>{hotel.city || "Select city"}</small></div><button className="updateLocationButton" type="button" onClick={() => setMessage("Location updated.")}>⌖ &nbsp; Update Location</button><div className="quickLinks"><b>ⓘ &nbsp; Quick Links</b><span>View on Google Maps ↗</span><span>View on Tripadvisor ↗</span><span>View on MakeMyTrip ↗</span><span>View on Goibibo ↗</span><span>View on Booking.com ↗</span></div></section></aside>
+          </div>
         )}
         {step === 1 && (
           <section className="roomsEditStep">
@@ -1259,6 +1248,9 @@ export default function NewHotelWizard() {
           </section>
         )}
         {step === 2 && (
+          <section className="amenitiesWorkspace"><div className="amenitiesMain"><section className="amenityReferenceCard popularHighlights"><div className="amenityCardHeading"><div><span className="amenityHeadingIcon">★</span><div><h2>Popular Highlights</h2><p>Select key highlights that will be showcased to guests</p></div></div><span className="selectedBadge">✓ &nbsp; {popularAmenities.filter((item) => selectedAmenities.includes(item)).length} popular highlights selected</span></div><div className="amenityChipGrid">{popularAmenities.map((item) => <button type="button" className={`amenityChip ${selectedAmenities.includes(item) ? "selected" : ""}`} key={item} onClick={() => setSelectedAmenities((current) => current.includes(item) ? current.filter((name) => name !== item) : [...current, item])}><span className="chipCheck">✓</span><span className="chipIcon">✦</span>{item}</button>)}</div></section>{amenityGroups.map((group) => <section className="amenityReferenceCard" key={group.title}><div className="amenityCardTitle"><span className="amenityHeadingIcon">{group.icon}</span><div><h2>{group.title}</h2><p>{group.subtitle}</p></div></div><div className="amenityToggleGrid">{group.items.map((item) => <button type="button" className={`amenityToggleItem ${selectedAmenities.includes(item) ? "selected" : ""}`} key={item} onClick={() => setSelectedAmenities((current) => current.includes(item) ? current.filter((name) => name !== item) : [...current, item])}><span className="miniSwitch"><i /></span><span className="amenityItemIcon">✦</span><span>{item}</span></button>)}</div></section>)}<div className="amenityReferenceActions"><button type="button" className="btn secondary" onClick={() => setStep(0)}>Back</button><button type="button" className="btn" onClick={() => setStep(3)}>Update &amp; Continue</button></div></div><aside className="amenitiesSummaryRail"><section className="amenityReferenceCard"><div className="amenityCardTitle"><span className="amenityHeadingIcon">▥</span><div><h2>Amenities Summary</h2><p>Overview of selected amenities</p></div></div><div className="summaryMetric"><b>✓</b><strong>{selectedAmenities.length}</strong><span>Selected amenities<small>Total amenities across all categories</small></span></div><div className="summaryMetric"><b>★</b><strong>{popularAmenities.filter((item) => selectedAmenities.includes(item)).length}</strong><span>Popular highlights<small>Showcased to guests</small></span></div><div className="summaryMetric"><b>♜</b><strong>{selectedAmenities.filter((item) => ["Multi-cuisine Restaurant", "Breakfast Buffet", "Coffee Shop", "In-room Dining", "Barbecue", "Kids Menu"].includes(item)).length}</strong><span>Dining facilities<small>Food &amp; dining options</small></span></div><div className="summaryMetric"><b>♢</b><strong>{selectedAmenities.filter((item) => groupContains(item, "Accessibility & Safety")).length}</strong><span>Safety features<small>Accessibility &amp; safety amenities</small></span></div></section><section className="amenityReferenceCard guestHighlights"><div className="amenityCardTitle"><span className="amenityHeadingIcon">♛</span><div><h2>Guest-facing Highlights</h2><p>Preview of top amenities shown to guests</p></div></div><div className="guestPreview"><b>{hotel.name || "RainWood Aurum Kodaikanal"}</b><small>A perfect blend of comfort and nature</small></div><div className="guestTags">{popularAmenities.filter((item) => selectedAmenities.includes(item)).slice(0, 6).map((item) => <span key={item}>✓ {item}</span>)}</div><p className="amenityTip">ⓘ &nbsp; <b>Tip:</b> Select only guest-facing amenities that are operational and currently available.</p></section></aside></section>
+        )}
+        {false && step === 2 && (
           <section className="formCard wizardCard amenitiesCard">
             <div className="amenitiesToolbar">
               <button
@@ -1877,6 +1869,9 @@ export default function NewHotelWizard() {
               </div>
             </div>
           </section>
+        )}
+        {hotelId && step >= 6 && step <= 9 && (
+          <HotelExtendedSections hotelId={hotelId} hotel={{ id: hotelId, ...hotel }} initialSection={(["policy", "contacts", "location", "documents"] as const)[step - 6]} />
         )}
       </div>
       {deleteTarget && (

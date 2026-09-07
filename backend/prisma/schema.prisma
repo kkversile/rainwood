@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
   engineType = "client"
 }
 
@@ -257,6 +257,9 @@ model Hotel {
   taxes             Tax[]
   charges           Charge[]
   cancellationRules CancellationRule[]
+  policy            HotelPolicy?
+  contacts          HotelContact[]
+  documents         HotelDocument[]
   reservations      Reservation[]
   holds             InventoryHold[]
   waitlist          WaitlistEntry[]
@@ -276,6 +279,66 @@ model HotelReview {
   updatedAt   DateTime @updatedAt
 
   @@index([hotelId, createdAt])
+}
+
+model HotelPolicy {
+  id                 String   @id @default(cuid())
+  hotelId            String   @unique
+  hotel              Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  checkInTime        String?
+  checkOutTime       String?
+  childMinAge        Int      @default(0)
+  childMaxAge        Int      @default(12)
+  childPolicyType    String   @default("FREE")
+  houseRules         String?
+  noShowPolicy       String?
+  amendmentPolicy    String?
+  termsAndConditions String?
+  allowEarlyCheckIn  Boolean  @default(false)
+  allowLateCheckOut  Boolean  @default(false)
+  allowExtraBed      Boolean  @default(false)
+  allowPets          Boolean  @default(false)
+  allowOutsideFood   Boolean  @default(false)
+  smokingAllowed     Boolean  @default(false)
+  alcoholAllowed     Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model HotelContact {
+  id            String   @id @default(cuid())
+  hotelId       String
+  hotel         Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  contactType   String
+  name          String
+  designation   String?
+  department    String?
+  email         String
+  phone         String?
+  mobile        String?
+  preferredMode String   @default("EMAIL")
+  primary       Boolean  @default(false)
+  remarks       String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([hotelId, active])
+}
+
+model HotelDocument {
+  id           String    @id @default(cuid())
+  hotelId      String
+  hotel        Hotel     @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  documentType String
+  name         String
+  fileId       String
+  fileName     String
+  expiryDate   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([hotelId, documentType])
 }
 
 model HotelImage {
@@ -299,49 +362,49 @@ model Amenity {
 }
 
 model HotelAmenity {
-  hotelId   String
-  amenityId String
-  quantity  Int      @default(1)
-  availabilityType String @default("24/7")
-  startTime String?
-  endTime   String?
-  active    Boolean  @default(true)
-  hotel     Hotel   @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  amenity   Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+  hotelId          String
+  amenityId        String
+  quantity         Int     @default(1)
+  availabilityType String  @default("24/7")
+  startTime        String?
+  endTime          String?
+  active           Boolean @default(true)
+  hotel            Hotel   @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  amenity          Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
 
   @@id([hotelId, amenityId])
 }
 
 model RoomType {
-  id           String              @id @default(cuid())
-  hotelId      String
-  hotel        Hotel               @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  code         String
-  name         String
-  roomTypeTitle String?
-  roomsAvailable Int                 @default(0)
-  preferredFor String                @default("")
-  acAvailable Boolean                @default(false)
-  description  String?
-  maxAdults    Int                 @default(2)
-  maxChildren  Int                 @default(1)
-  maxOccupancy Int                 @default(3)
-  checkInTime String?
-  checkOutTime String?
-  gstType String                       @default("Included")
-  gstPercentage String                 @default("GST - 0%")
-  inbuiltAmenities String              @default("")
-  breakfastIncluded Boolean            @default(false)
-  lunchIncluded Boolean                @default(false)
-  dinnerIncluded Boolean               @default(false)
-  active       Boolean             @default(true)
-  axisRoomId   String?
-  images       RoomImage[]
-  ratePlans    RatePlan[]
-  inventory    InventoryDay[]
-  lines        ReservationLine[]
-  holdLines    InventoryHoldLine[]
-  waitlist     WaitlistEntry[]
+  id                String              @id @default(cuid())
+  hotelId           String
+  hotel             Hotel               @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  code              String
+  name              String
+  roomTypeTitle     String?
+  roomsAvailable    Int                 @default(0)
+  preferredFor      String              @default("")
+  acAvailable       Boolean             @default(false)
+  description       String?
+  maxAdults         Int                 @default(2)
+  maxChildren       Int                 @default(1)
+  maxOccupancy      Int                 @default(3)
+  checkInTime       String?
+  checkOutTime      String?
+  gstType           String              @default("Included")
+  gstPercentage     String              @default("GST - 0%")
+  inbuiltAmenities  String              @default("")
+  breakfastIncluded Boolean             @default(false)
+  lunchIncluded     Boolean             @default(false)
+  dinnerIncluded    Boolean             @default(false)
+  active            Boolean             @default(true)
+  axisRoomId        String?
+  images            RoomImage[]
+  ratePlans         RatePlan[]
+  inventory         InventoryDay[]
+  lines             ReservationLine[]
+  holdLines         InventoryHoldLine[]
+  waitlist          WaitlistEntry[]
 
   @@unique([hotelId, code])
   @@unique([hotelId, axisRoomId])
@@ -406,14 +469,14 @@ model AgentRatePlan {
 }
 
 model AgentWallet {
-  id           String             @id @default(cuid())
-  agentId      String             @unique
-  agent        User               @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  currency     String             @default("INR")
-  balance      Decimal            @default(0) @db.Decimal(14, 2)
+  id           String              @id @default(cuid())
+  agentId      String              @unique
+  agent        User                @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  currency     String              @default("INR")
+  balance      Decimal             @default(0) @db.Decimal(14, 2)
   transactions WalletTransaction[]
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 }
 
 model WalletTransaction {

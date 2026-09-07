@@ -24,6 +24,14 @@ export class FilesController {
     return this.s.save(file.buffer, file.originalname, file.mimetype, 'OTHER', user.id);
   }
 
+  @Post('hotel-document')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (_request, file, callback) => callback(null, ['image/jpeg', 'image/png', 'application/pdf'].includes(file.mimetype)) }))
+  uploadHotelDocument(@UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: any) {
+    if (!file) throw new BadRequestException('A PDF, PNG, or JPEG hotel document is required');
+    return this.s.save(file.buffer, file.originalname, file.mimetype, 'OTHER', user.id);
+  }
+
   @Get('public/:id')
   async publicImage(@Param('id') id: string) {
     const { file, buffer } = await this.s.get(id);
