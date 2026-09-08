@@ -186,17 +186,63 @@ export class HotelReviewDto {
   @IsInt() @Min(1) @Max(5) rating!: number;
   @IsString() @MinLength(1) @MaxLength(5000) description!: string;
 }
+export class CancellationRuleDto {
+  @IsInt() @Min(0) fromDays!: number;
+  @IsInt() @Min(0) toDays!: number;
+  @IsNumber() @Min(0) charge!: number;
+  @IsIn(['PERCENT', 'FIXED']) chargeType!: 'PERCENT' | 'FIXED';
+}
+
 export class HotelPolicyDto {
-  @IsOptional() @IsString() checkInTime?: string; @IsOptional() @IsString() checkOutTime?: string;
-  @IsOptional() @IsInt() @Min(0) childMinAge?: number; @IsOptional() @IsInt() @Min(0) childMaxAge?: number;
-  @IsOptional() @IsString() childPolicyType?: string; @IsOptional() @IsString() houseRules?: string;
-  @IsOptional() @IsString() noShowPolicy?: string; @IsOptional() @IsString() amendmentPolicy?: string; @IsOptional() @IsString() termsAndConditions?: string;
-  @IsOptional() @IsBoolean() allowEarlyCheckIn?: boolean; @IsOptional() @IsBoolean() allowLateCheckOut?: boolean; @IsOptional() @IsBoolean() allowExtraBed?: boolean;
-  @IsOptional() @IsBoolean() allowPets?: boolean; @IsOptional() @IsBoolean() allowOutsideFood?: boolean; @IsOptional() @IsBoolean() smokingAllowed?: boolean; @IsOptional() @IsBoolean() alcoholAllowed?: boolean;
+  @IsOptional() @IsString() @MaxLength(8) checkInTime?: string;
+  @IsOptional() @IsString() @MaxLength(8) checkOutTime?: string;
+  @IsOptional() @IsInt() @Min(0) childMinAge?: number;
+  @IsOptional() @IsInt() @Min(0) childMaxAge?: number;
+  @IsOptional() @IsIn(['FREE', 'CHARGEABLE', 'CUSTOM']) childPolicyType?: string;
+  @IsOptional() @IsString() @MaxLength(5000) houseRules?: string;
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CancellationRuleDto) cancellationRules?: CancellationRuleDto[];
+  @IsOptional() @IsIn(['TOTAL', 'SPECIFIC', 'CUSTOM']) noShowPolicy?: string;
+  @IsOptional() @IsNumber() @Min(0) noShowAmount?: number | null;
+  @IsOptional() @IsString() @MaxLength(2000) noShowCustomText?: string;
+  @IsOptional() @IsIn(['CHARGES_APPLY', 'WITHOUT_CHARGES', 'NOT_ALLOWED']) amendmentPolicy?: string;
+  @IsOptional() @IsString() @MaxLength(2000) termsAndConditions?: string;
+  @IsOptional() @IsBoolean() allowEarlyCheckIn?: boolean;
+  @IsOptional() @IsBoolean() allowLateCheckOut?: boolean;
+  @IsOptional() @IsBoolean() allowExtraBed?: boolean;
+  @IsOptional() @IsBoolean() allowPets?: boolean;
+  @IsOptional() @IsBoolean() allowOutsideFood?: boolean;
+  @IsOptional() @IsBoolean() smokingAllowed?: boolean;
+  @IsOptional() @IsBoolean() alcoholAllowed?: boolean;
 }
 export class HotelContactDto {
   @IsString() @MinLength(2) contactType!: string; @IsString() @MinLength(2) name!: string; @IsOptional() @IsString() designation?: string; @IsOptional() @IsString() department?: string;
   @IsEmail() email!: string; @IsOptional() @IsString() phone?: string; @IsOptional() @IsString() mobile?: string; @IsOptional() @IsString() preferredMode?: string;
   @IsOptional() @IsBoolean() primary?: boolean; @IsOptional() @IsString() remarks?: string; @IsOptional() @IsBoolean() active?: boolean;
 }
-export class HotelDocumentDto { @IsString() documentType!: string; @IsString() name!: string; @IsString() fileId!: string; @IsString() fileName!: string; @IsOptional() @IsDateString() expiryDate?: string; }
+export class HotelDocumentDto { @IsString() documentType!: string; @IsString() name!: string; @IsString() fileId!: string; @IsString() fileName!: string; @IsOptional() @IsDateString() expiryDate?: string | null; }
+export class HotelDocumentUpdateDto { @IsOptional() @IsString() documentType?: string; @IsOptional() @IsString() name?: string; @IsOptional() @IsDateString() expiryDate?: string | null; }
+
+export class HotelLocationProfileDto {
+  @IsOptional() @IsString() @MaxLength(250) addressLine1?: string;
+  @IsOptional() @IsString() @MaxLength(250) addressLine2?: string;
+  @IsOptional() @IsString() @MaxLength(120) timezone?: string;
+  @IsOptional() @IsString() @MaxLength(120) bestTimeToVisit?: string;
+  @IsOptional() @IsString() @MaxLength(120) elevation?: string;
+  @IsOptional() @IsString() @MaxLength(160) weather?: string;
+  @IsOptional() @IsString() @MaxLength(160) nearbyCity?: string;
+  @IsOptional() @IsString() @MaxLength(160) accessRoad?: string;
+  @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+}
+
+export class HotelLocationAttractionDto {
+  @IsString() @MinLength(2) @MaxLength(160) name!: string;
+  @IsString() @MaxLength(40) distance!: string;
+  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+}
+
+export class HotelLocationTransportDto {
+  @IsString() @IsIn(['AIRPORT', 'TRAIN', 'BUS', 'OTHER']) type!: string;
+  @IsString() @MinLength(2) @MaxLength(160) name!: string;
+  @IsString() @MaxLength(40) distance!: string;
+  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+}

@@ -123,8 +123,12 @@
 .hotelEditShell .wizardHeader>div>span{display:block;color:#365d82;text-transform:none;letter-spacing:0;font-size:12px;font-weight:600}.hotelEditShell .wizardHeader>div>span b{padding:0 8px;color:#94a3b8}.hotelEditShell .wizardHeader h2{margin:6px 0 2px;font-size:25px}.hotelEditShell .wizardHeader p{margin:0;color:#607b96;font-size:12px}.hotelHeaderActions{display:flex;gap:8px;align-items:center}.hotelHeaderActions .btn{min-width:80px;height:34px;padding:8px 18px}.hotelBasicLayout{display:grid;grid-template-columns:minmax(0,1fr) 336px;gap:10px;align-items:start}.hotelBasicLayout .wizardCard{max-width:none;margin:0;padding:16px 18px}.basicInfoHeading{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.basicInfoHeading h2,.hotelSideCard h2{margin:0;color:#123e6e;font-size:16px}.basicInfoHeading p,.hotelSideCard p{margin:2px 0 0;color:#607b96;font-size:11px}.hotelStatusToggle{display:flex;align-items:center;gap:8px;color:#274d70;font-size:11px}.hotelStatusToggle input{appearance:none;position:relative;width:40px;height:22px;margin:0;border:0;border-radius:999px;background:#cbd5e1;cursor:pointer}.hotelStatusToggle input:before{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.15s}.hotelStatusToggle input:checked{background:#1ca86b}.hotelStatusToggle input:checked:before{left:21px}.hotelStatusToggle b{font-size:11px}.hotelBasicLayout label{gap:4px;color:#345675;font-size:10px;font-weight:700}.hotelBasicLayout label em{color:#e11d48;font-style:normal}.hotelBasicLayout input,.hotelBasicLayout select,.hotelBasicLayout textarea{min-height:30px;margin-top:0;padding:7px 10px;border-color:#cfdae5;border-radius:6px;color:#38516b;background:#fff;font-size:11px}.hotelBasicLayout textarea{min-height:54px;resize:vertical}.hotelBasicLayout .two{gap:14px;margin-bottom:8px}.hotelBasicLayout>form>label{margin-bottom:8px}.locationField{position:relative;margin-bottom:8px}.locationField label{display:block;margin-bottom:4px}.locationField button{position:absolute;right:0;top:-2px;border:0;background:transparent;color:#0875d1;font-size:10px;font-weight:700;cursor:pointer}.locationField input{width:100%}.descriptionField{position:relative}.descriptionField small{position:absolute;right:10px;bottom:8px;color:#70869b;font-size:9px;font-weight:400}.hotelAdvancedFields{display:none}.hotelBasicLayout .wizardButtons{margin-top:12px}.hotelBasicAside{display:grid;gap:10px}.hotelSideCard{background:#fff;border:1px solid #dbe5ee;border-radius:8px;padding:12px;box-shadow:0 3px 10px rgba(18,62,110,.04)}.hotelImageMosaic{display:grid;grid-template-columns:2fr 1fr;grid-template-rows:74px 74px;gap:5px;margin:8px 0}.hotelImageMosaic>div{position:relative;overflow:hidden;border-radius:6px;background:#dcebf4}.hotelImageMosaic .mainImage{grid-row:1/3}.hotelImageMosaic img{width:100%;height:100%;object-fit:cover}.hotelImageMosaic button{position:absolute;right:5px;top:5px;width:20px;height:20px;padding:0;border:0;border-radius:4px;background:#fff;color:#3a5870;font-size:10px;cursor:pointer}.hotelImageMosaic b{position:absolute;left:5px;top:5px;padding:4px 6px;border-radius:4px;background:#123e6e;color:#fff;font-size:9px}.imagePlaceholder{display:grid;place-items:center;grid-column:1/-1;grid-row:1/-1;color:#6f879c;font-size:11px}.uploadImagesButton{position:relative;display:inline-flex!important;align-items:center;justify-content:center;min-height:28px!important;width:max-content;padding:5px 10px!important;border:1px solid #1680df;border-radius:5px;color:#0875d1!important;font-size:10px!important;cursor:pointer}.uploadImagesButton input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.uploadHint{margin-left:8px;color:#7890a3;font-size:9px}.mapPreview{height:112px;margin:10px 0;border-radius:6px;position:relative;overflow:hidden;background-color:#d9eedc;background-image:linear-gradient(25deg,transparent 42%,rgba(255,255,255,.85) 43%,rgba(255,255,255,.85) 48%,transparent 49%),linear-gradient(110deg,transparent 47%,rgba(126,188,221,.65) 48%,rgba(126,188,221,.65) 56%,transparent 57%),repeating-linear-gradient(12deg,rgba(255,255,255,.28) 0 12px,transparent 12px 25px)}.mapPreview:before{content:"Kodaikanal Lake     Coaker's Walk              Bryant Park";position:absolute;left:26px;top:22px;color:#387c9f;font-size:9px;word-spacing:8px}.mapPreview span{position:absolute;left:51%;top:43%;color:#ed3d2c;font-size:25px;text-shadow:0 1px 1px #fff}.mapPreview b{position:absolute;left:58%;top:42%;color:#c33a2f;font-size:9px;max-width:90px}.mapPreview small{position:absolute;left:58%;top:58%;color:#c33a2f;font-size:9px}.updateLocationButton{padding:6px 10px;border:1px solid #147ee8;border-radius:5px;background:#fff;color:#0875d1;font-size:10px;font-weight:700}.quickLinks{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px;padding:12px;background:#edf7ff;border-radius:6px;color:#0875d1;font-size:9px}.quickLinks b{grid-column:1/-1;font-size:10px}.quickLinks span{cursor:pointer}.hotelEditShell .hotelBasicLayout .formCard{border-radius:8px}
 @media(max-width:1050px){.hotelBasicLayout{grid-template-columns:minmax(0,1fr) 280px}}@media(max-width:800px){.hotelBasicLayout{grid-template-columns:1fr}.hotelBasicAside{grid-template-columns:1fr 1fr}.hotelHeaderActions{display:none}}@media(max-width:560px){.hotelBasicAside{grid-template-columns:1fr}.basicInfoHeading{align-items:flex-start;gap:12px;flex-direction:column}}
 .hotelHeaderBrand img{display:block;width:142px;height:45px;object-fit:contain}.hotelBrandFallback{display:none}.hotelLinksMenu{position:relative;color:#0e3a6c}.hotelLinksMenu summary{list-style:none;cursor:pointer;padding:7px 4px;font-size:16px}.hotelLinksMenu summary::-webkit-details-marker{display:none}.hotelLinksMenu>div{position:absolute;right:0;top:34px;z-index:50;display:grid;min-width:150px;padding:7px;background:#fff;border:1px solid #dbe3ec;border-radius:8px;box-shadow:0 10px 28px rgba(15,45,70,.16)}.hotelLinksMenu a{padding:8px 10px;color:#294d6d;font-size:12px;font-weight:600}.hotelLinksMenu a:hover{background:#eff6fb;color:#0c356a}.hotelEditShell .hotelHeaderUser{margin-left:auto}
+.hotelHeaderSearch{position:relative;width:min(576px,45vw);margin:0 24px;padding:0;border:0;border-radius:0;color:#94a3b8;font-size:initial}
+.hotelHeaderSearch .uiIcon{position:absolute;left:14px;top:50%;z-index:1;transform:translateY(-50%)}
+.hotelHeaderSearch input{display:block;width:100%;height:38px;margin:0;padding:8px 16px 8px 40px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;color:#334155;font-size:14px;outline:0}
+.hotelHeaderSearch input:focus{border-color:#bfdbfe;box-shadow:0 0 0 2px rgba(59,130,246,.12)}
 .hotelEditShell .wizardSteps{display:flex;align-items:stretch;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}.hotelEditShell .wizardStep{flex:0 0 auto;min-width:124px;white-space:nowrap}
-.hotelEditShell>.adminContent{padding:14px 16px 28px}.hotelEditShell .wizard{max-width:none;width:100%;margin:0}.hotelEditShell .wizardHeader{padding:0 2px}.hotelEditShell .wizardSteps{width:100%}
+.hotelEditShell>.adminContent{padding:32px 16px 28px}.hotelEditShell .wizard{max-width:none;width:100%;margin:0}.hotelEditShell .wizardHeader{padding:0 2px}.hotelEditShell .wizardSteps{width:100%}
 .categoryControl{position:relative;display:block}.categoryControl select{padding-left:92px!important}.categoryStars{position:absolute;z-index:2;left:12px;top:50%;transform:translateY(-50%);color:#f6a900;font-size:16px;letter-spacing:0;line-height:1;pointer-events:none}.categoryStars i{color:#d8e0e8;font-style:normal}.statusSwitch{position:relative;display:inline-block;width:40px;height:22px;flex:0 0 40px}.statusSwitch input{position:absolute!important;inset:0;width:40px!important;height:22px!important;min-height:22px!important;margin:0!important;padding:0!important;opacity:0;z-index:2;cursor:pointer}.statusSwitch i{position:absolute;inset:0;border-radius:999px;background:#cbd5e1;transition:background .16s ease}.statusSwitch i:after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.15);transition:left .16s ease}.statusSwitch input:checked+i{background:#1caf70}.statusSwitch input:checked+i:after{left:21px}.hotelStatusToggle{gap:7px!important}.hotelStatusToggle>b{font-size:11px!important}
 .propertyTypeControl{position:relative;display:block}.propertyTypeControl select{padding-left:34px!important}.propertyTypeIcon{position:absolute;z-index:2;left:12px;top:50%;transform:translateY(-50%);color:#6a8095;font-size:16px;line-height:1;pointer-events:none}
 .starCategorySelect{position:relative}.starCategoryButton{position:relative;display:flex;align-items:center;width:100%;height:30px;padding:0 30px 0 12px;border:1px solid #cfdae5;border-radius:6px;background:#fff;color:#38516b;font-size:11px;font-weight:700;text-align:left;cursor:pointer}.starCategoryButton:focus{outline:0;box-shadow:0 0 0 2px rgba(14,58,108,.15);border-color:#0c356a}.starCategoryButton .categoryStars{position:static;transform:none;display:flex;gap:1px;margin-right:7px;font-size:16px}.starCategoryButton .categoryStars i,.starCategoryMenu .categoryStars i{color:#d8e0e8;font-style:normal}.starCategoryButton .categoryStars i.filled,.starCategoryMenu .categoryStars i.filled{color:#f6a900}.categoryPlaceholder{color:#6b8298;font-size:11px}.selectChevron{position:absolute;right:10px;color:#345675;font-size:15px}.starCategoryMenu{position:absolute;z-index:20;left:0;right:0;top:34px;padding:4px 0;background:#fff;border:1px solid #aabaca;border-radius:6px;box-shadow:0 8px 18px rgba(15,45,70,.15)}.starCategoryMenu button{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border:0;background:#fff;color:#345675;font-size:11px;text-align:left;cursor:pointer}.starCategoryMenu button:hover,.starCategoryMenu button[aria-selected=true]{background:#eaf3ff;color:#0c5fb4}.starCategoryMenu .categoryStars{display:flex;gap:1px;min-width:78px;font-size:15px}
@@ -136,3 +140,371 @@
 .starCategoryMenu .categoryStars{position:static;transform:none;display:flex;align-items:center;gap:1px;margin:0;min-width:82px;height:16px}.starCategoryMenu .categoryStars i{position:static;display:block;line-height:1;font-size:15px}.starCategoryMenu button{align-items:center;min-height:32px}.starCategoryMenu button b{line-height:16px}
 .amenitiesWorkspace{display:grid;grid-template-columns:minmax(0,1fr) 235px;gap:10px;align-items:start}.amenitiesMain,.amenitiesSummaryRail{display:grid;gap:10px}.amenityReferenceCard{background:#fff;border:1px solid #dbe5ee;border-radius:8px;padding:12px;box-shadow:0 3px 10px rgba(18,62,110,.04)}.amenityCardHeading,.amenityCardTitle{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.amenityCardTitle>div,.amenityCardHeading>div>div{display:inline-block;vertical-align:top}.amenityReferenceCard h2{margin:0;color:#123e6e;font-size:13px}.amenityReferenceCard p{margin:1px 0 9px;color:#71869a;font-size:9px}.amenityHeadingIcon{display:inline-grid;place-items:center;width:20px;height:20px;margin-right:7px;color:#0875d1;font-size:17px;vertical-align:top}.selectedBadge{padding:5px 8px;border:1px solid #c7ecd9;border-radius:999px;background:#effbf5;color:#178250;font-size:9px;font-weight:700;white-space:nowrap}.amenityChipGrid{display:flex;flex-wrap:wrap;gap:5px}.amenityChip{display:inline-flex;align-items:center;gap:5px;padding:6px 8px;border:1px solid #c8def5;border-radius:5px;background:#f5faff;color:#2e536f;font-size:9px;cursor:pointer}.amenityChip.selected{background:#edf7ff;border-color:#9ac8f4;color:#174f85}.chipCheck{display:grid;place-items:center;width:11px;height:11px;border:1px solid #9fb6c9;border-radius:2px;color:transparent;font-size:8px}.amenityChip.selected .chipCheck{background:#147ee8;border-color:#147ee8;color:#fff}.chipIcon{color:#277bc1;font-size:11px}.amenityToggleGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));column-gap:18px;row-gap:9px}.amenityToggleItem{display:flex;align-items:center;gap:7px;min-width:0;border:0;background:transparent;padding:0;color:#35536c;font-size:9px;text-align:left;cursor:pointer}.amenityToggleItem>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.miniSwitch{position:relative;width:25px;height:14px;flex:0 0 25px;border-radius:999px;background:#cbd8e3}.miniSwitch i{position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 1px 2px #9aaab5}.amenityToggleItem.selected .miniSwitch{background:#20ad70}.amenityToggleItem.selected .miniSwitch i{left:13px}.amenityItemIcon{width:14px;color:#688198;text-align:center;font-size:11px}.amenityReferenceActions{display:flex;justify-content:flex-end;gap:8px}.amenityReferenceActions .btn{padding:8px 14px;font-size:10px}.amenitiesSummaryRail .amenityReferenceCard{padding:10px}.summaryMetric{display:grid;grid-template-columns:27px 27px 1fr;align-items:center;gap:6px;padding:8px 6px;margin-top:6px;border:1px solid #e0ebf3;border-radius:6px;background:#f8fbfd}.summaryMetric>b{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#e4f6ec;color:#1a9d65;font-size:12px}.summaryMetric:nth-of-type(3)>b{background:#fff5d8;color:#ecaa00}.summaryMetric strong{color:#123e6e;font-size:16px}.summaryMetric span{color:#365673;font-size:9px;font-weight:700}.summaryMetric small{display:block;color:#8094a5;font-size:8px;font-weight:400}.guestPreview{display:grid;align-content:end;min-height:72px;margin:7px 0;padding:9px;border-radius:6px;background:linear-gradient(145deg,#43757e,#0d3144);color:#fff}.guestPreview b{font-size:10px}.guestPreview small{margin:2px 0 0;color:#d6e7ed;font-size:8px}.guestTags{display:flex;flex-wrap:wrap;gap:4px}.guestTags span{padding:4px 6px;border:1px solid #c9e1f5;border-radius:999px;color:#1764a1;background:#f5faff;font-size:8px}.amenityTip{margin:9px 0 0!important;padding:8px;background:#eaf6ff;border-radius:5px;color:#2272a7!important;font-size:8px!important}.amenityTip b{color:#146197}@media(max-width:950px){.amenitiesWorkspace{grid-template-columns:1fr}.amenitiesSummaryRail{grid-template-columns:1fr 1fr}.amenityToggleGrid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:620px){.amenitiesSummaryRail{grid-template-columns:1fr}.amenityToggleGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(min-width:901px){.hotelEditShell{grid-template-columns:240px minmax(0,1fr)}.hotelHeaderBrand{width:240px}.hotelEditShell>.adminContent{padding-right:32px;padding-left:32px}}
+
+/* Stitch-matched hotel policy workspace */
+.policiesWorkspace{display:grid;gap:8px;color:#1e293b}.policiesTopGrid{display:grid;grid-template-columns:1.12fr .93fr .98fr;gap:8px}.policiesMiddleGrid{display:grid;grid-template-columns:1.45fr .72fr .93fr;gap:8px;align-items:stretch}.policyCard{min-width:0;margin:0;padding:12px;background:#fff;border:1px solid #dbe5ee;border-radius:8px;box-shadow:0 3px 10px rgba(18,62,110,.04)}.policiesTopGrid>.policyCard{min-height:188px}.policiesMiddleGrid>.policyCard{min-height:226px}.policyCardHeading{display:flex;align-items:flex-start;gap:9px;margin:0 0 12px}.policyCardHeadingRow{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.policyCardIcon{display:grid;place-items:center;width:26px;height:26px;flex:0 0 26px;border-radius:7px;background:#eff6ff;color:#0875e1}.policyCardIcon svg{width:17px;height:17px;stroke-width:2.2}.policyCardHeading h2{margin:1px 0 1px;color:#123e6e;font-size:13px;font-weight:800;line-height:1.2}.policyCardHeading p{margin:0;color:#71869a;font-size:9px;line-height:1.25}.policiesWorkspace label,.policyFieldLabel{color:#345675;font-size:9px;font-weight:700}.policiesWorkspace label em,.policyFieldLabel em{color:#e11d48;font-style:normal}.policyTimeGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:2px}.policyTimeGrid label{display:grid;gap:5px}.policyInputWithIcon{position:relative;display:block}.policyInputWithIcon svg{position:absolute;left:9px;top:50%;z-index:1;width:14px;height:14px;color:#647f99;transform:translateY(-50%)}.hotelEditShell .policyInputWithIcon input{width:100%;height:34px;min-height:34px;margin:0;padding:7px 8px 7px 30px;border:1px solid #cfdae5;border-radius:6px;color:#38516b;background:#fff;font-size:11px;font-weight:500}.policyInfoBanner{display:flex;align-items:flex-start;gap:7px;margin-top:13px;padding:10px;border:1px solid #dceeff;border-radius:6px;background:#edf7ff;color:#226ca8;font-size:9px;line-height:1.35}.policyInfoBanner svg{width:13px;height:13px;flex:0 0 13px;margin-top:1px;fill:#147ee8;color:#147ee8}.policyFieldLabel{display:block;margin:0 0 6px}.childAgeRange{display:flex;align-items:center;gap:10px}.hotelEditShell .childAgeRange input{width:70px;height:32px;min-height:32px;margin:0;padding:6px 10px;text-align:left}.childAgeRange span{color:#546e86;font-size:10px;font-weight:700}.childPolicyTypeLabel{margin-top:11px}.policyRadioGroup{display:grid;gap:5px}.policyRadioGroup.compact{gap:4px}.policyRadio{display:flex!important;align-items:center;gap:7px!important;margin:0!important;color:#35536c!important;font-size:9px!important;font-weight:500!important;line-height:1.2;cursor:pointer;text-transform:none!important}.hotelEditShell .policyRadio input{appearance:auto;width:13px!important;height:13px!important;min-height:13px!important;flex:0 0 13px;margin:0!important;padding:0!important;border-radius:50%;accent-color:#147ee8}.houseRulesCard{display:flex;flex-direction:column}.houseRulesCard .policyCardHeading{margin-bottom:8px}.houseRulesList{min-height:117px;padding:7px 9px;border:1px solid #e4edf4;border-radius:6px;background:#f8fafc;color:#536b80;font-size:8.5px;line-height:1.35}.houseRulesList ul{margin:0;padding-left:13px}.houseRulesList li{margin:0}.hotelEditShell .houseRulesEditor{width:100%;min-height:117px;margin:0;padding:8px;border:1px solid #cfdae5;border-radius:6px;color:#536b80;font-size:9px;line-height:1.35;resize:vertical}.houseRulesActions{display:flex;justify-content:flex-end;margin-top:7px}.houseRulesActions button{display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid #b8cce0;border-radius:6px;background:#fff;color:#345675;font-size:9px;font-weight:700;cursor:pointer}.houseRulesActions svg{width:13px;height:13px;color:#0875e1}.addPolicyButton{display:inline-flex;align-items:center;gap:4px;min-width:86px;height:29px;padding:5px 9px;border:1px solid #6db3f5;border-radius:6px;background:#fff;color:#0875d1;font-size:9px;font-weight:800;white-space:nowrap;cursor:pointer}.addPolicyButton svg{width:13px;height:13px}.policyTableWrap{overflow-x:auto;border:1px solid #e1e9f0;border-radius:6px}.policyTableWrap table{width:100%;min-width:390px;border-collapse:collapse;text-align:left}.policyTableWrap th{padding:9px 10px;border-bottom:1px solid #e5e9ef;background:#fff8fb;color:#405b73;font-size:8px;font-weight:800;white-space:nowrap}.policyTableWrap td{padding:10px;border-bottom:1px solid #edf1f5;color:#536b80;font-size:9px}.policyTableWrap tbody tr:last-child td{border-bottom:0}.policyTableWrap td b{color:#294963}.policyTableWrap th:last-child,.policyTableWrap td:last-child{text-align:right}.policyRowActions{display:flex;align-items:center;justify-content:flex-end;gap:9px}.policyRowActions button{display:grid;place-items:center;padding:0;border:0;background:transparent;color:#0875e1;cursor:pointer}.policyRowActions button:last-child{color:#f43f5e}.policyRowActions svg{width:13px;height:13px;stroke-width:2.2}.policyRuleEditor{display:grid;grid-template-columns:repeat(4,minmax(60px,1fr)) auto;gap:6px;align-items:end;margin:-2px 0 8px;padding:8px;border:1px solid #cce3f8;border-radius:6px;background:#f7fbff}.policyRuleEditor label{display:grid;gap:3px}.hotelEditShell .policyRuleEditor input,.hotelEditShell .policyRuleEditor select{width:100%;height:28px;min-height:28px;margin:0;padding:4px 6px;border-radius:5px;font-size:9px}.policyRuleEditor>div{display:flex;gap:4px}.policyRuleEditor>div button{height:28px;padding:4px 7px;border:1px solid #147ee8;border-radius:5px;background:#147ee8;color:#fff;font-size:8px;font-weight:700}.policyRuleEditor>div button+button{background:#fff;color:#345675;border-color:#cbd5e1}.policyRuleEditor>p{grid-column:1/-1;margin:0;color:#dc2626;font-size:8px}.splitPolicyCard{display:flex;flex-direction:column;padding:0}.policySubsection{flex:1;padding:12px}.policySubsection .policyCardHeading{margin-bottom:9px}.amendmentSubsection{border-top:1px solid #e7edf2}.hotelEditShell .policyConditionalInput{width:100%;min-height:29px;margin:7px 0 0;padding:6px 8px;border:1px solid #cfdae5;border-radius:5px;color:#38516b;font-size:9px}.additionalPoliciesCard .policyCardHeading{margin-bottom:11px}.additionalPolicyList{display:grid;gap:8px}.additionalPolicyRow,.additionalPolicyRow>div{display:flex;align-items:center}.additionalPolicyRow{justify-content:space-between;gap:6px}.additionalPolicyRow>div{min-width:0;gap:8px}.additionalPolicyRow>div>span{overflow:hidden;color:#35536c;font-size:9px;line-height:1.15;white-space:nowrap;text-overflow:ellipsis}.additionalPolicyRow small{color:#94a3b8;font-size:7.5px;font-weight:400}.additionalPolicyRow>svg{width:12px;height:12px;flex:0 0 12px;color:#0875e1}.policySwitch{position:relative;width:28px;height:15px;flex:0 0 28px;padding:0;border:0;border-radius:999px;background:#cbd5e1;cursor:pointer;transition:background .15s}.policySwitch i{position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.2);transition:left .15s}.policySwitch.on{background:#147ee8}.policySwitch.on i{left:15px}.termsPolicyCard{padding:12px}.termsPolicyCard .policyCardHeading{margin-bottom:9px}.policyRichEditor{overflow:hidden;border:1px solid #dbe5ee;border-radius:6px}.policyEditorToolbar{display:flex;align-items:center;justify-content:space-between;height:30px;padding:5px 9px;border-bottom:1px solid #dbe5ee;background:#f8fafc}.policyEditorToolbar>div{display:flex;align-items:center;gap:8px}.policyEditorToolbar button{display:grid;place-items:center;width:15px;height:15px;padding:0;border:0;background:transparent;color:#4e657a;cursor:pointer}.policyEditorToolbar button svg{width:12px;height:12px}.policyEditorToolbar>div>i{width:1px;height:13px;background:#cbd5e1}.policyEditorToolbar>span{color:#94a3b8;font:8px Consolas,monospace}.hotelEditShell .policyRichEditor textarea{display:block;width:100%;height:76px;min-height:76px;margin:0;padding:8px 10px;border:0!important;border-radius:0;color:#455f76;background:#fff;font-size:9px;line-height:1.45;resize:vertical;box-shadow:none!important}.policyFormActions{display:flex;justify-content:flex-end;gap:8px;padding-top:3px}.policyFormActions .btn{min-width:86px;height:32px;padding:7px 12px;font-size:10px}.policyFormActions .btn:last-child{min-width:126px}.hotelExtended>.notice,.hotelExtended>.error{margin:0 0 8px;padding:9px 12px;font-size:10px}
+@media(max-width:1150px){.policiesTopGrid{grid-template-columns:1fr 1fr}.houseRulesCard{grid-column:1/-1}.policiesMiddleGrid{grid-template-columns:1.35fr .85fr}.additionalPoliciesCard{grid-column:1/-1}.additionalPolicyList{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.policiesTopGrid,.policiesMiddleGrid{grid-template-columns:1fr}.houseRulesCard,.additionalPoliciesCard{grid-column:auto}.policyRuleEditor{grid-template-columns:1fr 1fr}.policyRuleEditor>div{grid-column:1/-1}.additionalPolicyList{grid-template-columns:1fr}.policyFormActions{flex-wrap:wrap}}
+.policiesMiddleGrid{grid-template-columns:1.33fr .76fr 1fr}.policyTimeGrid label{display:block}.policyInputWithIcon{margin-top:5px}
+@media(max-width:1150px){.policiesMiddleGrid{grid-template-columns:1.35fr .85fr}}@media(max-width:760px){.policiesMiddleGrid{grid-template-columns:1fr}}
+.policyLoading{display:grid;place-items:center;min-height:320px;border:1px solid #dbe5ee;border-radius:8px;background:#fff;color:#607b96;font-size:11px}
+
+/* Policies: dimensions and tokens copied from the supplied Stitch reference. */
+.policiesWorkspace{gap:20px;color:#1e293b}
+.policiesTopGrid{grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.policiesMiddleGrid{grid-template-columns:5fr 4fr 3fr;gap:20px}
+.policyCard{padding:20px;border-color:rgba(226,232,240,.8);border-radius:12px;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+.policiesTopGrid>.policyCard,.policiesMiddleGrid>.policyCard{min-height:0}
+.policyCardHeading{gap:12px;margin:0 0 16px}
+.policyCardHeadingRow{gap:12px;margin-bottom:16px}
+.policyCardIcon{width:32px;height:32px;flex-basis:32px;border-radius:8px;background:#eff6ff;color:#0d54b8}
+.policyCardIcon svg{width:16px;height:16px;stroke-width:2}
+.policyCardHeading h2{margin:1px 0 1px;color:#1e293b;font-size:14px;line-height:1.25}
+.policyCardHeading p{color:#64748b;font-size:11px;line-height:1.25}
+.policiesWorkspace label,.policyFieldLabel{color:#334155;font-size:11px;font-weight:500}
+.policyTimeGrid{gap:12px;margin-top:16px}
+.policyTimeGrid label{display:block}
+.policyInputWithIcon{margin-top:4px}
+.policyInputWithIcon svg{left:10px;width:14px;height:14px;color:#94a3b8}
+.hotelEditShell .policyInputWithIcon input{height:36px;min-height:36px;padding:6px 8px 6px 32px;border-color:#cbd5e1;border-radius:8px;color:#1e293b;font-size:12px;font-weight:400}
+.policyInfoBanner{gap:8px;margin-top:16px;padding:10px;border-color:#dbeafe;border-radius:8px;background:rgba(239,246,255,.7);color:#0d54b8;font-size:11px;line-height:1.25}
+.policyInfoBanner svg{width:14px;height:14px;flex-basis:14px;margin-top:1px;color:#0d54b8}
+.policyFieldLabel{margin:0 0 8px}
+.childAgeRange{gap:12px}
+.hotelEditShell .childAgeRange input{width:80px;height:36px;min-height:36px;padding:6px 12px;text-align:center;border-color:#cbd5e1;border-radius:8px;font-size:12px}
+.childAgeRange span{color:#64748b;font-size:12px;font-weight:500}
+.childPolicyTypeLabel{margin-top:16px}
+.policyRadioGroup{gap:8px}
+.policyRadioGroup.compact{gap:6px}
+.policyRadio{gap:8px!important;color:#334155!important;font-size:12px!important;font-weight:400!important;line-height:1.25}
+.hotelEditShell .policyRadio input{width:14px!important;height:14px!important;min-height:14px!important;flex-basis:14px!important;accent-color:#0d54b8}
+.houseRulesCard .policyCardHeading{margin-bottom:12px}
+.houseRulesList{min-height:0;padding:12px;border-color:#f1f5f9;border-radius:8px;background:#f8fafc;color:#475569;font-size:11px;line-height:1.625}
+.houseRulesList ul{padding-left:16px}
+.houseRulesList li{margin:0}
+.hotelEditShell .houseRulesEditor{min-height:170px;padding:12px;border-color:#cbd5e1;border-radius:8px;color:#475569;font-size:12px;line-height:1.625}
+.houseRulesActions{margin-top:12px}
+.houseRulesActions button{gap:6px;padding:6px 12px;border-color:#cbd5e1;border-radius:8px;color:#334155;font-size:12px;font-weight:500;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+.houseRulesActions svg{width:14px;height:14px;color:#0d54b8}
+.addPolicyButton{gap:4px;min-width:0;height:36px;padding:6px 12px;border-color:#93c5fd;border-radius:8px;color:#0d54b8;font-size:12px;font-weight:600}
+.addPolicyButton svg{width:16px;height:16px}
+.policyTableWrap{border:0;border-radius:0}
+.policyTableWrap table{min-width:0}
+.policyTableWrap th{padding:8px 12px;border-bottom-color:rgba(226,232,240,.7);background:rgba(255,241,242,.4);color:#334155;font-size:11px}
+.policyTableWrap td{padding:10px 12px;border-bottom-color:#f1f5f9;color:#475569;font-size:12px}
+.policyTableWrap td b{color:#1e293b}
+.policyRowActions{gap:10px}
+.policyRowActions svg{width:14px;height:14px}
+.policyRuleEditor{gap:8px;margin:-4px 0 12px;padding:12px;border-radius:8px}
+.hotelEditShell .policyRuleEditor input,.hotelEditShell .policyRuleEditor select{height:34px;min-height:34px;padding:6px 8px;border-radius:8px;font-size:12px}
+.policyRuleEditor>div button{height:34px;padding:6px 10px;border-radius:8px;font-size:11px}
+.splitPolicyCard{padding:20px;gap:20px}
+.policySubsection{padding:0}
+.policySubsection .policyCardHeading{margin-bottom:8px}
+.amendmentSubsection{padding-top:20px;border-top-color:#f1f5f9}
+.hotelEditShell .policyConditionalInput{min-height:36px;margin-top:8px;padding:6px 10px;border-color:#cbd5e1;border-radius:8px;font-size:12px}
+.additionalPoliciesCard .policyCardHeading{margin-bottom:16px}
+.additionalPolicyList{gap:12px}
+.additionalPolicyRow{gap:12px}
+.additionalPolicyRow>div{gap:12px}
+.additionalPolicyRow>div>span{color:#334155;font-size:12px;line-height:1.25}
+.additionalPolicyRow small{color:#94a3b8;font-size:10px}
+.additionalPolicyRow>svg{width:14px;height:14px;flex-basis:14px;color:#0d54b8}
+.policySwitch{width:32px;height:16px;flex-basis:32px;background:#cbd5e1}
+.policySwitch i{top:2px;left:2px;width:12px;height:12px}
+.policySwitch.on{background:#0d54b8}
+.policySwitch.on i{left:18px}
+.termsPolicyCard{padding:20px}
+.termsPolicyCard .policyCardHeading{margin-bottom:16px}
+.policyRichEditor{border-color:#e2e8f0;border-radius:8px}
+.policyEditorToolbar{height:34px;padding:6px 12px;border-bottom-color:#e2e8f0;background:#f8fafc}
+.policyEditorToolbar>div{gap:12px}
+.policyEditorToolbar button{width:16px;height:16px;color:#475569}
+.policyEditorToolbar button svg{width:14px;height:14px}
+.policyEditorToolbar>div>i{height:14px}
+.policyEditorToolbar>span{font-size:10px}
+.hotelEditShell .policyRichEditor textarea{height:110px;min-height:110px;padding:14px;color:#334155;font-size:12px;line-height:1.625}
+.policyFormActions{gap:12px;padding-top:0}
+.policyFormActions .btn{height:36px;padding:8px 16px;font-size:12px}
+.policyFormActions .btn:last-child{min-width:0}
+.hotelEditShell,.hotelEditShell>.adminContent{background:#f3f6fa}
+.hotelEditShell>.adminNav{background:#091a30}
+.hotelEditShell>.adminNav a.active{background:#1254a1}
+.policyCardHeading h2{color:#0f172a}
+@media(min-width:1024px){
+  .policiesTopGrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .policiesMiddleGrid{grid-template-columns:5fr 4fr 3fr}
+  .houseRulesCard,.additionalPoliciesCard{grid-column:auto}
+  .hotelEditShell .wizardSteps{margin-bottom:24px;border-radius:12px}
+  .hotelEditShell .wizardStep{flex:1 1 0;min-width:0;padding:12px 16px;border-bottom-width:2px;font-size:12px}
+}
+@media(max-width:1023px){.policiesTopGrid{grid-template-columns:1fr 1fr}.houseRulesCard{grid-column:1/-1}.policiesMiddleGrid{grid-template-columns:1.35fr .85fr}.additionalPoliciesCard{grid-column:1/-1}.additionalPolicyList{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:767px){.policiesTopGrid,.policiesMiddleGrid{grid-template-columns:1fr}.houseRulesCard,.additionalPoliciesCard{grid-column:auto}.policyRuleEditor{grid-template-columns:1fr 1fr}.policyRuleEditor>div{grid-column:1/-1}.additionalPolicyList{grid-template-columns:1fr}}
+
+/* Final Stitch reference geometry for the hotel editor shell. */
+@media(min-width:901px){
+  .hotelEditShell .hotelGlobalHeader{display:grid;grid-template-columns:240px minmax(0,1fr) 197px;justify-content:initial}
+  .hotelEditShell .hotelHeaderBrand{grid-column:1;width:240px}
+  .hotelEditShell .hotelHeaderSearch{grid-column:2;justify-self:center;width:min(576px,100%);margin:0}
+  .hotelEditShell .hotelHeaderUser{grid-column:3;justify-self:end}
+  .hotelEditShell .wizardHeader{align-items:center;margin-bottom:24px}
+  .hotelEditShell .wizardHeader>div>span{line-height:16px}
+  .hotelEditShell .wizardHeader h2{font-size:24px;line-height:32px;margin:4px 0 2px}
+  .hotelEditShell .wizardHeader p{line-height:16px}
+  .hotelEditShell .wizardSteps{height:43px}
+  .hotelEditShell .wizardStep{height:41px;line-height:16px;padding:0 16px}
+  .policiesWorkspace{gap:24px}
+  .policiesTopGrid>.policyCard{min-height:303px}
+  .policiesMiddleGrid>.policyCard{min-height:325px}
+  .termsPolicyCard{height:236px;box-sizing:border-box}
+}
+@media(max-width:700px){.hotelEditShell>.adminContent{padding:16px}}
+
+/* Contacts tab: measured against the supplied Stitch reference. */
+@media(min-width:901px){
+  .hotelEditShell:has(.contactsWizard)>.adminContent{padding:20px 28px 28px;font-size:13px;line-height:19.5px}
+  .hotelEditShell:has(.contactsWizard) .hotelGlobalHeader{grid-template-columns:240px minmax(0,1fr) 208px}
+  .hotelEditShell:has(.contactsWizard) .hotelHeaderUser{width:204px}
+  .hotelEditShell:has(.contactsWizard) .hotelHeaderSearch{width:576px;padding:0 16px;box-sizing:border-box}
+  .hotelEditShell:has(.contactsWizard) .hotelHeaderSearch input{height:34px;font-size:12px;line-height:16px}
+  .hotelEditShell:has(.contactsWizard)>.adminNav{padding:16px 12px;gap:2px}
+  .hotelEditShell:has(.contactsWizard)>.adminNav a{padding:8px 12px;font-size:12px;line-height:16px}
+  .hotelEditShell:has(.contactsWizard)>.adminNav a.active{background:#1668e3}
+  .contactsWizard .wizardHeader{height:62px;margin-bottom:16px;padding:0}
+  .contactsWizard .wizardHeader>div>span{font-size:11px;line-height:16.5px}
+  .contactsWizard .wizardHeader h2{font-size:20px;line-height:25px;margin:2px 0 0}
+  .contactsWizard .wizardHeader p{font-size:12px;line-height:16px}
+  .contactsWizard .wizardHeader .hotelHeaderActions .btn{height:30px;padding:7px 16px;font-size:12px}
+  .contactsWizard .wizardSteps{height:43px;margin-bottom:24px;display:flex;align-items:stretch;gap:0;overflow-x:auto;overflow-y:hidden;border:1px solid #dbe3ec;border-radius:8px;background:#fff;box-shadow:0 3px 10px rgba(18,62,110,.04);padding:0}
+  .contactsWizard .wizardStep{height:41px;min-width:0;flex:1 1 0;padding:0 16px;line-height:16px;font-size:12px;background:transparent;border-bottom:2px solid transparent;justify-content:center}
+  .contactsWizard .wizardStep.active{background:#f8fbff;color:#2563eb;border-bottom-color:#2563eb}
+  .contactsWizard .wizardStep.done{background:transparent}
+}
+.contactsWorkspace{display:grid;gap:16px;color:#1e293b}
+.contactsInfoGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;min-height:103.5px}
+.contactsIntroCard,.contactsTipsCard,.contactsFormCard,.contactsTypesCard,.contactsExistingCard{min-width:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 1px 3px rgba(15,23,42,.04)}
+.contactsIntroCard{grid-column:span 2;display:flex;align-items:flex-start;gap:14px;padding:16px}
+.contactsTipsCard{grid-column:span 1}
+.contactsIntroIcon{display:grid;place-items:center;flex:0 0 40px;width:40px;height:40px;margin-top:2px;border-radius:50%;background:#eff6ff;color:#2563eb}
+.contactsIntroCard h2,.contactsTipsCard h3,.contactsFormCard h2,.contactsTypesCard h2,.contactsExistingCard h2{margin:0;color:#1e293b;font-weight:700}
+.contactsIntroCard h2{font-size:14px;line-height:20px}
+.contactsIntroCard p{margin:4px 0 0;color:#64748b;font-size:12px;line-height:18px}
+.contactsTipsCard{display:flex;align-items:flex-start;gap:10px;padding:14px;color:#059669;background:#f0fdf4;border-color:#bbf7d0}
+.contactsTipsCard h3{color:#065f46;font-size:13px;line-height:18px}
+.contactsTipsCard ul{margin:3px 0 0;padding-left:17px;color:#047857;font-size:11px;line-height:16px}
+.contactsFormGrid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:stretch;min-height:386px}
+.contactsFormCard{grid-column:span 8;min-height:386px;padding:16px;box-sizing:border-box}
+.contactsTypesCard{grid-column:span 4;min-height:386px;padding:16px;box-sizing:border-box}
+.contactsFormCard h2,.contactsTypesCard h2,.contactsExistingCard h2{font-size:14px;line-height:20px}
+.contactsFormCard form{display:grid;gap:12px;margin-top:14px}
+.contactsThreeColumns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.contactsWorkspace label,.contactsWorkspace fieldset{min-width:0;margin:0;text-transform:none}
+.contactsWorkspace label{display:grid;gap:4px}
+.contactsFieldLabel,.contactsWorkspace legend{display:block;color:#334155;font-size:11px;font-weight:600;line-height:16px}
+.contactsFieldLabel em{color:#ef4444;font-style:normal}
+.contactsWorkspace input,.contactsWorkspace select,.contactsWorkspace textarea{box-sizing:border-box;width:100%;min-height:30px;margin:0;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#334155;font-size:12px;font-weight:400;line-height:16px;outline:0}
+.contactsWorkspace input::placeholder,.contactsWorkspace textarea::placeholder{color:#94a3b8}
+.contactsWorkspace select{height:30px;padding-right:26px;line-height:16px}
+.contactsWorkspace input:focus,.contactsWorkspace select:focus,.contactsWorkspace textarea:focus{border-color:#3b82f6;box-shadow:0 0 0 1px #3b82f6!important}
+.contactsPhoneField{display:flex;min-width:0}
+.contactsPhoneField input{min-width:0;border-top-left-radius:0;border-bottom-left-radius:0}
+.contactsCountryCode{display:inline-flex;align-items:center;gap:5px;flex:0 0 52px;padding:0 8px;border:1px solid #cbd5e1;border-right:0;border-radius:6px 0 0 6px;background:#f8fafc;color:#475569;font-size:12px;line-height:28px}
+.contactsCountryCode span{color:#94a3b8;font-size:13px}
+.contactsPreferenceRow{display:grid;grid-template-columns:4fr 5fr 3fr;gap:12px;align-items:end;padding-top:1px}
+.contactsPreferenceRow fieldset{border:0;padding:0}
+.contactsPreferenceRow legend{padding:0;margin-bottom:4px}
+.contactsRadioGroup{display:flex;align-items:center;gap:16px;height:30px}
+.contactsRadioGroup label{display:flex;align-items:center;gap:6px;white-space:nowrap;color:#334155;font-size:12px;font-weight:400}
+.contactsRadioGroup input{width:14px;height:14px;min-height:14px;padding:0;accent-color:#2563eb}
+.contactsSwitch{position:relative;display:block;width:36px;height:20px;margin-top:0}
+.contactsSwitch input{position:absolute;inset:0;z-index:1;width:36px;height:20px;min-height:20px;margin:0;opacity:0;cursor:pointer}
+.contactsSwitch i{position:absolute;inset:0;border-radius:999px;background:#cbd5e1;transition:background .15s}
+.contactsSwitch i:after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border:1px solid #cbd5e1;border-radius:50%;background:#fff;transition:left .15s}
+.contactsSwitch input:checked+i{background:#2563eb}
+.contactsSwitch input:checked+i:after{left:18px;border-color:#fff}
+.contactsRemarks textarea{height:38px;min-height:38px;resize:vertical}
+.contactsFormActions{display:flex;align-items:center;justify-content:space-between;padding-top:1px}
+.contactsSecondaryButton,.contactsPrimaryButton{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:30px;padding:6px 16px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#334155;font-size:12px;font-weight:500;cursor:pointer}
+.contactsPrimaryButton{border-color:#09367d;background:#09367d;color:#fff}
+.contactsPrimaryButton:hover{background:#072b64}
+.contactsPrimaryButton:disabled{cursor:not-allowed;opacity:.6}
+.contactsSectionHeading{margin-bottom:12px}
+.contactsSectionHeading p{margin:1px 0 0;color:#64748b;font-size:11px;line-height:16px}
+.contactsTypeGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.contactsTypeItem{display:flex;align-items:center;gap:8px;min-width:0;padding:6px;border:1px solid transparent;border-radius:8px;background:#fff;text-align:left;cursor:pointer}
+.contactsTypeItem:hover{border-color:#e2e8f0;background:#f8fafc}
+.contactsTypeIcon{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border-radius:50%}
+.contactsTypeItem>span:last-child{display:grid;min-width:0}
+.contactsTypeItem b,.contactsTypeItem small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.contactsTypeItem b{color:#1e293b;font-size:12px;line-height:16px}
+.contactsTypeItem small{color:#94a3b8;font-size:10px;line-height:14px}
+.contactsExistingCard{min-height:294px;padding:16px;box-sizing:border-box}
+.contactsExistingHeader{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.contactsSearch{position:relative!important;display:flex!important;align-items:center!important;gap:7px!important;width:288px!important;height:30px;min-height:30px!important;padding:0 10px!important;border:1px solid #e2e8f0!important;border-radius:6px!important;color:#64748b!important}
+.contactsSearch input{height:28px!important;min-height:28px!important;padding:5px 0!important;border:0!important;box-shadow:none!important;font-size:11px!important}
+.contactsTableScroll{width:100%;overflow-x:auto}
+.contactsTable{width:100%;min-width:1200px;border-collapse:collapse;text-align:left;color:#334155;font-size:11px}
+.contactsTable th{padding:10px 12px;border-bottom:1px solid #e2e8f0;background:#f8fafc;color:#475569;font-size:11px;font-weight:600;white-space:nowrap}
+.contactsTable td{padding:12px;border-bottom:1px solid #f1f5f9;white-space:nowrap;line-height:16px}
+.contactsTable tbody tr:hover{background:#f8fafc}
+.contactsPill{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;font-size:10px;line-height:14px;font-weight:600}
+.contactsPill.yes,.contactsPill.active{background:#e8f8f0;color:#059669}.contactsPill.no,.contactsPill.inactive{background:#f1f5f9;color:#64748b}
+.contactsActions{display:inline-flex;align-items:center;justify-content:center;gap:10px}
+.contactsActions button{display:grid;place-items:center;padding:0;border:0;background:transparent;color:#3b82f6;cursor:pointer}
+.contactsActions button:last-child{color:#ef4444}
+.contactsEmpty{text-align:center;color:#64748b!important}
+@media(max-width:1100px){.contactsInfoGrid{grid-template-columns:1fr}.contactsFormGrid{grid-template-columns:1fr}.contactsFormCard,.contactsTypesCard{grid-column:auto}.contactsTypeGrid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:700px){.contactsThreeColumns,.contactsPreferenceRow{grid-template-columns:1fr}.contactsTypeGrid{grid-template-columns:1fr 1fr}.contactsExistingHeader{align-items:stretch;flex-direction:column}.contactsSearch{width:100%!important}}
+
+/* Location tab: Stitch reference geometry and functional map/context editor. */
+.locationWorkspace{display:grid;gap:8px;color:#1e293b}
+.locationUpperGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:stretch}
+.locationLowerGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:stretch}
+.locationFormCard,.locationMapCard,.locationDataCard{min-width:0;margin:0;padding:12px;background:#fff;border:1px solid #dbe5ee;border-radius:8px;box-shadow:0 3px 10px rgba(18,62,110,.04)}
+.locationFormCard,.locationMapCard{min-height:303px}
+.locationDataCard{min-height:258px}
+.locationCardHeading{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding-bottom:12px;border-bottom:1px solid #eef2f6}
+.locationHeadingGroup{display:flex;align-items:flex-start;gap:10px;min-width:0}
+.locationHeadingIcon{display:grid;place-items:center;width:26px;height:26px;flex:0 0 26px;border-radius:7px;background:#eff6ff;color:#0875e1}
+.locationHeadingGroup h2{margin:1px 0 1px;color:#123e6e;font-size:13px;font-weight:800;line-height:16px}
+.locationHeadingGroup p{margin:0;color:#71869a;font-size:9px;line-height:13px}
+.locationOutlineButton,.locationAddButton{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:29px;padding:6px 10px;border:1px solid #6db3f5;border-radius:6px;background:#fff;color:#0875d1;font-size:9px;font-weight:800;white-space:nowrap;text-decoration:none;cursor:pointer}
+.locationOutlineButton:hover,.locationAddButton:hover{background:#eff7ff}
+.locationFormBody{display:grid;gap:10px;margin-top:13px}
+.locationTwoColumns,.locationThreeColumns{display:grid;gap:12px}
+.locationTwoColumns{grid-template-columns:1fr 1fr}
+.locationThreeColumns{grid-template-columns:1.35fr .62fr 1fr}
+.locationFieldControl{display:grid;gap:4px;margin:0!important;color:#345675;font-size:9px;font-weight:700}
+.locationFieldControl em{color:#e11d48;font-style:normal}
+.hotelEditShell .locationFieldControl input,.hotelEditShell .locationFieldControl select{width:100%;height:30px;min-height:30px;margin:0;padding:6px 10px;border:1px solid #cfdae5;border-radius:6px;color:#38516b;background:#fff;font-size:11px;font-weight:500}
+.hotelEditShell .locationFieldControl input:focus,.hotelEditShell .locationFieldControl select:focus{border-color:#3b82f6;box-shadow:0 0 0 1px #3b82f6!important}
+.locationMapCard{display:flex;flex-direction:column}
+.locationMapFrame{height:240px;margin-top:12px;overflow:hidden;border:1px solid #dbe5ee;border-radius:8px;background:#e5e3df}
+.locationMapFrame .hotelLeafletMap{width:100%;height:100%;min-height:240px}
+.locationMapFrame .leaflet-container{font:10px Inter,Arial,sans-serif}
+.rainwoodMapMarker{border:0!important;background:transparent!important}
+.rainwoodMapMarker span{display:block;width:20px;height:20px;border:3px solid #fff;border-radius:50% 50% 50% 0;background:#ef3e32;box-shadow:0 2px 5px rgba(15,23,42,.28);transform:rotate(-45deg);transform-origin:center}
+.locationUrlBar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;padding:8px;border:1px solid #dbe5ee;border-radius:6px;background:#f8fafc}
+.locationUrlBar>div{display:flex;align-items:center;gap:7px;min-width:0;color:#0875e1}
+.locationUrlBar>div>span{display:grid;min-width:0}
+.locationUrlBar b{color:#345675;font-size:9px;line-height:13px}
+.locationUrlBar small{overflow:hidden;color:#71869a;font-size:8px;line-height:12px;white-space:nowrap;text-overflow:ellipsis}
+.locationUrlBar button{display:inline-flex;align-items:center;gap:4px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;color:#0875d1;font-size:9px;font-weight:700;white-space:nowrap;cursor:pointer}
+.locationDataCard{display:flex;flex-direction:column}
+.locationDataCard .locationCardHeading{padding-bottom:10px}
+.locationDataCard .locationHeadingGroup{gap:9px}
+.locationDataCard .locationHeadingIcon{width:26px;height:26px;flex-basis:26px}
+.locationAddButton{min-height:27px;padding:5px 8px;background:#eff7ff;border-color:#bfdbfe;font-size:9px}
+.locationTableWrap{margin-top:10px;overflow-x:auto}
+.locationDataTable{width:100%;min-width:0;border-collapse:collapse;table-layout:fixed;text-align:left;color:#536b80;font-size:9px}
+.locationDataTable th{padding:6px 8px;border-bottom:1px solid #e5e9ef;color:#64748b;font-size:8px;font-weight:800;white-space:nowrap}
+.locationDataTable th{background:#fff}
+.locationDataTable td{padding:8px;border-bottom:1px solid #f1f5f9;white-space:nowrap;line-height:12px}
+.locationDataTable th:nth-child(1),.locationDataTable td:nth-child(1){width:15%}
+.locationDataTable th:nth-child(2),.locationDataTable td:nth-child(2){width:45%;overflow:hidden;text-overflow:ellipsis}
+.locationDataTable th:nth-child(3),.locationDataTable td:nth-child(3){width:20%}
+.locationDataTable th:nth-child(4),.locationDataTable td:nth-child(4){width:20%}
+.locationDataTable tbody tr:last-child td{border-bottom:0}
+.locationDataTable td b{color:#294963;font-weight:700}
+.locationDataTable th:last-child,.locationDataTable td:last-child{text-align:right}
+.locationDataTable td:last-child{display:flex;justify-content:flex-end;gap:10px}
+.locationDataTable td:last-child button{display:grid;place-items:center;padding:0;border:0;background:transparent;color:#0875e1;cursor:pointer}
+.locationDataTable td:last-child button:last-child{color:#f43f5e}
+.locationTravelTable td:first-child{width:25px;color:#536b80}
+.locationTransportIcon{display:grid;place-items:center;width:18px;height:18px}
+.locationLocalCard .locationHeadingIcon{background:#fff7ed;color:#d97706}
+.locationLowerGrid>section:first-child .locationHeadingIcon{background:#ecfdf5;color:#059669}
+.locationLowerGrid>section:nth-child(2) .locationHeadingIcon{background:#eef2ff;color:#4f46e5}
+.locationFacts{display:grid;margin-top:7px}
+.locationFact{display:grid;grid-template-columns:minmax(0,1fr) auto 16px;align-items:center;gap:6px;min-height:25px;border-bottom:1px solid #f1f5f9;color:#536b80;font-size:9px}
+.locationFact>span{display:flex;align-items:center;gap:7px;min-width:0}
+.locationFact i{display:grid;place-items:center;width:14px;color:#64748b;font-style:normal}
+.locationFact b{max-width:170px;overflow:hidden;color:#294963;font-size:9px;font-weight:600;white-space:nowrap;text-overflow:ellipsis}
+.locationFact button,.locationNotes button{display:grid;place-items:center;padding:0;border:0;background:transparent;color:#0875e1;cursor:pointer}
+.locationNotes{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-top:9px;padding:8px;border:1px solid #dbeeff;border-radius:6px;background:#edf7ff}
+.locationNotes>div{display:flex;align-items:flex-start;gap:7px;color:#0875e1}
+.locationNotes>div>span{display:grid;gap:2px}
+.locationNotes b{color:#294963;font-size:9px;line-height:12px}
+.locationNotes small{color:#536b80;font-size:8px;line-height:11px}
+.locationSaveBar{display:flex;justify-content:flex-end;margin-top:0}
+.locationSaveBar .btn{height:32px;min-width:126px;padding:7px 12px;font-size:10px}
+.locationWorkspace+.locationSaveBar{margin-top:0}
+@media(max-width:1150px){.locationUpperGrid{grid-template-columns:1fr}.locationLowerGrid{grid-template-columns:1fr 1fr}.locationLocalCard{grid-column:1/-1}}
+@media(max-width:760px){.locationTwoColumns,.locationThreeColumns,.locationLowerGrid{grid-template-columns:1fr}.locationLocalCard{grid-column:auto}.locationCardHeading{align-items:flex-start;flex-direction:column}.locationCardHeading>.locationOutlineButton,.locationCardHeading>.locationAddButton{align-self:flex-end}}
+
+/* Shared React dialogs replace native browser prompt/confirm/alert UI. */
+.uiModalBackdrop{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;padding:24px;background:rgba(8,31,55,.48);backdrop-filter:blur(2px)}
+.uiModal{width:min(460px,100%);overflow:hidden;border:1px solid #d7e2ee;border-radius:12px;background:#fff;box-shadow:0 24px 70px rgba(12,48,82,.28);color:#163b61}
+.uiModalDanger{border-color:#fecdd3}
+.uiModalHeader{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px 14px;border-bottom:1px solid #e6edf4;background:#fbfdff}
+.uiModalHeading{display:flex;align-items:center;gap:10px;min-width:0}
+.uiModalHeading h2{margin:0;color:#123b66;font-size:16px;line-height:22px;font-weight:800}
+.uiModalIcon{display:grid;place-items:center;width:30px;height:30px;flex:none;border-radius:8px;background:#e9f3ff;color:#0875e1}
+.uiModalDanger .uiModalIcon{background:#fff1f2;color:#e11d48}
+.uiModalClose{display:grid;place-items:center;width:30px;height:30px;padding:0;border:0;border-radius:6px;background:transparent;color:#71869a;cursor:pointer}
+.uiModalClose:hover{background:#edf4fa;color:#163b61}
+.uiModalBody{padding:18px 20px 6px}
+.uiModalMessage{margin:0;color:#536b80;font-size:13px;line-height:20px}
+.uiModalField{display:grid;gap:7px;color:#294963;font-size:11px;font-weight:800}
+.uiModalField input{width:100%;height:38px;margin:0;box-sizing:border-box;padding:0 11px;border:1px solid #cbd9e7;border-radius:7px;outline:0;background:#fff;color:#294963;font:inherit;font-weight:600}
+.uiModalField input:focus{border-color:#0875e1;box-shadow:0 0 0 3px rgba(8,117,225,.12)}
+.uiModalActions{display:flex;justify-content:flex-end;gap:9px;padding:16px 20px 19px}
+.uiModalButton{min-width:88px;height:36px;padding:0 14px;border:1px solid #c5d5e5;border-radius:7px;background:#fff;color:#294963;font-size:11px;font-weight:800;cursor:pointer}
+.uiModalButton:hover{background:#f5f9fd}
+.uiModalButton.primary{border-color:#0b4a8f;background:#0b4a8f;color:#fff}
+.uiModalButton.primary:hover{background:#083d76}
+.uiModalButton.primary.danger{border-color:#dc2626;background:#dc2626}
+.uiModalButton.primary.danger:hover{background:#b91c1c}
+@media(max-width:520px){.uiModalBackdrop{padding:14px}.uiModalHeader{padding:16px}.uiModalBody{padding:16px 16px 4px}.uiModalActions{padding:14px 16px 16px}}
+
+/* Documents tab: compact Stitch-aligned cards, table, and React previews. */
+.documentsWorkspace{display:grid;gap:8px;color:#334e68}
+.documentsOverviewCard{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding:12px 10px;background:#fff;border:1px solid #dbe5ee;border-radius:8px;box-shadow:0 3px 10px rgba(18,62,110,.04)}
+.documentsOverviewInfo{display:flex;align-items:flex-start;gap:12px;max-width:590px;padding:2px 0}
+.documentsOverviewIcon{display:grid;place-items:center;width:36px;height:36px;flex:0 0 36px;margin-top:1px;border:1px solid #dbeeff;border-radius:7px;background:#eff7ff;color:#0875e1}
+.documentsOverviewInfo h2{margin:1px 0 3px;color:#123e6e;font-size:13px;line-height:17px;font-weight:800}
+.documentsOverviewInfo p{margin:0;color:#71869a;font-size:9px;line-height:13px}
+.documentsGuidelines{width:292px;flex:none;padding:9px 12px;border:1px solid #dbeeff;border-radius:7px;background:#edf7ff;color:#536b80}
+.documentsGuidelines>div{display:flex;align-items:center;gap:6px;margin-bottom:4px;color:#0875d1;font-size:10px}
+.documentsGuidelines ul{margin:0;padding-left:15px;font-size:8px;line-height:12px}
+.documentsUploadGrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.documentUploadCard{display:flex;min-height:134px;flex-direction:column;align-items:center;justify-content:space-between;padding:10px 8px;border:2px dashed #cbd9e7;border-radius:8px;background:#fff;text-align:center;transition:border-color .15s,background .15s}
+.documentUploadCard:hover{border-color:#60a5fa;background:#fbfdff}
+.documentUploadCardIntro{display:flex;flex-direction:column;align-items:center}
+.documentTypeIcon{display:grid;place-items:center;width:34px;height:34px;margin-bottom:7px;border-radius:50%}
+.documentUploadCard.blue .documentTypeIcon{background:#eff6ff;color:#2563eb}.documentUploadCard.green .documentTypeIcon{background:#ecfdf5;color:#059669}.documentUploadCard.purple .documentTypeIcon{background:#f5f3ff;color:#7c3aed}.documentUploadCard.amber .documentTypeIcon{background:#fffbeb;color:#d97706}.documentUploadCard.rose .documentTypeIcon{background:#fff1f2;color:#ef4444}.documentUploadCard.slate .documentTypeIcon{background:#f1f5f9;color:#64748b}
+.documentUploadCard h3{margin:0;color:#123e6e;font-size:10px;line-height:13px;font-weight:800}.documentUploadCard p{margin:2px 0 0;color:#8498ab;font-size:8px;line-height:11px}
+.documentUploadAction{display:grid;justify-items:center;width:100%;gap:5px}.documentUploadAction input{display:none}.documentUploadAction button{display:inline-flex;align-items:center;justify-content:center;gap:5px;width:88px;height:26px;padding:4px 6px;border:1px solid #147ee8;border-radius:5px;background:#fff;color:#0875d1;font-size:9px;font-weight:800;cursor:pointer}.documentUploadAction button:hover{background:#eff7ff}.documentUploadAction button:disabled{cursor:not-allowed;opacity:.55}.documentUploadAction span{color:#94a3b8;font-size:7px;line-height:9px;white-space:nowrap}
+.documentsListCard{overflow:hidden;background:#fff;border:1px solid #dbe5ee;border-radius:8px;box-shadow:0 3px 10px rgba(18,62,110,.04)}
+.documentsListHeader{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 10px;border-bottom:1px solid #dbe5ee}.documentsListTitle{display:flex;align-items:center;gap:9px;min-width:0}.documentsListTitle>span{display:grid;place-items:center;width:30px;height:30px;border-radius:7px;background:#eff7ff;color:#0875e1}.documentsListTitle h3{margin:0 0 2px;color:#123e6e;font-size:12px;line-height:16px;font-weight:800}.documentsListTitle p{margin:0;color:#8498ab;font-size:8px;line-height:11px}.documentsFilters{display:flex;align-items:center;gap:8px}.documentsSearch{display:flex;align-items:center;gap:6px;width:224px;height:29px;box-sizing:border-box;padding:0 9px;border:1px solid #cbd9e7;border-radius:6px;color:#8ca0b2}.documentsSearch input{width:100%;height:auto!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;outline:0;font-size:9px!important;box-shadow:none!important}.documentsTypeFilter select{width:158px;height:29px;margin:0;padding:0 8px;border:1px solid #cbd9e7;border-radius:6px;background:#fff;color:#536b80;font-size:9px;font-weight:600}
+.documentsTableWrap{overflow-x:auto}.documentsTable{width:100%;min-width:850px;border-collapse:collapse;text-align:left;color:#536b80;font-size:8px}.documentsTable th{padding:8px 9px;border-bottom:1px solid #dbe5ee;background:#f3f7fb;color:#405b73;font-size:8px;font-weight:800;white-space:nowrap}.documentsTable td{padding:7px 9px;border-bottom:1px solid #edf1f5;vertical-align:middle;white-space:nowrap}.documentsTable tbody tr:hover{background:#f8fbff}.documentsTable tbody tr:last-child td{border-bottom:0}.documentsTable td:first-child{color:#71869a;font-weight:600}.documentsTable td b{color:#294963;font-weight:700}.documentsTable code{color:#536b80;font:8px Consolas,monospace}.documentStatus{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;font-size:8px;font-weight:800;line-height:10px}.documentStatus.valid{background:#dff6ea;color:#15945b}.documentStatus.active{background:#dbeeff;color:#0875d1}.documentStatus.soon{background:#fff0d8;color:#f28b16}.documentStatus.expired{background:#ffe2e5;color:#dc2626}.documentRowActions{display:flex;align-items:center;justify-content:center;gap:13px}.documentRowActions button{display:grid;place-items:center;padding:0;border:0;background:transparent;color:#0875e1;cursor:pointer}.documentRowActions button:hover{color:#0756a5}.documentRowActions button.danger{color:#f43f5e}.documentsEmpty{margin:10px;color:#8498ab;text-align:center;font-size:9px}
+.documentPreviewBackdrop{position:fixed;inset:0;z-index:2100;display:grid;place-items:center;padding:20px;background:rgba(8,31,55,.48);backdrop-filter:blur(2px)}.documentPreviewModal,.documentEditModal{width:min(720px,100%);max-height:calc(100vh - 40px);overflow:hidden;border:1px solid #d7e2ee;border-radius:10px;background:#fff;box-shadow:0 24px 70px rgba(12,48,82,.28)}.documentPreviewModal>header,.documentEditModal>header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;border-bottom:1px solid #e6edf4}.documentPreviewModal h2,.documentEditModal h2{margin:0;color:#123e6e;font-size:14px;font-weight:800}.documentPreviewModal header p,.documentEditModal header p{margin:3px 0 0;color:#8498ab;font-size:9px}.documentPreviewModal header button,.documentEditModal header button{display:grid;place-items:center;padding:5px;border:0;border-radius:5px;background:transparent;color:#71869a;cursor:pointer}.documentPreviewBody{display:grid;place-items:center;min-height:320px;max-height:calc(100vh - 180px);padding:12px;background:#f4f8fb;color:#71869a;font-size:11px}.documentPreviewBody img{display:block;max-width:100%;max-height:calc(100vh - 210px);object-fit:contain}.documentPreviewBody iframe{width:100%;height:calc(100vh - 210px);min-height:320px;border:0;background:#fff}.documentPreviewModal>footer,.documentEditModal>footer{display:flex;justify-content:flex-end;gap:8px;padding:11px 16px;border-top:1px solid #e6edf4}.documentPreviewModal>footer button{display:inline-flex;align-items:center;gap:5px}.documentEditBody{display:grid;gap:12px;padding:18px 16px}.documentEditBody label{display:grid;gap:5px;color:#345675;font-size:10px;font-weight:800}.documentEditBody input,.documentEditBody select{height:34px;margin:0;padding:0 9px;border:1px solid #cbd9e7;border-radius:6px;color:#38516b;background:#fff;font-size:11px}.documentEditBody input:focus,.documentEditBody select:focus{outline:0;border-color:#147ee8;box-shadow:0 0 0 2px rgba(20,126,232,.12)}
+@media(max-width:1100px){.documentsUploadGrid{grid-template-columns:repeat(3,minmax(0,1fr))}.documentsOverviewCard{flex-direction:column}.documentsGuidelines{width:auto}.documentsListHeader{align-items:flex-start;flex-direction:column;width:auto}.documentsFilters{width:100%}.documentsSearch{flex:1}}
+@media(max-width:640px){.documentsUploadGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.documentsFilters{align-items:stretch;flex-direction:column}.documentsSearch,.documentsTypeFilter select{width:100%}}
+
+/* Keep the Location tab header and shared tab strip aligned with Contacts and Policies. */
+@media(min-width:901px){
+  .hotelEditShell:has(.locationWorkspace)>.adminContent{padding:20px 28px 28px}
+  .hotelEditShell:has(.locationWorkspace) .hotelGlobalHeader{grid-template-columns:240px minmax(0,1fr) 208px}
+  .hotelEditShell:has(.locationWorkspace) .hotelHeaderUser{width:204px}
+  .hotelEditShell:has(.locationWorkspace) .hotelHeaderSearch{width:576px;padding:0 16px;box-sizing:border-box}
+  .locationWizard .wizardHeader{height:62px;margin-bottom:16px;padding:0}
+  .locationWizard .wizardHeader>div>span{font-size:11px;line-height:16.5px}
+  .locationWizard .wizardHeader h2{font-size:20px;line-height:25px;margin:2px 0 0}
+  .locationWizard .wizardHeader p{font-size:12px;line-height:16px}
+  .locationWizard .wizardHeader .hotelHeaderActions .btn{height:30px;padding:7px 16px;font-size:12px}
+  .locationWizard .wizardSteps{height:43px;margin-bottom:24px;display:flex;align-items:stretch;gap:0;overflow-x:auto;overflow-y:hidden;border:1px solid #dbe3ec;border-radius:8px;background:#fff;box-shadow:0 3px 10px rgba(18,62,110,.04);padding:0}
+  .locationWizard .wizardStep{height:41px;min-width:0;flex:1 1 0;padding:0 16px;line-height:16px;font-size:12px;background:transparent;border-bottom:2px solid transparent;justify-content:center}
+  .locationWizard .wizardStep.active{background:#f8fbff;color:#2563eb;border-bottom-color:#2563eb}
+  .locationWizard .wizardStep.done{background:transparent}
+}
+/* Rate plans reference view */
+.ratePlansPage{max-width:1180px;margin:0 auto;padding:2px 0 24px;color:#112f4f}.ratePlansHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:18px}.ratePlansHeader h1{margin:0;color:#102f50;font-size:30px;line-height:1.1;letter-spacing:-.02em}.ratePlansHeader p{margin:3px 0 0;color:#6d8298;font-size:14px}.ratePlansHeaderActions{display:flex;align-items:center;gap:12px}.ratePlansSearch{display:flex;align-items:center;gap:9px;width:342px;height:38px;margin:0;padding:0 12px;border:1px solid #d9e3ec;border-radius:9px;background:#fff;color:#8ba0b4}.ratePlansSearch input{height:auto;margin:0;padding:0;border:0;outline:0;font-size:12px;color:#143b60}.ratePlansSearch input::placeholder{color:#91a3b4}.ratePlanAddButton{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 17px;border:0;border-radius:8px;background:#0e4266;color:#fff;font-size:13px;font-weight:800;white-space:nowrap;cursor:pointer}.ratePlanAddButton:hover{background:#0b3451}.ratePlansFilters{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:14px}.ratePlanStatusFilters{display:flex;gap:7px;flex-wrap:wrap}.ratePlanStatusFilters button{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 12px;border:1px solid #e0e7ee;border-radius:999px;background:#fff;color:#24486a;font-size:12px;font-weight:700;cursor:pointer}.ratePlanStatusFilters button.active{border-color:#d3e8fb;background:#eef7ff;color:#0875d1}.ratePlanFilterRadio{display:grid;place-items:center;width:15px;height:15px;border:2px solid #c4d4e2;border-radius:50%;color:#fff}.active .ratePlanFilterRadio{border-color:#0875d1;background:#0875d1}.ratePlanSelectFilters{display:flex;gap:10px}.ratePlanSelectFilters label{position:relative;display:flex;align-items:center;gap:8px;width:178px;height:36px;margin:0;padding:0 10px;border:1px solid #dde6ee;border-radius:8px;background:#fff;color:#235275}.ratePlanSelectFilters label:last-child{width:178px}.ratePlanSelectFilters select{height:100%;margin:0;padding:0 18px 0 0;border:0;background:transparent;color:#24486a;font-size:12px;font-weight:700;appearance:none;cursor:pointer}.ratePlanSelectFilters label>svg:last-child{position:absolute;right:9px;pointer-events:none}.ratePlansTableCard{overflow:visible;border:1px solid #e1e8ef;border-radius:8px;background:#fff;box-shadow:0 3px 12px rgba(16,58,89,.06)}.ratePlansTableWrap{overflow-x:auto;border-radius:8px}.ratePlansTable{width:100%;min-width:1030px;border-collapse:separate;border-spacing:0}.ratePlansTable th{height:36px;padding:0 13px;background:#0d466a;color:#fff;font-size:11px;font-weight:800;white-space:nowrap}.ratePlansTable th:first-child{border-radius:8px 0 0 0}.ratePlansTable th:last-child{border-radius:0 8px 0 0}.ratePlansTable td{height:74px;padding:9px 13px;border-bottom:1px solid #e3eaf0;color:#183b5c;font-size:12px;vertical-align:middle}.ratePlansTable tbody tr:last-child td{border-bottom:0}.ratePlansTable tbody tr:hover,.ratePlansTable tbody tr.selected{background:#f1f8ff}.ratePlansTable .selectColumn{width:49px;padding-left:14px;padding-right:4px}.tableCheckbox{display:block;width:17px;height:17px;border:2px solid #fff;border-radius:4px;background:#fff}.tableRadio{display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;background:transparent;color:#5d91bd;cursor:pointer}.tableRadio.selected{color:#0875d1}.ratePlanName{display:flex;flex-direction:column;gap:1px;min-width:170px}.ratePlanName b{color:#142f4c;font-size:13px}.ratePlanName code{color:#0875d1;font-size:11px;font-weight:800;background:none}.ratePlanName small{max-width:190px;color:#71869a;font-size:11px;line-height:1.3}.ratePlanRoom{display:flex;flex-direction:column;line-height:1.35;min-width:170px}.ratePlanRoom span:first-child{color:#183b5c}.ratePlanRoom span:nth-child(2){color:#183b5c}.ratePlanRoom small{color:#71869a}.sortMark{margin-left:4px;color:#c9deed;font-size:13px}.ratePlanStatus{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}.ratePlanStatus i{width:8px;height:8px;border-radius:50%;background:currentColor}.ratePlanStatus.active{background:#ddf5e9;color:#13955f}.ratePlanStatus.inactive{background:#ffe3e4;color:#d6323a}.ratePlanActions{display:flex;align-items:center;gap:7px;white-space:nowrap}.ratePlanEditButton,.ratePlanDeactivateButton{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 12px;border-radius:8px;background:#fff;font-size:11px;font-weight:800;cursor:pointer}.ratePlanEditButton{border:1px solid #2489ed;color:#0875d1}.ratePlanEditButton:hover{background:#edf7ff}.ratePlanDeactivateButton{border:1px solid #ff7777;color:#ef4242}.ratePlanDeactivateButton:hover{background:#fff1f1}.ratePlanEditButton:disabled,.ratePlanDeactivateButton:disabled{opacity:.5;cursor:not-allowed}.ratePlanMore{position:relative}.ratePlanMore>button{display:grid;place-items:center;width:30px;height:32px;padding:0;border:0;background:transparent;color:#0e4266;cursor:pointer}.ratePlanMore>button:hover{border-radius:7px;background:#eaf4fb}.ratePlanMoreMenu{position:absolute;right:0;top:36px;z-index:10;min-width:108px;padding:5px;border:1px solid #d9e4ec;border-radius:8px;background:#fff;box-shadow:0 8px 20px rgba(15,59,95,.16)}.ratePlanMoreMenu button{display:block;width:100%;padding:8px 10px;border:0;border-radius:5px;background:#fff;color:#d6323a;text-align:left;font-size:11px;font-weight:800;cursor:pointer}.ratePlanMoreMenu button:hover{background:#fff1f1}.ratePlansLoading,.ratePlansEmpty{text-align:center!important;color:#71869a!important;padding:28px!important}.ratePlansPage .masterForm{margin:0 0 14px;border-radius:8px;box-shadow:none}.ratePlansPage .error,.ratePlansPage .notice{border-radius:8px;margin:0 0 14px}.ratePlansPage .rangeSectionHeader{margin-bottom:14px}
+@media(max-width:900px){.ratePlansHeader,.ratePlansFilters{align-items:stretch;flex-direction:column}.ratePlansHeaderActions{width:100%}.ratePlansSearch{flex:1;width:auto}.ratePlanSelectFilters{justify-content:flex-start}.ratePlansPage{padding-top:0}}
+@media(max-width:620px){.ratePlansHeaderActions{align-items:stretch;flex-direction:column}.ratePlansSearch{width:100%}.ratePlanAddButton{justify-content:center}.ratePlanSelectFilters{flex-direction:column}.ratePlanSelectFilters label,.ratePlanSelectFilters label:last-child{width:100%}}
+.adminContent:has(.ratePlansPage)>.pageTitle{display:none}.ratePlansPage{max-width:none;margin:0;padding-top:0}
+/* Rooms & Inventory admin workspace */
+.roomsInventoryPage{max-width:1400px;margin:0 auto;padding:0 0 28px;color:#143b5f}.roomsInventoryHeader{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:18px}.roomsInventoryHeader>div>span{display:block;color:#167da5;text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:900}.roomsInventoryHeader h1{margin:5px 0 2px;color:#0d3856;font-size:30px;line-height:1.1}.roomsInventoryHeader p{margin:0;color:#6b8196;font-size:13px}.roomsInventoryRateLink{display:inline-flex;align-items:center;height:36px;padding:0 15px;border:1px solid #1687d3;border-radius:8px;color:#0875d1;background:#fff;font-size:12px;font-weight:800}.roomsInventoryRateLink:hover{background:#eef8ff}.roomsInventoryHotelBar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:14px;padding:13px 16px;border:1px solid #d8e5ee;border-radius:10px;background:#fff;box-shadow:0 3px 12px rgba(20,63,91,.05)}.roomsInventoryHotelBar label{position:relative;display:flex;align-items:center;gap:8px;margin:0;color:#244c6d;text-transform:none;font-size:12px}.roomsInventoryHotelBar select{width:300px;height:34px;margin:0;padding:0 28px 0 8px;border:0;background:#fff;color:#143b5f;font-size:13px;font-weight:800;appearance:none;cursor:pointer}.roomsInventoryHotelBar label>svg:last-child{position:absolute;right:7px;pointer-events:none}.roomsInventoryHotelBar>div{display:flex;align-items:center;gap:12px;color:#6b8196;font-size:12px}.roomsInventoryHotelBar>div b{padding:4px 8px;border-radius:5px;background:#eaf4fb;color:#0d5e96;font-size:11px}.roomsInventoryStats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}.roomsInventoryStats>div{display:grid;grid-template-columns:42px 1fr;grid-template-rows:1fr 1fr;column-gap:10px;align-items:center;padding:13px 15px;border:1px solid #dbe7ef;border-radius:9px;background:#fff}.roomsInventoryStats span{grid-row:span 2;display:grid;place-items:center;width:42px;height:42px;border-radius:9px;background:#e9f5ff;color:#0875d1}.roomsInventoryStats b{color:#143b5f;font-size:20px;line-height:1}.roomsInventoryStats small{color:#71869a;font-size:11px;font-weight:700}.roomsInventoryGrid{display:grid;grid-template-columns:minmax(560px,1fr) minmax(480px,.9fr);gap:14px;align-items:start}.roomsInventoryCard{padding:18px;border:1px solid #d9e5ee;border-radius:10px;background:#fff;box-shadow:0 3px 12px rgba(20,63,91,.05)}.roomsInventoryCardTitle{display:flex;align-items:center;gap:10px;margin-bottom:16px}.roomsInventoryCardTitle>span{display:grid;place-items:center;width:36px;height:36px;border-radius:8px;background:#eaf4ff;color:#0875d1}.roomsInventoryCardTitle h2{margin:0;color:#123e6e;font-size:17px}.roomsInventoryCardTitle p{margin:2px 0 0;color:#6b8196;font-size:11px}.roomsInventoryFormGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.roomsInventoryCard label{margin:0 0 10px;color:#345675;font-size:10px}.roomsInventoryCard label em{color:#df334f;font-style:normal}.roomsInventoryCard input,.roomsInventoryCard select,.roomsInventoryCard textarea{min-height:32px;margin-top:4px;padding:7px 9px;border-radius:6px;font-size:11px}.roomsInventoryCard textarea{resize:vertical}.roomsInventoryCheckboxes{display:flex;align-items:center;gap:14px;margin:2px 0 12px;color:#345675;font-size:11px}.roomsInventoryCheckboxes>span{font-weight:800}.roomsInventoryCheckboxes label{display:flex;align-items:center;gap:5px;margin:0;text-transform:none;font-size:11px;font-weight:600}.roomsInventoryCheckboxes input{width:auto;min-height:0;margin:0}.roomsInventoryPrimaryButton{display:inline-flex;align-items:center;justify-content:center;height:34px;padding:0 17px;border:0;border-radius:7px;background:#0c356a;color:#fff;font-size:12px;font-weight:800;cursor:pointer}.roomsInventoryPrimaryButton:hover{background:#185487}.roomsInventoryPrimaryButton:disabled{opacity:.55;cursor:not-allowed}.configuredRoomsList{display:grid;gap:9px}.configuredRoom{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid #e0e9ef;border-radius:8px;background:#fbfdff}.configuredRoomIcon{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:8px;background:#edf7ff;color:#0875d1}.configuredRoomMain{min-width:0;flex:1}.configuredRoomMain h3{margin:0;color:#143b5f;font-size:13px}.configuredRoomMain h3 small{margin-left:5px;color:#0875d1;font-size:10px}.configuredRoomMain p{margin:2px 0 8px;color:#71869a;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.configuredRoomMain>div{display:flex;gap:7px;flex-wrap:wrap}.configuredRoomMain>div span{padding:3px 6px;border-radius:4px;background:#eef6fb;color:#53738e;font-size:10px}.configuredRoom>.status{flex:0 0 auto;margin-top:2px;padding:4px 7px;font-size:10px}.roomsInventoryPage .error,.roomsInventoryPage .notice{border-radius:8px;margin:0 0 14px}.roomsInventoryPage .loading,.roomsInventoryPage .empty{padding:20px 5px;font-size:12px}
+@media(max-width:1100px){.roomsInventoryGrid{grid-template-columns:1fr}.roomsInventoryPage{max-width:none}.configuredRoomsCard{min-height:0}}
+@media(max-width:700px){.roomsInventoryHeader,.roomsInventoryHotelBar{align-items:stretch;flex-direction:column}.roomsInventoryStats{grid-template-columns:repeat(2,1fr)}.roomsInventoryFormGrid{grid-template-columns:repeat(2,1fr)}.roomsInventoryHotelBar select{width:100%}}
+@media(max-width:460px){.roomsInventoryStats,.roomsInventoryFormGrid{grid-template-columns:1fr}.roomsInventoryCard{padding:14px}.roomsInventoryCheckboxes{align-items:flex-start;flex-direction:column;gap:7px}}

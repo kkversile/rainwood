@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
-import { AmenityDto, HotelContentDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
+import { AmenityDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
 import { FilesService } from '../files/files.service';
 import ExcelJS from 'exceljs';
 
@@ -48,14 +48,84 @@ export class HotelsService {
   }
 
   async policy(hotelId: string) { await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } }); return this.prisma.hotelPolicy.findUnique({ where: { hotelId } }); }
-  async savePolicy(hotelId: string, body: any) { await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } }); return this.prisma.hotelPolicy.upsert({ where: { hotelId }, create: { hotelId, ...body }, update: { ...body } }); }
+  async savePolicy(hotelId: string, body: HotelPolicyDto) {
+    await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
+    if (body.childMinAge !== undefined && body.childMaxAge !== undefined && body.childMinAge > body.childMaxAge) throw new BadRequestException('Child minimum age cannot be greater than maximum age');
+    const rules = body.cancellationRules ?? [];
+    for (const rule of rules) {
+      if (rule.fromDays > rule.toDays) throw new BadRequestException('Cancellation policy From days cannot exceed To days');
+      if (rule.chargeType === 'PERCENT' && rule.charge > 100) throw new BadRequestException('Cancellation percentage cannot exceed 100');
+    }
+    const orderedRules = [...rules].sort((a, b) => a.fromDays - b.fromDays);
+    for (let index = 1; index < orderedRules.length; index += 1) {
+      if (orderedRules[index].fromDays <= orderedRules[index - 1].toDays) throw new BadRequestException('Cancellation policy day ranges cannot overlap');
+    }
+    const data = { ...body, cancellationRules: body.cancellationRules as any };
+    return this.prisma.hotelPolicy.upsert({ where: { hotelId }, create: { hotelId, ...data }, update: data });
+  }
   async contacts(hotelId: string) { await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } }); return this.prisma.hotelContact.findMany({ where: { hotelId }, orderBy: [{ primary: 'desc' }, { name: 'asc' }] }); }
   async addContact(hotelId: string, body: any) { await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } }); if (body.primary) await this.prisma.hotelContact.updateMany({ where: { hotelId }, data: { primary: false } }); return this.prisma.hotelContact.create({ data: { hotelId, ...body } }); }
   async updateContact(id: string, body: any) { const contact = await this.prisma.hotelContact.findUniqueOrThrow({ where: { id } }); if (body.primary) await this.prisma.hotelContact.updateMany({ where: { hotelId: contact.hotelId, id: { not: id } }, data: { primary: false } }); return this.prisma.hotelContact.update({ where: { id }, data: body }); }
   deleteContact(id: string) { return this.prisma.hotelContact.delete({ where: { id } }); }
-  async documents(hotelId: string) { await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } }); return this.prisma.hotelDocument.findMany({ where: { hotelId }, orderBy: { createdAt: 'desc' } }); }
+  async documents(hotelId: string) {
+    await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
+    const documents = await this.prisma.hotelDocument.findMany({ where: { hotelId }, orderBy: { createdAt: 'desc' } });
+    const files = await this.prisma.storedFile.findMany({ where: { id: { in: documents.map((document) => document.fileId) } }, select: { id: true, mimeType: true, size: true } });
+    return documents.map((document) => ({ ...document, mimeType: files.find((file) => file.id === document.fileId)?.mimeType ?? null, size: files.find((file) => file.id === document.fileId)?.size ?? null }));
+  }
   async addDocument(hotelId: string, body: any) { await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } }); return this.prisma.hotelDocument.create({ data: { hotelId, ...body, expiryDate: body.expiryDate ? new Date(body.expiryDate) : undefined } }); }
+  async updateDocument(id: string, body: HotelDocumentUpdateDto) {
+    await this.prisma.hotelDocument.findUniqueOrThrow({ where: { id } });
+    return this.prisma.hotelDocument.update({ where: { id }, data: { ...body, expiryDate: body.expiryDate === null ? null : body.expiryDate ? new Date(body.expiryDate) : undefined } });
+  }
   async deleteDocument(id: string) { const document = await this.prisma.hotelDocument.delete({ where: { id } }); await this.files.remove(document.fileId); return { deleted: true, id }; }
+
+  async location(hotelId: string) {
+    await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
+    const [profile, attractions, transports] = await Promise.all([
+      this.prisma.hotelLocationProfile.findUnique({ where: { hotelId } }),
+      this.prisma.hotelLocationAttraction.findMany({ where: { hotelId }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
+      this.prisma.hotelLocationTransport.findMany({ where: { hotelId }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
+    ]);
+    return { profile, attractions, transports };
+  }
+
+  async saveLocation(hotelId: string, body: HotelLocationProfileDto) {
+    await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
+    return this.prisma.hotelLocationProfile.upsert({ where: { hotelId }, create: { hotelId, ...body }, update: body });
+  }
+
+  async addLocationAttraction(hotelId: string, body: HotelLocationAttractionDto) {
+    await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
+    const count = await this.prisma.hotelLocationAttraction.count({ where: { hotelId } });
+    return this.prisma.hotelLocationAttraction.create({ data: { hotelId, name: body.name.trim(), distance: body.distance.trim(), sortOrder: body.sortOrder ?? count } });
+  }
+
+  async updateLocationAttraction(id: string, body: Partial<HotelLocationAttractionDto>) {
+    await this.prisma.hotelLocationAttraction.findUniqueOrThrow({ where: { id } });
+    return this.prisma.hotelLocationAttraction.update({ where: { id }, data: { ...body, name: body.name?.trim(), distance: body.distance?.trim() } });
+  }
+
+  async deleteLocationAttraction(id: string) {
+    await this.prisma.hotelLocationAttraction.delete({ where: { id } });
+    return { deleted: true, id };
+  }
+
+  async addLocationTransport(hotelId: string, body: HotelLocationTransportDto) {
+    await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
+    const count = await this.prisma.hotelLocationTransport.count({ where: { hotelId } });
+    return this.prisma.hotelLocationTransport.create({ data: { hotelId, type: body.type, name: body.name.trim(), distance: body.distance.trim(), sortOrder: body.sortOrder ?? count } });
+  }
+
+  async updateLocationTransport(id: string, body: Partial<HotelLocationTransportDto>) {
+    await this.prisma.hotelLocationTransport.findUniqueOrThrow({ where: { id } });
+    return this.prisma.hotelLocationTransport.update({ where: { id }, data: { ...body, name: body.name?.trim(), distance: body.distance?.trim() } });
+  }
+
+  async deleteLocationTransport(id: string) {
+    await this.prisma.hotelLocationTransport.delete({ where: { id } });
+    return { deleted: true, id };
+  }
 
   catalog(hotelId: string, startDate?: string, endDate?: string) {
     const from = startDate ? new Date(`${startDate}T00:00:00.000Z`) : undefined;

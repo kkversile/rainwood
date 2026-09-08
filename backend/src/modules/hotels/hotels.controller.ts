@@ -1,6 +1,6 @@
 import { Body, ConflictException, Controller, Delete, Get, Header, Param, Patch, Post, Put, Query, StreamableFile, UseGuards } from '@nestjs/common';
 import { HotelsService } from './hotels.service';
-import { AmenityDto, HotelContactDto, HotelContentDto, HotelDocumentDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelPolicyDto, HotelReviewDto, HotelUpdateDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
+import { AmenityDto, HotelContactDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelUpdateDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -90,10 +90,55 @@ export class HotelsController {
   @Roles('SUPER_ADMIN', 'ADMIN')
   addDocument(@Param('hotelId') hotelId: string, @Body() body: HotelDocumentDto) { return this.service.addDocument(hotelId, body); }
 
+  @Patch('documents/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  updateDocument(@Param('id') id: string, @Body() body: HotelDocumentUpdateDto) { return this.service.updateDocument(id, body); }
+
   @Delete('documents/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   deleteDocument(@Param('id') id: string) { return this.service.deleteDocument(id); }
+
+  @Get(':hotelId/location')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  location(@Param('hotelId') hotelId: string) { return this.service.location(hotelId); }
+
+  @Put(':hotelId/location')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  saveLocation(@Param('hotelId') hotelId: string, @Body() body: HotelLocationProfileDto) { return this.service.saveLocation(hotelId, body); }
+
+  @Post(':hotelId/location/attractions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  addLocationAttraction(@Param('hotelId') hotelId: string, @Body() body: HotelLocationAttractionDto) { return this.service.addLocationAttraction(hotelId, body); }
+
+  @Patch('location/attractions/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  updateLocationAttraction(@Param('id') id: string, @Body() body: Partial<HotelLocationAttractionDto>) { return this.service.updateLocationAttraction(id, body); }
+
+  @Delete('location/attractions/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  deleteLocationAttraction(@Param('id') id: string) { return this.service.deleteLocationAttraction(id); }
+
+  @Post(':hotelId/location/transports')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  addLocationTransport(@Param('hotelId') hotelId: string, @Body() body: HotelLocationTransportDto) { return this.service.addLocationTransport(hotelId, body); }
+
+  @Patch('location/transports/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  updateLocationTransport(@Param('id') id: string, @Body() body: Partial<HotelLocationTransportDto>) { return this.service.updateLocationTransport(id, body); }
+
+  @Delete('location/transports/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  deleteLocationTransport(@Param('id') id: string) { return this.service.deleteLocationTransport(id); }
 
   @Get(':hotelId/catalog')
   @UseGuards(JwtAuthGuard, RolesGuard)

@@ -1,0 +1,71 @@
+'use client';
+
+import { FormEvent, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { BedDouble, Building2, CheckCircle2, ChevronDown, Clock3, PackagePlus, Users } from 'lucide-react';
+import { AdminLayout } from '../../../components/Shell';
+import { apiRequest } from '../../../lib/api';
+
+type HotelSummary = { id: string; name: string; code: string; city: string; state?: string | null };
+type Room = { id: string; code: string; name: string; roomTypeTitle?: string | null; roomsAvailable?: number; preferredFor?: string | null; acAvailable?: boolean; description?: string | null; maxAdults?: number; maxChildren?: number; maxOccupancy?: number; checkInTime?: string | null; checkOutTime?: string | null; gstType?: string | null; gstPercentage?: string | null; inbuiltAmenities?: string | null; breakfastIncluded?: boolean; lunchIncluded?: boolean; dinnerIncluded?: boolean; active?: boolean; ratePlans?: { id: string }[]; inventory?: { id: string }[] };
+type HotelCatalog = HotelSummary & { rooms: Room[] };
+type RoomForm = { roomTypeTitle: string; name: string; code: string; roomsAvailable: number; preferredFor: string; acAvailable: boolean; active: boolean; maxAdults: number; maxChildren: number; maxOccupancy: number; checkInTime: string; checkOutTime: string; gstType: string; gstPercentage: string; inbuiltAmenities: string; description: string; breakfastIncluded: boolean; lunchIncluded: boolean; dinnerIncluded: boolean };
+
+const blankRoom: RoomForm = { roomTypeTitle: '', name: '', code: '', roomsAvailable: 0, preferredFor: 'Couple', acAvailable: true, active: true, maxAdults: 2, maxChildren: 1, maxOccupancy: 3, checkInTime: '', checkOutTime: '', gstType: 'Included', gstPercentage: 'GST - 0%', inbuiltAmenities: '', description: '', breakfastIncluded: false, lunchIncluded: false, dinnerIncluded: false };
+
+export default function RoomsInventoryPage() {
+  const [hotels, setHotels] = useState<HotelSummary[]>([]);
+  const [hotelId, setHotelId] = useState('');
+  const [catalog, setCatalog] = useState<HotelCatalog | null>(null);
+  const [room, setRoom] = useState<RoomForm>(blankRoom);
+  const [loadingHotels, setLoadingHotels] = useState(true);
+  const [loadingRooms, setLoadingRooms] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+
+  async function loadHotels() {
+    setLoadingHotels(true);
+    try {
+      const loaded = await apiRequest<HotelSummary[]>('/hotels');
+      setHotels(loaded);
+      setHotelId((current) => current || loaded[0]?.id || '');
+      setError('');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load hotels'); }
+    finally { setLoadingHotels(false); }
+  }
+
+  async function loadCatalog(id: string) {
+    if (!id) { setCatalog(null); return; }
+    setLoadingRooms(true);
+    try { setCatalog(await apiRequest<HotelCatalog>(`/hotels/${id}/catalog`)); setError(''); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load rooms'); }
+    finally { setLoadingRooms(false); }
+  }
+
+  useEffect(() => { void loadHotels(); }, []);
+  useEffect(() => { void loadCatalog(hotelId); }, [hotelId]);
+
+  function updateRoom<K extends keyof RoomForm>(key: K, value: RoomForm[K]) { setRoom((current) => ({ ...current, [key]: value })); }
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!hotelId) { setError('Select a hotel first.'); return; }
+    setBusy(true); setError(''); setMessage('');
+    try {
+      await apiRequest(`/hotels/${hotelId}/rooms`, { method: 'POST', body: JSON.stringify({ ...room, code: room.code.trim().toUpperCase(), name: room.name.trim(), roomTypeTitle: room.roomTypeTitle.trim() || undefined, preferredFor: room.preferredFor.trim() || undefined, inbuiltAmenities: room.inbuiltAmenities.trim() || undefined, description: room.description.trim() || undefined }) });
+      setRoom(blankRoom); setMessage('Room added successfully.'); await loadCatalog(hotelId);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not add room'); }
+    finally { setBusy(false); }
+  }
+
+  const selectedHotel = hotels.find((hotel) => hotel.id === hotelId);
+  const rooms = catalog?.rooms ?? [];
+  return <AdminLayout title="Rooms & Inventory"><section className="roomsInventoryPage">
+    <header className="roomsInventoryHeader"><div><span>Property operations</span><h1>Rooms &amp; Inventory</h1><p>Manage room types, availability and room-level rate plans for your hotels.</p></div><Link className="roomsInventoryRateLink" href="/admin/rate-plans">Manage Rate Plans</Link></header>
+    <section className="roomsInventoryHotelBar"><label><Building2 size={17} /> Select Hotel<select aria-label="Select hotel" value={hotelId} disabled={loadingHotels} onChange={(event) => setHotelId(event.target.value)}><option value="">Select a hotel</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name} · {hotel.city}</option>)}</select><ChevronDown size={16} /></label>{selectedHotel && <div><b>{selectedHotel.code}</b><span>{selectedHotel.city}{selectedHotel.state ? `, ${selectedHotel.state}` : ''}</span></div>}</section>
+    {error && <p className="error" role="alert">{error}</p>}{message && <p className="notice" role="status">{message}</p>}
+    <div className="roomsInventoryStats"><div><span><BedDouble size={19} /></span><b>{rooms.length}</b><small>Room types</small></div><div><span><PackagePlus size={19} /></span><b>{rooms.reduce((total, item) => total + (item.roomsAvailable ?? 0), 0)}</b><small>Total availability</small></div><div><span><CheckCircle2 size={19} /></span><b>{rooms.filter((item) => item.active !== false).length}</b><small>Active room types</small></div><div><span><Clock3 size={19} /></span><b>{rooms.reduce((total, item) => total + (item.ratePlans?.length ?? 0), 0)}</b><small>Rate plans</small></div></div>
+    <div className="roomsInventoryGrid"><form className="roomsInventoryCard roomCreateForm" onSubmit={submit}><div className="roomsInventoryCardTitle"><span><BedDouble size={20} /></span><div><h2>Add Room Type</h2><p>Create a room under the selected hotel.</p></div></div><div className="roomsInventoryFormGrid"><label>Room Type<input value={room.roomTypeTitle} onChange={(event) => updateRoom('roomTypeTitle', event.target.value)} placeholder="Premium Valley Room" /></label><label>Room Title <em>*</em><input value={room.name} onChange={(event) => updateRoom('name', event.target.value)} placeholder="Enter room title" required /></label><label>Room Code <em>*</em><input value={room.code} onChange={(event) => updateRoom('code', event.target.value)} placeholder="PVR" required /></label><label>Rooms Available<input type="number" min="0" value={room.roomsAvailable} onChange={(event) => updateRoom('roomsAvailable', Number(event.target.value))} /></label><label>Preferred For<select value={room.preferredFor} onChange={(event) => updateRoom('preferredFor', event.target.value)}><option>Couple</option><option>Family</option><option>Business</option><option>Group</option></select></label><label>AC Availability<select value={room.acAvailable ? 'Yes' : 'No'} onChange={(event) => updateRoom('acAvailable', event.target.value === 'Yes')}><option>Yes</option><option>No</option></select></label><label>Max Adults<input type="number" min="1" value={room.maxAdults} onChange={(event) => updateRoom('maxAdults', Number(event.target.value))} /></label><label>Max Children<input type="number" min="0" value={room.maxChildren} onChange={(event) => updateRoom('maxChildren', Number(event.target.value))} /></label><label>Max Occupancy<input type="number" min="1" value={room.maxOccupancy} onChange={(event) => updateRoom('maxOccupancy', Number(event.target.value))} /></label><label>Check-in Time<input type="time" value={room.checkInTime} onChange={(event) => updateRoom('checkInTime', event.target.value)} /></label><label>Check-out Time<input type="time" value={room.checkOutTime} onChange={(event) => updateRoom('checkOutTime', event.target.value)} /></label><label>Status<select value={room.active ? 'Active' : 'Inactive'} onChange={(event) => updateRoom('active', event.target.value === 'Active')}><option>Active</option><option>Inactive</option></select></label></div><label>Inbuilt Amenities<input value={room.inbuiltAmenities} onChange={(event) => updateRoom('inbuiltAmenities', event.target.value)} placeholder="Wi-Fi, Room Service, Breakfast" /></label><label>Description<textarea rows={3} value={room.description} onChange={(event) => updateRoom('description', event.target.value)} placeholder="Describe this room type" /></label><div className="roomsInventoryCheckboxes"><span>Food Included</span><label><input type="checkbox" checked={room.breakfastIncluded} onChange={(event) => updateRoom('breakfastIncluded', event.target.checked)} /> Breakfast</label><label><input type="checkbox" checked={room.lunchIncluded} onChange={(event) => updateRoom('lunchIncluded', event.target.checked)} /> Lunch</label><label><input type="checkbox" checked={room.dinnerIncluded} onChange={(event) => updateRoom('dinnerIncluded', event.target.checked)} /> Dinner</label></div><button className="roomsInventoryPrimaryButton" type="submit" disabled={busy || !hotelId}>{busy ? 'Saving...' : 'Add Room'}</button></form>
+      <section className="roomsInventoryCard configuredRoomsCard"><div className="roomsInventoryCardTitle"><span><Users size={20} /></span><div><h2>{selectedHotel ? selectedHotel.name : 'Configured Rooms'}</h2><p>Room types and inventory configured for this hotel.</p></div></div>{loadingRooms ? <p className="loading">Loading rooms...</p> : !hotelId ? <p className="empty">Select a hotel to view its rooms.</p> : !rooms.length ? <p className="empty">No room types configured yet.</p> : <div className="configuredRoomsList">{rooms.map((item) => <article className="configuredRoom" key={item.id}><div className="configuredRoomIcon"><BedDouble size={19} /></div><div className="configuredRoomMain"><h3>{item.name} <small>{item.code}</small></h3><p>{item.roomTypeTitle || 'Room type'} · {item.description || 'No description'}</p><div><span>{item.roomsAvailable ?? 0} rooms available</span><span>{item.maxOccupancy ?? 0} max occupancy</span><span>{item.ratePlans?.length ?? 0} rate plans</span></div></div><span className={`status ${item.active === false ? 'err' : 'ok'}`}>{item.active === false ? 'Inactive' : 'Active'}</span></article>)}</div>}</section></div>
+  </section></AdminLayout>;
+}

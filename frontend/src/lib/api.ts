@@ -7,6 +7,13 @@ export function apiAssetUrl(value?: string | null) {
   return markerIndex >= 0 ? `${API}${value.slice(markerIndex)}` : value;
 }
 
+export async function apiFileBlob(path: string) {
+  const token = browserToken();
+  const response = await fetch(`${API}${path}`, { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : undefined, cache: 'no-store' });
+  if (!response.ok) throw new Error(`Could not load file (${response.status})`);
+  return response.blob();
+}
+
 let accessToken: string | null = null;
 
 function browserToken() {

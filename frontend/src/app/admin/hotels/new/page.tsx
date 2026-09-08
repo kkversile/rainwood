@@ -8,19 +8,16 @@ import { API, apiAssetUrl, apiRequest } from "../../../../lib/api";
 import { HotelExtendedSections } from "../../../../components/HotelExtendedSections";
 import { HotelLocationMap } from "../../../../components/HotelLocationMap";
 import { HotelImagesMedia } from "../../../../components/HotelImagesMedia";
+import { useDialog } from "../../../../components/ReactDialog";
 
 const steps = [
-  "Basic Details",
-  "Rooms & Inventory",
-  "Facilities & Amenities",
-  "Images & Media",
-  "Price Book",
-  "Reviews",
-  "Preview",
-  "Policies",
-  "Contacts",
-  "Location",
-  "Documents",
+  { label: "Basic Details", step: 0 },
+  { label: "Amenities", step: 2 },
+  { label: "Images & Media", step: 3 },
+  { label: "Policies", step: 7 },
+  { label: "Contacts", step: 8 },
+  { label: "Location", step: 9 },
+  { label: "Documents", step: 10 },
 ];
 const showLegacyAmenities = false;
 type OccupancyKey =
@@ -400,6 +397,7 @@ function PropertyTypeSelect({ value, onChange }: { value: string; onChange: (val
 }
 
 export default function NewHotelWizard() {
+  const dialog = useDialog();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit") ?? "";
   const initialStep = Number(searchParams.get("step") ?? 0);
@@ -766,9 +764,12 @@ export default function NewHotelWizard() {
   async function deleteHotelImage(image: HotelImage) {
     if (
       !hotelId ||
-      !window.confirm(
-        `Delete ${image.altText}? This removes the gallery link and uploaded file permanently.`,
-      )
+      !(await dialog.confirm({
+        title: "Delete hotel image?",
+        message: `${image.altText} will be removed from the gallery and uploaded file permanently.`,
+        confirmLabel: "Delete Image",
+        danger: true,
+      }))
     )
       return;
     try {
@@ -828,7 +829,7 @@ export default function NewHotelWizard() {
     finally { setBusy(false); }
   }
   async function deleteHotelVideo(video: HotelVideo) {
-    if (!hotelId || !window.confirm(`Delete ${video.title}?`)) return;
+    if (!hotelId || !(await dialog.confirm({ title: "Delete hotel video?", message: `${video.title} will be permanently removed from this hotel.`, confirmLabel: "Delete Video", danger: true }))) return;
     setBusy(true); setError(""); setMessage("");
     try { await apiRequest(`/hotels/${hotelId}/videos/${video.id}`, { method: "DELETE" }); await loadCatalog(hotelId); setMessage("Video deleted."); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Could not delete video"); }
@@ -1246,25 +1247,24 @@ export default function NewHotelWizard() {
   }
   return (
     <AdminLayout title={editId ? "Edit Hotel" : "Add Hotel"}>
-      <div className="wizard">
+      <div className={`wizard${step === 8 ? " contactsWizard" : ""}${step === 9 ? " locationWizard" : ""}`}>
         <div className="wizardHeader">
           <div>
-            <span>Hotels <b>›</b> {step === 3 && editId ? "Edit Hotel" : editId ? "Add / Edit Hotel" : "Add Hotel"}</span>
+            <span>Hotels <b>›</b> {step >= 3 && editId ? "Edit Hotel" : editId ? "Add / Edit Hotel" : "Add Hotel"}</span>
             <h2>{editId ? "Edit Hotel" : "Add Hotel"}</h2>
-            <p>{step === 3 && editId ? `${hotel.name} (${hotel.code})` : "Manage hotel details, facilities, images and policies"}</p>
+            <p>{step >= 3 && editId ? `${hotel.name} (${hotel.code})` : "Manage hotel details, facilities, images and policies"}</p>
           </div>
-          <div className="hotelHeaderActions"><Link className="btn secondary" href="/admin/hotels">Cancel</Link><button className="btn" form="hotel-basic-form" type="submit">Save Hotel</button></div>
+          <div className="hotelHeaderActions"><Link className="btn secondary" href="/admin/hotels">Cancel</Link><button className="btn" form={step === 7 ? "hotel-policy-form" : "hotel-basic-form"} type="submit">Save Hotel</button></div>
         </div>
         <div className="wizardSteps">
-          {steps.map((label, index) => (
+          {steps.map(({ label, step: stepIndex }) => (
             <button
               type="button"
-              className={`wizardStep ${index === step ? "active" : index < step ? "done" : ""}`}
-              disabled={index > 0 && !hotelId}
-              onClick={() => setStep(index)}
+              className={`wizardStep ${stepIndex === step ? "active" : stepIndex < step ? "done" : ""}`}
+              disabled={stepIndex > 0 && !hotelId}
+              onClick={() => setStep(stepIndex)}
               key={label}
             >
-              <b>{index + 1}</b>
               <span>{label}</span>
             </button>
           ))}
@@ -2025,7 +2025,12 @@ export default function NewHotelWizard() {
           </section>
         )}
         {hotelId && step >= 7 && step <= 10 && (
-          <HotelExtendedSections hotelId={hotelId} hotel={{ id: hotelId, ...hotel }} initialSection={(["policy", "contacts", "location", "documents"] as const)[step - 7]} />
+          <HotelExtendedSections
+            hotelId={hotelId}
+            hotel={{ id: hotelId, ...hotel }}
+            initialSection={(["policy", "contacts", "location", "documents"] as const)[step - 7]}
+            onNavigate={(section) => setStep(({ preview: 6, policy: 7, contacts: 8, location: 9, documents: 10 } as const)[section])}
+          />
         )}
       </div>
       {deleteTarget && (

@@ -264,6 +264,9 @@ model Hotel {
   policy            HotelPolicy?
   contacts          HotelContact[]
   documents         HotelDocument[]
+  locationProfile   HotelLocationProfile?
+  locationAttractions HotelLocationAttraction[]
+  locationTransports HotelLocationTransport[]
   reservations      Reservation[]
   holds             InventoryHold[]
   waitlist          WaitlistEntry[]
@@ -271,6 +274,50 @@ model Hotel {
   updatedAt         DateTime           @updatedAt
 
   @@index([active, slug])
+}
+
+model HotelLocationProfile {
+  id              String   @id @default(cuid())
+  hotelId         String   @unique
+  hotel            Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  addressLine1    String?
+  addressLine2    String?
+  timezone        String   @default("IST (UTC +5:30)")
+  bestTimeToVisit String?
+  elevation       String?
+  weather         String?
+  nearbyCity      String?
+  accessRoad      String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model HotelLocationAttraction {
+  id        String   @id @default(cuid())
+  hotelId   String
+  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  name      String
+  distance  String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([hotelId, sortOrder])
+}
+
+model HotelLocationTransport {
+  id        String   @id @default(cuid())
+  hotelId   String
+  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  type      String
+  name      String
+  distance  String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([hotelId, sortOrder])
 }
 
 model HotelReview {
@@ -295,7 +342,10 @@ model HotelPolicy {
   childMaxAge        Int      @default(12)
   childPolicyType    String   @default("FREE")
   houseRules         String?
+  cancellationRules  Json?
   noShowPolicy       String?
+  noShowAmount       Decimal? @db.Decimal(12, 2)
+  noShowCustomText   String?
   amendmentPolicy    String?
   termsAndConditions String?
   allowEarlyCheckIn  Boolean  @default(false)

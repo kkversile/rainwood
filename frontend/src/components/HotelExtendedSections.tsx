@@ -1,31 +1,132 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiRequest } from '../lib/api';
+import { createDefaultPolicy, HotelPolicies, type HotelPolicyValue, normalizePolicy } from './HotelPolicies';
+import { HotelContacts, type HotelContact, type HotelContactDraft } from './HotelContacts';
+import { HotelLocation } from './HotelLocation';
+import { useDialog } from './ReactDialog';
+import { HotelDocuments, type HotelDocumentRecord } from './HotelDocuments';
 
-type Hotel = { id: string; address?: string | null; city: string; state?: string | null; country?: string | null; pincode?: string | null; latitude?: string | null; longitude?: string | null };
-type Policy = { checkInTime: string; checkOutTime: string; childMinAge: number; childMaxAge: number; childPolicyType: string; houseRules: string; noShowPolicy: string; amendmentPolicy: string; termsAndConditions: string; allowEarlyCheckIn: boolean; allowLateCheckOut: boolean; allowExtraBed: boolean; allowPets: boolean; allowOutsideFood: boolean; smokingAllowed: boolean; alcoholAllowed: boolean };
-type Contact = { id: string; contactType: string; name: string; designation?: string; department?: string; email: string; phone?: string; mobile?: string; preferredMode: string; primary: boolean; remarks?: string; active: boolean };
-type Doc = { id: string; documentType: string; name: string; fileId: string; fileName: string; expiryDate?: string | null; createdAt: string };
-const blankPolicy: Policy = { checkInTime: '14:00', checkOutTime: '11:00', childMinAge: 0, childMaxAge: 12, childPolicyType: 'FREE', houseRules: '', noShowPolicy: '100% of total booking amount', amendmentPolicy: 'Allow amendments', termsAndConditions: '', allowEarlyCheckIn: false, allowLateCheckOut: false, allowExtraBed: false, allowPets: false, allowOutsideFood: false, smokingAllowed: false, alcoholAllowed: false };
-const blankContact = { contactType: 'General Manager', name: '', designation: '', department: '', email: '', phone: '', mobile: '', preferredMode: 'EMAIL', primary: false, remarks: '', active: true };
+type Hotel = { id: string; name: string; address?: string | null; city: string; state?: string | null; country?: string | null; pincode?: string | null; latitude?: string | null; longitude?: string | null };
+type Doc = HotelDocumentRecord;
+type ExtendedSection = 'policy' | 'contacts' | 'location' | 'documents';
+type NavigateSection = ExtendedSection | 'preview';
 
-export function HotelExtendedSections({ hotelId, hotel: initialHotel, initialSection }: { hotelId: string; hotel: Hotel; initialSection: 'policy' | 'contacts' | 'location' | 'documents' }) {
-  const [section, setSection] = useState(initialSection); const [policy, setPolicy] = useState<Policy>(blankPolicy); const [contacts, setContacts] = useState<Contact[]>([]); const [documents, setDocuments] = useState<Doc[]>([]); const [hotel, setHotel] = useState(initialHotel); const [contact, setContact] = useState({ ...blankContact }); const [busy, setBusy] = useState(false); const [message, setMessage] = useState(''); const [error, setError] = useState('');
+export function HotelExtendedSections({ hotelId, hotel: initialHotel, initialSection, onNavigate }: { hotelId: string; hotel: Hotel; initialSection: ExtendedSection; onNavigate?: (section: NavigateSection) => void }) {
+  const dialog = useDialog();
+  const [section, setSection] = useState(initialSection);
+  const [policy, setPolicy] = useState<HotelPolicyValue>(createDefaultPolicy);
+  const [policyLoaded, setPolicyLoaded] = useState(false);
+  const [contacts, setContacts] = useState<HotelContact[]>([]);
+  const [documents, setDocuments] = useState<Doc[]>([]);
+  const [hotel, setHotel] = useState(initialHotel);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
   useEffect(() => { setSection(initialSection); }, [initialSection]);
-  useEffect(() => { void Promise.all([apiRequest<Policy | null>(`/hotels/${hotelId}/policy`), apiRequest<Contact[]>(`/hotels/${hotelId}/contacts`), apiRequest<Doc[]>(`/hotels/${hotelId}/documents`)]).then(([loadedPolicy, loadedContacts, loadedDocuments]) => { if (loadedPolicy) setPolicy({ ...blankPolicy, ...loadedPolicy }); setContacts(loadedContacts); setDocuments(loadedDocuments); }).catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load hotel settings')); }, [hotelId]);
+  useEffect(() => {
+    setHotel(initialHotel);
+  }, [initialHotel.id, initialHotel.name, initialHotel.address, initialHotel.city, initialHotel.state, initialHotel.country, initialHotel.pincode, initialHotel.latitude, initialHotel.longitude]);
+  useEffect(() => {
+    void Promise.all([
+      apiRequest<Partial<HotelPolicyValue> | null>(`/hotels/${hotelId}/policy`),
+      apiRequest<HotelContact[]>(`/hotels/${hotelId}/contacts`),
+      apiRequest<Doc[]>(`/hotels/${hotelId}/documents`),
+    ]).then(([loadedPolicy, loadedContacts, loadedDocuments]) => {
+      setPolicy(normalizePolicy(loadedPolicy));
+      setPolicyLoaded(true);
+      setContacts(loadedContacts);
+      setDocuments(loadedDocuments);
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load hotel settings'));
+  }, [hotelId]);
+
   function clearNotice() { setError(''); setMessage(''); }
-  async function savePolicy(event: FormEvent) { event.preventDefault(); clearNotice(); setBusy(true); try { await apiRequest(`/hotels/${hotelId}/policy`, { method: 'PUT', body: JSON.stringify(policy) }); setMessage('Policies saved.'); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not save policies'); } finally { setBusy(false); } }
-  async function saveContact(event: FormEvent) { event.preventDefault(); clearNotice(); setBusy(true); try { const saved = await apiRequest<Contact>(`/hotels/${hotelId}/contacts`, { method: 'POST', body: JSON.stringify(contact) }); setContacts((current) => [saved, ...current.map((item) => saved.primary ? { ...item, primary: false } : item)]); setContact({ ...blankContact }); setMessage('Contact added.'); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not add contact'); } finally { setBusy(false); } }
-  async function removeContact(id: string) { if (!window.confirm('Delete this hotel contact?')) return; setBusy(true); try { await apiRequest(`/hotels/contacts/${id}`, { method: 'DELETE' }); setContacts((current) => current.filter((item) => item.id !== id)); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not delete contact'); } finally { setBusy(false); } }
-  async function saveLocation(event: FormEvent) { event.preventDefault(); clearNotice(); setBusy(true); try { const saved = await apiRequest<Hotel>(`/hotels/${hotelId}`, { method: 'PATCH', body: JSON.stringify(hotel) }); setHotel(saved); setMessage('Location saved.'); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not save location'); } finally { setBusy(false); } }
-  async function uploadDocument(file: File, documentType: string) { clearNotice(); setBusy(true); try { const form = new FormData(); form.append('file', file); const stored = await apiRequest<{ id: string }>(`/files/hotel-document`, { method: 'POST', body: form }); const saved = await apiRequest<Doc>(`/hotels/${hotelId}/documents`, { method: 'POST', body: JSON.stringify({ documentType, name: file.name.replace(/\.[^.]+$/, ''), fileId: stored.id, fileName: file.name }) }); setDocuments((current) => [saved, ...current]); setMessage('Document uploaded.'); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not upload document'); } finally { setBusy(false); } }
-  async function removeDocument(item: Doc) { if (!window.confirm(`Delete ${item.name}?`)) return; setBusy(true); try { await apiRequest(`/hotels/documents/${item.id}`, { method: 'DELETE' }); setDocuments((current) => current.filter((doc) => doc.id !== item.id)); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not delete document'); } finally { setBusy(false); } }
-  const tabs = [['policy', 'Policies'], ['contacts', 'Contacts'], ['location', 'Location'], ['documents', 'Documents']] as const;
-  return <section className="hotelExtended"><div className="hotelInnerTabs">{tabs.map(([key, label]) => <button type="button" className={section === key ? 'active' : ''} key={key} onClick={() => { clearNotice(); setSection(key); }}>{label}</button>)}</div>{error && <p className="error" role="alert">{error}</p>}{message && <p className="notice" role="status">{message}</p>}
-    {section === 'policy' && <form className="formCard extendedPanel" onSubmit={savePolicy}><h2>Hotel Policies</h2><p>Define the property rules shown to guests and used by operations.</p><div className="two"><label>Check-in time<input type="time" value={policy.checkInTime} onChange={(e) => setPolicy({ ...policy, checkInTime: e.target.value })} /></label><label>Check-out time<input type="time" value={policy.checkOutTime} onChange={(e) => setPolicy({ ...policy, checkOutTime: e.target.value })} /></label></div><div className="two"><label>Child minimum age<input type="number" min="0" value={policy.childMinAge} onChange={(e) => setPolicy({ ...policy, childMinAge: Number(e.target.value) })} /></label><label>Child maximum age<input type="number" min="0" value={policy.childMaxAge} onChange={(e) => setPolicy({ ...policy, childMaxAge: Number(e.target.value) })} /></label></div><label>Child policy<select value={policy.childPolicyType} onChange={(e) => setPolicy({ ...policy, childPolicyType: e.target.value })}><option value="FREE">Free stay</option><option value="CHARGEABLE">Chargeable</option><option value="CUSTOM">Custom per room type</option></select></label><div className="two"><label>House rules<textarea rows={6} value={policy.houseRules} onChange={(e) => setPolicy({ ...policy, houseRules: e.target.value })} /></label><label>Terms and conditions<textarea rows={6} value={policy.termsAndConditions} onChange={(e) => setPolicy({ ...policy, termsAndConditions: e.target.value })} /></label></div><div className="policyToggles">{([['allowEarlyCheckIn', 'Allow early check-in'], ['allowLateCheckOut', 'Allow late check-out'], ['allowExtraBed', 'Allow extra bed'], ['allowPets', 'Allow pets'], ['allowOutsideFood', 'Allow outside food'], ['smokingAllowed', 'Smoking allowed'], ['alcoholAllowed', 'Alcohol allowed']] as const).map(([key, label]) => <label className="checkLabel" key={key}><input type="checkbox" checked={policy[key]} onChange={(e) => setPolicy({ ...policy, [key]: e.target.checked })} /> {label}</label>)}</div><button className="btn" disabled={busy}>{busy ? 'Saving...' : 'Save Policies'}</button></form>}
-    {section === 'contacts' && <div className="extendedGrid"><form className="formCard extendedPanel" onSubmit={saveContact}><h2>Add New Contact</h2><div className="two"><label>Contact type<select value={contact.contactType} onChange={(e) => setContact({ ...contact, contactType: e.target.value })}><option>General Manager</option><option>Reservations</option><option>Front Office</option><option>Sales</option><option>Accounts</option><option>Maintenance</option><option>Emergency</option><option>Other</option></select></label><label>Name<input value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })} required /></label></div><div className="two"><label>Designation<input value={contact.designation} onChange={(e) => setContact({ ...contact, designation: e.target.value })} /></label><label>Department<input value={contact.department} onChange={(e) => setContact({ ...contact, department: e.target.value })} /></label></div><div className="two"><label>Email<input type="email" value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} required /></label><label>Mobile<input value={contact.mobile} onChange={(e) => setContact({ ...contact, mobile: e.target.value })} /></label></div><div className="two"><label>Preferred mode<select value={contact.preferredMode} onChange={(e) => setContact({ ...contact, preferredMode: e.target.value })}><option>EMAIL</option><option>PHONE</option><option>WHATSAPP</option></select></label><label className="checkLabel"><input type="checkbox" checked={contact.primary} onChange={(e) => setContact({ ...contact, primary: e.target.checked })} /> Primary contact</label></div><label>Remarks<textarea rows={3} value={contact.remarks} onChange={(e) => setContact({ ...contact, remarks: e.target.value })} /></label><button className="btn" disabled={busy}>+ Add Contact</button></form><section className="panel extendedPanel"><h2>Existing Contacts</h2><div className="tableScroll"><table><thead><tr><th>Type</th><th>Name</th><th>Department</th><th>Email</th><th>Primary</th><th>Actions</th></tr></thead><tbody>{contacts.map((item) => <tr key={item.id}><td>{item.contactType}</td><td><b>{item.name}</b><small>{item.designation}</small></td><td>{item.department || '—'}</td><td>{item.email}</td><td>{item.primary ? 'Yes' : 'No'}</td><td><button className="smallBtn dangerBtn" type="button" onClick={() => void removeContact(item.id)}>Delete</button></td></tr>)}{!contacts.length && <tr><td colSpan={6}><p className="empty">No contacts added yet.</p></td></tr>}</tbody></table></div></section></div>}
-    {section === 'location' && <form className="formCard extendedPanel" onSubmit={saveLocation}><h2>Hotel Location</h2><p>Set the exact location of the property for visibility and navigation.</p><div className="two"><label>Address<input value={hotel.address ?? ''} onChange={(e) => setHotel({ ...hotel, address: e.target.value })} /></label><label>City / destination<input value={hotel.city} onChange={(e) => setHotel({ ...hotel, city: e.target.value })} required /></label></div><div className="three"><label>State<input value={hotel.state ?? ''} onChange={(e) => setHotel({ ...hotel, state: e.target.value })} /></label><label>Country<input value={hotel.country ?? ''} onChange={(e) => setHotel({ ...hotel, country: e.target.value })} /></label><label>Pincode<input value={hotel.pincode ?? ''} onChange={(e) => setHotel({ ...hotel, pincode: e.target.value })} /></label></div><div className="two"><label>Latitude<input value={hotel.latitude ?? ''} onChange={(e) => setHotel({ ...hotel, latitude: e.target.value })} /></label><label>Longitude<input value={hotel.longitude ?? ''} onChange={(e) => setHotel({ ...hotel, longitude: e.target.value })} /></label></div>{hotel.latitude && hotel.longitude && <p className="notice">Map link: <a href={`https://www.google.com/maps?q=${hotel.latitude},${hotel.longitude}`} target="_blank" rel="noreferrer">Open location in Google Maps</a></p>}<button className="btn" disabled={busy}>{busy ? 'Saving...' : 'Save Location'}</button></form>}
-    {section === 'documents' && <section className="panel extendedPanel"><h2>Hotel Documents</h2><p>Upload compliance, license, tax, and supporting documents. PDF, JPG, or PNG up to 5 MB.</p><div className="documentUploadGrid">{['Business Registration', 'GST Certificate', 'Hotel License', 'Identity Proof', 'Bank Details', 'Other Document'].map((type) => <label className="documentUpload" key={type}><b>{type}</b><input type="file" accept="application/pdf,image/jpeg,image/png" disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadDocument(file, type); e.currentTarget.value = ''; }} /><span>Upload File</span></label>)}</div><h3>Uploaded Documents ({documents.length})</h3><div className="tableScroll"><table><thead><tr><th>Name</th><th>Type</th><th>File</th><th>Uploaded</th><th>Expiry</th><th>Actions</th></tr></thead><tbody>{documents.map((item) => <tr key={item.id}><td>{item.name}</td><td>{item.documentType}</td><td>{item.fileName}</td><td>{new Date(item.createdAt).toLocaleDateString()}</td><td>{item.expiryDate ? new Date(item.expiryDate).toLocaleDateString() : '—'}</td><td><a className="smallBtn" href={`${process.env.NEXT_PUBLIC_API_BASE_URL}/files/${item.fileId}`} target="_blank" rel="noreferrer">View</a> <button className="smallBtn dangerBtn" type="button" onClick={() => void removeDocument(item)}>Delete</button></td></tr>)}{!documents.length && <tr><td colSpan={6}><p className="empty">No documents uploaded yet.</p></td></tr>}</tbody></table></div></section>}
+
+  async function savePolicy() {
+    clearNotice();
+    if (policy.childMinAge > policy.childMaxAge) { setError('Child minimum age cannot be greater than maximum age.'); return false; }
+    setBusy(true);
+    try {
+      const payload = { ...policy, noShowAmount: policy.noShowPolicy === 'SPECIFIC' && policy.noShowAmount !== '' ? Number(policy.noShowAmount) : null };
+      const saved = await apiRequest<Partial<HotelPolicyValue>>(`/hotels/${hotelId}/policy`, { method: 'PUT', body: JSON.stringify(payload) });
+      setPolicy(normalizePolicy(saved));
+      setMessage('Policies saved.');
+      return true;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not save policies');
+      return false;
+    } finally { setBusy(false); }
+  }
+
+  async function saveContact(value: HotelContactDraft, editingId?: string) {
+    clearNotice(); setBusy(true);
+    try {
+      const saved = await apiRequest<HotelContact>(editingId ? `/hotels/contacts/${editingId}` : `/hotels/${hotelId}/contacts`, { method: editingId ? 'PATCH' : 'POST', body: JSON.stringify(value) });
+      setContacts((current) => {
+        const next = current.map((item) => (item.id === saved.id ? saved : (saved.primary ? { ...item, primary: false } : item)));
+        return editingId ? next : [saved, ...next];
+      });
+      setMessage(editingId ? 'Contact updated.' : 'Contact added.');
+      return true;
+    } catch (reason) { setError(reason instanceof Error ? reason.message : editingId ? 'Could not update contact' : 'Could not add contact'); return false; } finally { setBusy(false); }
+  }
+
+  async function removeContact(id: string) {
+    if (!await dialog.confirm({ title: 'Delete hotel contact?', message: 'This contact will be permanently removed from the hotel profile.', confirmLabel: 'Delete Contact', danger: true })) return;
+    setBusy(true);
+    try { await apiRequest(`/hotels/contacts/${id}`, { method: 'DELETE' }); setContacts((current) => current.filter((item) => item.id !== id)); setMessage('Contact deleted.'); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not delete contact'); }
+    finally { setBusy(false); }
+  }
+
+  async function uploadDocument(file: File, documentType: string) {
+    clearNotice(); setBusy(true);
+    try {
+      const form = new FormData(); form.append('file', file);
+      const stored = await apiRequest<{ id: string }>('/files/hotel-document', { method: 'POST', body: form });
+      const saved = await apiRequest<Doc>(`/hotels/${hotelId}/documents`, { method: 'POST', body: JSON.stringify({ documentType, name: file.name.replace(/\.[^.]+$/, ''), fileId: stored.id, fileName: file.name }) });
+      setDocuments((current) => [saved, ...current]); setMessage('Document uploaded.');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not upload document'); }
+    finally { setBusy(false); }
+  }
+
+  async function updateDocument(id: string, changes: { name: string; documentType: string; expiryDate: string | null }) {
+    clearNotice(); setBusy(true);
+    try {
+      const saved = await apiRequest<Doc>(`/hotels/documents/${id}`, { method: 'PATCH', body: JSON.stringify(changes) });
+      setDocuments((current) => current.map((document) => document.id === id ? { ...document, ...saved } : document));
+      setMessage('Document updated.');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update document'); }
+    finally { setBusy(false); }
+  }
+
+  async function removeDocument(item: Doc) {
+    if (!await dialog.confirm({ title: 'Delete document?', message: `${item.name} will be permanently removed from this hotel.`, confirmLabel: 'Delete Document', danger: true })) return;
+    setBusy(true);
+    try { await apiRequest(`/hotels/documents/${item.id}`, { method: 'DELETE' }); setDocuments((current) => current.filter((doc) => doc.id !== item.id)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not delete document'); }
+    finally { setBusy(false); }
+  }
+
+  return <section className="hotelExtended">
+    {error && <p className="error" role="alert">{error}</p>}
+    {message && <p className="notice" role="status">{message}</p>}
+
+    {section === 'policy' && !policyLoaded && <section className="policyLoading" role="status">Loading policies...</section>}
+    {section === 'policy' && policyLoaded && <HotelPolicies
+      value={policy}
+      busy={busy}
+      onChange={(next) => { clearNotice(); setPolicy(next); }}
+      onBack={() => onNavigate?.('preview')}
+      onSave={(continueToNext) => { void savePolicy().then((saved) => { if (saved && continueToNext) onNavigate?.('contacts'); }); }}
+    />}
+
+    {section === 'contacts' && <HotelContacts contacts={contacts} busy={busy} onSave={saveContact} onDelete={(id) => void removeContact(id)} />}
+
+    {section === 'location' && <HotelLocation hotel={hotel} busy={busy} onHotelChange={setHotel} />}
+
+    {section === 'documents' && <HotelDocuments documents={documents} busy={busy} onUpload={uploadDocument} onUpdate={updateDocument} onDelete={removeDocument} />}
   </section>;
 }

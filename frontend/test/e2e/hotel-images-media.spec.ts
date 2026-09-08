@@ -72,10 +72,10 @@ test('Images & Media matches the Stitch geometry and persists uploaded previews'
   expect(metrics.header).toMatchObject({ x: 0, y: 0, height: 64, width: 1920 });
   expect(metrics.sidebar).toMatchObject({ x: 0, y: 64, width: 240 });
   expect(metrics.main).toMatchObject({ x: 240, y: 64, width: 1680 });
-  expect(metrics.tabs).toMatchObject({ x: 272, y: 176, width: 1616, height: 55 });
-  expect(metrics.intro).toMatchObject({ x: 272, y: 249, width: 1616, height: 170 });
+  expect(metrics.tabs).toMatchObject({ x: 272, y: 190, width: 1616, height: 43 });
+  expect(metrics.intro).toMatchObject({ x: 272, y: 263, width: 1616, height: 170 });
   expect(metrics.guidelines).toMatchObject({ width: 384, height: 128 });
-  expect(metrics.filter).toMatchObject({ y: 443, height: 30 });
+  expect(metrics.filter).toMatchObject({ y: 457, height: 30 });
   expect(metrics.columns).toBe(6);
 
   const before = await authenticatedCatalog(page, hotelId);
@@ -98,7 +98,7 @@ test('Images & Media matches the Stitch geometry and persists uploaded previews'
     await expect(firstCard).toHaveCount(1);
     await expect(secondCard).toHaveCount(1);
     await expect(page.locator('.hotelMediaCard.pending')).toHaveCount(0);
-    expect(await firstCard.locator('img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBeTruthy();
+    await expect.poll(() => firstCard.locator('img').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBeTruthy();
 
     const uploadedCatalog = await authenticatedCatalog(page, hotelId);
     const firstDto = uploadedCatalog.images.find((image) => image.altText === firstAlt);
@@ -153,8 +153,9 @@ test('Images & Media matches the Stitch geometry and persists uploaded previews'
     for (const alt of [firstAlt, secondAlt]) {
       const card = page.locator('.hotelMediaCard', { hasText: alt });
       if (await card.count()) {
-        page.once('dialog', (dialog) => dialog.accept());
         await card.getByRole('button', { name: `Delete ${alt}` }).click();
+        await expect(page.getByRole('dialog')).toBeVisible();
+        await page.getByRole('dialog').getByRole('button', { name: 'Delete Image' }).click();
         await expect(card).toHaveCount(0);
       }
     }
