@@ -508,3 +508,14 @@
 @media(max-width:1100px){.roomsInventoryGrid{grid-template-columns:1fr}.roomsInventoryPage{max-width:none}.configuredRoomsCard{min-height:0}}
 @media(max-width:700px){.roomsInventoryHeader,.roomsInventoryHotelBar{align-items:stretch;flex-direction:column}.roomsInventoryStats{grid-template-columns:repeat(2,1fr)}.roomsInventoryFormGrid{grid-template-columns:repeat(2,1fr)}.roomsInventoryHotelBar select{width:100%}}
 @media(max-width:460px){.roomsInventoryStats,.roomsInventoryFormGrid{grid-template-columns:1fr}.roomsInventoryCard{padding:14px}.roomsInventoryCheckboxes{align-items:flex-start;flex-direction:column;gap:7px}}
+
+/* Keep the admin header and search consistent on every protected page. */
+.adminAppShell:not(.hotelEditShell){display:grid;grid-template-columns:256px minmax(0,1fr);grid-template-rows:64px minmax(0,1fr);min-height:100vh;background:#f4f6fa;font-family:Inter,Arial,Helvetica,sans-serif;color:#1e293b}
+.adminAppShell:not(.hotelEditShell) .hotelGlobalHeader{grid-column:1/-1;grid-row:1;display:flex;align-items:center;justify-content:space-between;height:64px;padding:0 24px;background:#fff;border-bottom:1px solid #e2e8f0;z-index:30}
+.adminAppShell:not(.hotelEditShell)>.adminNav{grid-column:1;grid-row:2;background:#0e2439;padding:18px 12px;gap:3px}
+.adminAppShell:not(.hotelEditShell)>.adminNav a{color:#cbd5e1;border-radius:7px;padding:12px 14px;font-size:14px}
+.adminAppShell:not(.hotelEditShell)>.adminNav a.active{background:#174066;color:#fff;box-shadow:inset 3px 0 #0ea5a4}
+.adminAppShell:not(.hotelEditShell)>.adminContent{grid-column:2;grid-row:2;padding:24px 32px 48px;min-width:0;overflow:auto;background:#f4f6fa}
+.adminAppShell:not(.hotelEditShell) .hotelHeaderUser{margin-left:auto}
+@media(max-width:900px){.adminAppShell:not(.hotelEditShell){grid-template-columns:210px minmax(0,1fr)}.adminAppShell:not(.hotelEditShell)>.adminContent{padding:20px}.adminAppShell:not(.hotelEditShell) .hotelHeaderBrand{width:200px}.adminAppShell:not(.hotelEditShell) .hotelHeaderSearch{width:35vw}.adminAppShell:not(.hotelEditShell) .hotelHeaderUser span:not(.hotelAvatar):not(.hotelBell){display:none}}
+@media(max-width:700px){.adminAppShell:not(.hotelEditShell){display:block}.adminAppShell:not(.hotelEditShell) .hotelGlobalHeader{position:sticky;top:0}.adminAppShell:not(.hotelEditShell)>.adminNav{display:flex;flex-direction:row;overflow:auto;padding:8px}.adminAppShell:not(.hotelEditShell)>.adminContent{padding:16px}.adminAppShell:not(.hotelEditShell) .hotelHeaderBrand{width:auto}.adminAppShell:not(.hotelEditShell) .hotelHeaderSearch{display:none}}
