@@ -446,6 +446,11 @@ export default function NewHotelWizard() {
   const [reviewPageSize, setReviewPageSize] = useState(10);
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewDeleteTarget, setReviewDeleteTarget] = useState<HotelReview | null>(null);
+  useEffect(() => {
+    if (!message) return;
+    const timeoutId = window.setTimeout(() => setMessage(""), 1000);
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
   function setStep(next: number) {
     if (step === 2 && next === 3) { void saveReferenceAmenities(); return; }
     setWizardStep(next);
