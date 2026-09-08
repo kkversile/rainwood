@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsDateString, IsEmail, IsInt, IsNumber, IsObject, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsEmail, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 
 export class HotelContentDto {
   @IsString()
@@ -19,6 +19,8 @@ export class HotelContentDto {
   @IsOptional() @IsString() mobile?: string;
   @IsOptional() @IsString() email?: string;
   @IsOptional() @IsString() place?: string;
+  @IsOptional() @IsString() propertyType?: string;
+  @IsOptional() @IsString() location?: string;
   @IsOptional() @IsString() country?: string;
   @IsOptional() @IsString() state?: string;
   @IsOptional() @IsString() address?: string;
@@ -56,6 +58,10 @@ export class HotelContentDto {
 
   @IsOptional()
   @IsString()
+  virtualTourUrl?: string;
+
+  @IsOptional()
+  @IsString()
   axisPropertyId?: string;
 }
 
@@ -67,6 +73,8 @@ export class HotelUpdateDto {
   @IsOptional() @IsString() mobile?: string;
   @IsOptional() @IsString() email?: string;
   @IsOptional() @IsString() place?: string;
+  @IsOptional() @IsString() propertyType?: string;
+  @IsOptional() @IsString() location?: string;
   @IsOptional() @IsString() country?: string;
   @IsOptional() @IsString() state?: string;
   @IsOptional() @IsString() address?: string;
@@ -82,6 +90,7 @@ export class HotelUpdateDto {
   @IsOptional() @IsString() seoDescription?: string;
   @IsOptional() @IsString() canonicalPath?: string;
   @IsOptional() @IsString() ogImageUrl?: string;
+  @IsOptional() @IsString() virtualTourUrl?: string;
   @IsOptional() @IsString() axisPropertyId?: string;
 }
 
@@ -147,7 +156,32 @@ export class AmenityDto {
   @IsOptional() @IsString() endTime?: string;
   @IsOptional() @IsBoolean() active?: boolean;
 }
-export class HotelImageDto { @IsString() @MinLength(1) url!: string; @IsOptional() @IsString() altText?: string; @IsOptional() @IsInt() @Min(0) sortOrder?: number; @IsOptional() @IsBoolean() published?: boolean; }
+export class HotelImageDto {
+  @IsString() @MinLength(1) url!: string;
+  @IsOptional() @IsString() altText?: string;
+  @IsOptional() @IsIn(['ROOMS', 'AMENITIES', 'RESTAURANT', 'EXTERIOR', 'OTHERS']) category?: string;
+  @IsOptional() @IsBoolean() isMain?: boolean;
+  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+  @IsOptional() @IsBoolean() published?: boolean;
+}
+export class HotelImageUpdateDto {
+  @IsOptional() @IsString() @MinLength(1) altText?: string;
+  @IsOptional() @IsIn(['ROOMS', 'AMENITIES', 'RESTAURANT', 'EXTERIOR', 'OTHERS']) category?: string;
+  @IsOptional() @IsBoolean() isMain?: boolean;
+  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+  @IsOptional() @IsBoolean() published?: boolean;
+}
+export class HotelImageOrderDto { @IsArray() @ArrayNotEmpty() @IsString({ each: true }) imageIds!: string[]; }
+export class HotelVideoDto {
+  @IsString() @MinLength(1) fileId!: string;
+  @IsString() @MinLength(1) url!: string;
+  @IsString() @MinLength(1) title!: string;
+  @IsString() @MinLength(1) fileName!: string;
+  @IsString() @MinLength(1) mimeType!: string;
+  @IsInt() @Min(1) size!: number;
+  @IsOptional() @IsString() duration?: string;
+  @IsOptional() @IsString() thumbnailUrl?: string;
+}
 export class HotelReviewDto {
   @IsInt() @Min(1) @Max(5) rating!: number;
   @IsString() @MinLength(1) @MaxLength(5000) description!: string;

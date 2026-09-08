@@ -1,6 +1,6 @@
 import { Body, ConflictException, Controller, Delete, Get, Header, Param, Patch, Post, Put, Query, StreamableFile, UseGuards } from '@nestjs/common';
 import { HotelsService } from './hotels.service';
-import { AmenityDto, HotelContactDto, HotelContentDto, HotelDocumentDto, HotelImageDto, HotelPolicyDto, HotelReviewDto, HotelUpdateDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
+import { AmenityDto, HotelContactDto, HotelContentDto, HotelDocumentDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelPolicyDto, HotelReviewDto, HotelUpdateDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -122,10 +122,30 @@ export class HotelsController {
   @Roles('SUPER_ADMIN', 'ADMIN')
   addImage(@Param('hotelId') hotelId: string, @Body() body: HotelImageDto) { return this.service.addImage(hotelId, body); }
 
+  @Patch(':hotelId/images/:imageId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  updateImage(@Param('hotelId') hotelId: string, @Param('imageId') imageId: string, @Body() body: HotelImageUpdateDto) { return this.service.updateImage(hotelId, imageId, body); }
+
+  @Put(':hotelId/images/order')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  reorderImages(@Param('hotelId') hotelId: string, @Body() body: HotelImageOrderDto) { return this.service.reorderImages(hotelId, body); }
+
   @Delete(':hotelId/images/:imageId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   deleteImage(@Param('hotelId') hotelId: string, @Param('imageId') imageId: string) { return this.service.deleteImage(hotelId, imageId); }
+
+  @Post(':hotelId/videos')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  addVideo(@Param('hotelId') hotelId: string, @Body() body: HotelVideoDto) { return this.service.addVideo(hotelId, body); }
+
+  @Delete(':hotelId/videos/:videoId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  deleteVideo(@Param('hotelId') hotelId: string, @Param('videoId') videoId: string) { return this.service.deleteVideo(hotelId, videoId); }
 
   @Post(':hotelId/rooms')
   @UseGuards(JwtAuthGuard, RolesGuard)

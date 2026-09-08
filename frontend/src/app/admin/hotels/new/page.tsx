@@ -6,11 +6,14 @@ import { useSearchParams } from "next/navigation";
 import { AdminLayout } from "../../../../components/Shell";
 import { API, apiRequest } from "../../../../lib/api";
 import { HotelExtendedSections } from "../../../../components/HotelExtendedSections";
+import { HotelLocationMap } from "../../../../components/HotelLocationMap";
+import { HotelImagesMedia } from "../../../../components/HotelImagesMedia";
 
 const steps = [
   "Basic Details",
   "Rooms & Inventory",
   "Facilities & Amenities",
+  "Images & Media",
   "Price Book",
   "Reviews",
   "Preview",
@@ -19,6 +22,7 @@ const steps = [
   "Location",
   "Documents",
 ];
+const showLegacyAmenities = false;
 type OccupancyKey =
   | "single"
   | "double"
@@ -105,7 +109,10 @@ type HotelImage = {
   altText: string;
   sortOrder: number;
   published: boolean;
+  category: "ROOMS" | "AMENITIES" | "RESTAURANT" | "EXTERIOR" | "OTHERS";
+  isMain: boolean;
 };
+type HotelVideo = { id: string; fileId: string; url: string; title: string; fileName: string; mimeType: string; size: number; duration?: string | null; thumbnailUrl?: string | null; createdAt: string };
 type HotelAmenity = {
   hotelId: string;
   amenityId: string;
@@ -136,6 +143,8 @@ type Hotel = {
   mobile?: string | null;
   email?: string | null;
   place?: string | null;
+  propertyType?: string | null;
+  location?: string | null;
   country?: string | null;
   state?: string | null;
   address?: string | null;
@@ -151,7 +160,9 @@ type Hotel = {
   seoDescription?: string | null;
   canonicalPath?: string | null;
   ogImageUrl?: string | null;
+  virtualTourUrl?: string | null;
   images?: HotelImage[];
+  videos?: HotelVideo[];
   rooms?: Room[];
   amenities?: HotelAmenity[];
 };
@@ -194,6 +205,8 @@ const blankHotel = {
   mobile: "",
   email: "",
   place: "",
+  propertyType: "",
+  location: "",
   country: "",
   state: "",
   address: "",
@@ -209,6 +222,7 @@ const blankHotel = {
   seoDescription: "",
   canonicalPath: "",
   ogImageUrl: "",
+  virtualTourUrl: "",
 };
 const blankRoom = {
   code: "",
@@ -426,6 +440,7 @@ export default function NewHotelWizard() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
   const [reviews, setReviews] = useState<HotelReview[]>([]);
   const [reviewForm, setReviewForm] = useState({ rating: "", description: "" });
   const [editingReviewId, setEditingReviewId] = useState("");
@@ -521,6 +536,8 @@ export default function NewHotelWizard() {
           mobile: data.mobile ?? "",
           email: data.email ?? "",
           place: data.place ?? "",
+          propertyType: data.propertyType ?? "",
+          location: data.location ?? "",
           country: data.country ?? "",
           state: data.state ?? "",
           address: data.address ?? "",
@@ -536,6 +553,7 @@ export default function NewHotelWizard() {
           seoDescription: data.seoDescription ?? "",
           canonicalPath: data.canonicalPath ?? "",
           ogImageUrl: data.ogImageUrl ?? "",
+          virtualTourUrl: data.virtualTourUrl ?? "",
         });
         setCatalog(data);
       })
@@ -558,7 +576,7 @@ export default function NewHotelWizard() {
     try { setReviews(await apiRequest<HotelReview[]>(`/hotels/${hotelId}/reviews`)); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load reviews"); }
   }
-  useEffect(() => { if (step === 4 && hotelId) void loadReviews(); }, [step, hotelId]);
+  useEffect(() => { if (step === 5 && hotelId) void loadReviews(); }, [step, hotelId]);
   function resetReviewForm() { setReviewForm({ rating: "", description: "" }); setEditingReviewId(""); }
   async function saveReview(event: FormEvent) {
     event.preventDefault();
@@ -665,8 +683,9 @@ export default function NewHotelWizard() {
       setBusy(false);
     }
   }
-  async function uploadHotelImages(id: string) {
-    for (const [index, file] of imageFiles.entries()) {
+  async function uploadHotelImages(id: string, files = imageFiles, category: HotelImage["category"] = "EXTERIOR") {
+    const existingCount = catalog?.images?.length ?? 0;
+    for (const [index, file] of files.entries()) {
       const formData = new FormData();
       formData.append("file", file);
       const stored = await apiRequest<{ id: string }>(`/files/hotel-image`, {
@@ -678,11 +697,43 @@ export default function NewHotelWizard() {
         body: JSON.stringify({
           url: `${API}/files/public/${stored.id}`,
           altText: file.name.replace(/\.[^.]+$/, ""),
-          sortOrder: index,
+          category,
+          isMain: existingCount === 0 && index === 0,
+          sortOrder: existingCount + index,
         }),
       });
     }
     setImageFiles([]);
+  }
+  useEffect(() => {
+    const urls = imageFiles.map((file) => URL.createObjectURL(file));
+    setImagePreviewUrls(urls);
+    return () => urls.forEach((url) => URL.revokeObjectURL(url));
+  }, [imageFiles]);
+  async function handleHotelImageSelection(files: File[], category: HotelImage["category"] = "EXTERIOR") {
+    if (!files.length) return;
+    const supportedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+    const invalid = files.find((file) => !supportedTypes.has(file.type) || file.size > 5 * 1024 * 1024);
+    if (invalid) {
+      setError(`${invalid.name} must be a JPG, PNG, or WebP image no larger than 5 MB.`);
+      return;
+    }
+    setImageFiles(files);
+    if (!hotelId) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await uploadHotelImages(hotelId, files, category);
+      await loadCatalog(hotelId);
+      setMessage("Images uploaded successfully.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not upload images");
+      await loadCatalog(hotelId);
+      setImageFiles([]);
+    } finally {
+      setBusy(false);
+    }
   }
   async function downloadPriceBook() {
     if (!hotelId) return;
@@ -732,12 +783,68 @@ export default function NewHotelWizard() {
             }
           : current,
       );
+      await loadCatalog(hotelId);
       setMessage("Image deleted successfully.");
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Could not delete image",
       );
     }
+  }
+  async function updateHotelImage(imageId: string, changes: Partial<Pick<HotelImage, "altText" | "category" | "isMain" | "sortOrder" | "published">>) {
+    if (!hotelId) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      await apiRequest(`/hotels/${hotelId}/images/${imageId}`, { method: "PATCH", body: JSON.stringify(changes) });
+      await loadCatalog(hotelId);
+      setMessage(changes.isMain ? "Main photo updated." : "Image updated.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not update image"); }
+    finally { setBusy(false); }
+  }
+  async function reorderHotelImages(imageIds: string[]) {
+    if (!hotelId) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      await apiRequest(`/hotels/${hotelId}/images/order`, { method: "PUT", body: JSON.stringify({ imageIds }) });
+      await loadCatalog(hotelId);
+      setMessage("Image order updated.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not reorder images"); }
+    finally { setBusy(false); }
+  }
+  async function uploadHotelVideo(file: File) {
+    if (!hotelId) return;
+    if (!["video/mp4", "video/webm"].includes(file.type) || file.size > 150 * 1024 * 1024) {
+      setError(`${file.name} must be an MP4 or WebM video no larger than 150 MB.`);
+      return;
+    }
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const formData = new FormData(); formData.append("file", file);
+      const stored = await apiRequest<{ id: string; originalName: string; mimeType: string; size: number }>("/files/hotel-video", { method: "POST", body: formData });
+      await apiRequest(`/hotels/${hotelId}/videos`, { method: "POST", body: JSON.stringify({ fileId: stored.id, url: `${API}/files/public/${stored.id}`, title: file.name.replace(/\.[^.]+$/, ""), fileName: stored.originalName, mimeType: stored.mimeType, size: stored.size }) });
+      await loadCatalog(hotelId);
+      setMessage("Video uploaded successfully.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not upload video"); }
+    finally { setBusy(false); }
+  }
+  async function deleteHotelVideo(video: HotelVideo) {
+    if (!hotelId || !window.confirm(`Delete ${video.title}?`)) return;
+    setBusy(true); setError(""); setMessage("");
+    try { await apiRequest(`/hotels/${hotelId}/videos/${video.id}`, { method: "DELETE" }); await loadCatalog(hotelId); setMessage("Video deleted."); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not delete video"); }
+    finally { setBusy(false); }
+  }
+  async function saveVirtualTour(virtualTourUrl: string) {
+    if (!hotelId) return false;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      await apiRequest(`/hotels/${hotelId}`, { method: "PATCH", body: JSON.stringify({ virtualTourUrl }) });
+      setHotel((current) => ({ ...current, virtualTourUrl }));
+      setCatalog((current) => current ? { ...current, virtualTourUrl } : current);
+      setMessage("Virtual tour saved.");
+      return true;
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save virtual tour"); return false; }
+    finally { setBusy(false); }
   }
   async function nextFromBasic(event: FormEvent) {
     event.preventDefault();
@@ -765,6 +872,34 @@ export default function NewHotelWizard() {
         }
       }
       setStep(1);
+    }
+  }
+  async function saveLocationFromMap() {
+    if (!hotelId) {
+      setError("Save the hotel details before updating its location.");
+      return;
+    }
+    const latitude = Number(hotel.latitude);
+    const longitude = Number(hotel.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      setError("Enter valid latitude and longitude coordinates.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await apiRequest<Hotel>(`/hotels/${hotelId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ latitude: hotel.latitude, longitude: hotel.longitude, location: hotel.location, address: hotel.address, city: hotel.city, state: hotel.state, country: hotel.country, pincode: hotel.pincode }),
+      });
+          setHotel((current) => ({ ...current, latitude: result.latitude ?? current.latitude, longitude: result.longitude ?? current.longitude, location: result.location ?? current.location, address: result.address ?? current.address, city: result.city ?? current.city, state: result.state ?? current.state, country: result.country ?? current.country, pincode: result.pincode ?? current.pincode }));
+      setCatalog((current) => current ? { ...current, ...result } : current);
+      setMessage("Location updated successfully.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not update location");
+    } finally {
+      setBusy(false);
     }
   }
   async function addRoom(event: FormEvent) {
@@ -1114,9 +1249,9 @@ export default function NewHotelWizard() {
       <div className="wizard">
         <div className="wizardHeader">
           <div>
-            <span>Hotels <b>›</b> {editId ? "Add / Edit Hotel" : "Add Hotel"}</span>
+            <span>Hotels <b>›</b> {step === 3 && editId ? "Edit Hotel" : editId ? "Add / Edit Hotel" : "Add Hotel"}</span>
             <h2>{editId ? "Edit Hotel" : "Add Hotel"}</h2>
-            <p>Manage hotel details, facilities, images and policies</p>
+            <p>{step === 3 && editId ? `${hotel.name} (${hotel.code})` : "Manage hotel details, facilities, images and policies"}</p>
           </div>
           <div className="hotelHeaderActions"><Link className="btn secondary" href="/admin/hotels">Cancel</Link><button className="btn" form="hotel-basic-form" type="submit">Save Hotel</button></div>
         </div>
@@ -1174,7 +1309,7 @@ export default function NewHotelWizard() {
               </label>
               <label>
                 Property Type
-                <PropertyTypeSelect value={hotel.place} onChange={(value) => setHotel({ ...hotel, place: value })} />
+                <PropertyTypeSelect value={hotel.propertyType} onChange={(value) => setHotel({ ...hotel, propertyType: value })} />
               </label>
             </div>
             <div className="two">
@@ -1198,16 +1333,16 @@ export default function NewHotelWizard() {
             <label>
               Address <em>*</em><textarea value={hotel.address} onChange={(e) => setHotel({ ...hotel, address: e.target.value })} required />
             </label>
-            <div className="locationField"><label>Location</label><button type="button" onClick={() => setMessage("Map picker is ready when coordinates are entered.")}>⌖ Get from Map</button><input value={hotel.place} onChange={(e) => setHotel({ ...hotel, place: e.target.value })} placeholder="Enter location or landmark" /></div>
+            <div className="locationField"><label>Location</label><button type="button" onClick={() => setMessage("Move the marker or click the map to choose a location.")}>⌖ Get from Map</button><input value={hotel.location} onChange={(e) => setHotel({ ...hotel, location: e.target.value })} placeholder="Enter location or landmark" /></div>
             <div className="two">
-              <label>Latitude<input value={hotel.latitude} onChange={(e) => setHotel({ ...hotel, latitude: e.target.value })} placeholder="10.2381" /></label>
-              <label>Longitude<input value={hotel.longitude} onChange={(e) => setHotel({ ...hotel, longitude: e.target.value })} placeholder="77.4892" /></label>
+              <label>Latitude<input value={hotel.latitude} onChange={(e) => setHotel((current) => ({ ...current, latitude: e.target.value }))} placeholder="10.2381" /></label>
+              <label>Longitude<input value={hotel.longitude} onChange={(e) => setHotel((current) => ({ ...current, longitude: e.target.value }))} placeholder="77.4892" /></label>
             </div>
             <label className="descriptionField">Description<textarea value={hotel.description} onChange={(e) => setHotel({ ...hotel, description: e.target.value })} maxLength={1000} placeholder="Describe the hotel, its location and key highlights..." /><small>{hotel.description.length}/1000</small></label>
             <div className="hotelAdvancedFields"><div className="two"><label>Hotel mobile<input value={hotel.mobile} onChange={(e) => setHotel({ ...hotel, mobile: e.target.value })} /></label><label>Hotel email<input type="email" value={hotel.email} onChange={(e) => setHotel({ ...hotel, email: e.target.value })} /></label></div><div className="two"><label>Slug<input value={hotel.slug} onChange={(e) => setHotel({ ...hotel, slug: e.target.value })} required /></label><label>SEO title<input value={hotel.seoTitle} onChange={(e) => setHotel({ ...hotel, seoTitle: e.target.value })} /></label></div><label className="checkLabel"><input type="checkbox" checked={hotel.powerBackup} onChange={(e) => setHotel({ ...hotel, powerBackup: e.target.checked })} /> Power backup</label></div>
-            <WizardButtons busy={busy} next="Save & Continue" />
+            <WizardButtons busy={busy} next={editId ? "Update & Continue" : "Save & Continue"} />
           </form>
-          <aside className="hotelBasicAside"><section className="hotelSideCard hotelImagesCard"><h2>Hotel Images</h2><p>Add high quality images <small>(Recommended size: 1280 x 720)</small></p><div className="hotelImageMosaic">{catalog?.images?.slice(0, 3).map((image, index) => <div className={index === 0 ? "mainImage" : "smallImage"} key={image.id}><img src={image.url} alt={image.altText} /><button type="button" onClick={() => void deleteHotelImage(image)} aria-label="Delete image">▣</button>{index === 0 && <b>Main Photo</b>}</div>)}{!catalog?.images?.length && <div className="imagePlaceholder">No images uploaded</div>}</div><label className="uploadImagesButton">⇧ &nbsp; Upload Images<input type="file" accept="image/jpeg,image/png" multiple onChange={(e) => setImageFiles(Array.from(e.target.files ?? []))} /></label><small className="uploadHint">JPEG, PNG up to 5MB each</small></section><section className="hotelSideCard hotelLocationCard"><h2>Location on Map</h2><div className="mapPreview"><span>●</span><b>{hotel.name || "Hotel location"}</b><small>{hotel.city || "Select city"}</small></div><button className="updateLocationButton" type="button" onClick={() => setMessage("Location updated.")}>⌖ &nbsp; Update Location</button><div className="quickLinks"><b>ⓘ &nbsp; Quick Links</b><span>View on Google Maps ↗</span><span>View on Tripadvisor ↗</span><span>View on MakeMyTrip ↗</span><span>View on Goibibo ↗</span><span>View on Booking.com ↗</span></div></section></aside>
+          <aside className="hotelBasicAside"><section className="hotelSideCard hotelImagesCard"><h2>Hotel Images</h2><p>Add high quality images <small>(Recommended size: 1280 x 720)</small></p><div className="hotelImageMosaic">{catalog?.images?.slice(0, 3).map((image, index) => <div className={index === 0 ? "mainImage" : "smallImage"} key={image.id}><img src={image.url} alt={image.altText} /><button type="button" onClick={() => void deleteHotelImage(image)} aria-label="Delete image">▣</button>{index === 0 && <b>Main Photo</b>}</div>)}{imagePreviewUrls.map((url, index) => <div className={index === 0 && !catalog?.images?.length ? "mainImage" : "smallImage"} key={url}><img src={url} alt={imageFiles[index]?.name || "Selected hotel image"} /><b className="pendingImageLabel">Pending</b></div>)}{!catalog?.images?.length && !imagePreviewUrls.length && <div className="imagePlaceholder">No images uploaded</div>}</div><label className="uploadImagesButton">⇧ &nbsp; {busy ? "Uploading..." : "Upload Images"}<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy} onChange={(e) => void handleHotelImageSelection(Array.from(e.target.files ?? []))} /></label><small className="uploadHint">JPG, PNG, WebP up to 5MB each</small></section><section className="hotelSideCard hotelLocationCard"><h2>Location on Map</h2><HotelLocationMap latitude={hotel.latitude} longitude={hotel.longitude} onChange={(latitude, longitude) => setHotel((current) => ({ ...current, latitude, longitude }))} onReverseGeocode={(details) => setHotel((current) => ({ ...current, ...details, location: details.address ?? current.location }))} /><button className="updateLocationButton" type="button" disabled={busy} onClick={() => void saveLocationFromMap()}>⌖ &nbsp; Update Location</button><div className="quickLinks"><b>ⓘ &nbsp; Quick Links</b><a href={`https://www.google.com/maps?q=${hotel.latitude},${hotel.longitude}`} target="_blank" rel="noreferrer">View on Google Maps ↗</a><span>View on Tripadvisor ↗</span><span>View on MakeMyTrip ↗</span><span>View on Goibibo ↗</span><span>View on Booking.com ↗</span></div></section></aside>
           </div>
         )}
         {step === 1 && (
@@ -1250,7 +1385,7 @@ export default function NewHotelWizard() {
         {step === 2 && (
           <section className="amenitiesWorkspace"><div className="amenitiesMain"><section className="amenityReferenceCard popularHighlights"><div className="amenityCardHeading"><div><span className="amenityHeadingIcon">★</span><div><h2>Popular Highlights</h2><p>Select key highlights that will be showcased to guests</p></div></div><span className="selectedBadge">✓ &nbsp; {popularAmenities.filter((item) => selectedAmenities.includes(item)).length} popular highlights selected</span></div><div className="amenityChipGrid">{popularAmenities.map((item) => <button type="button" className={`amenityChip ${selectedAmenities.includes(item) ? "selected" : ""}`} key={item} onClick={() => setSelectedAmenities((current) => current.includes(item) ? current.filter((name) => name !== item) : [...current, item])}><span className="chipCheck">✓</span><span className="chipIcon">✦</span>{item}</button>)}</div></section>{amenityGroups.map((group) => <section className="amenityReferenceCard" key={group.title}><div className="amenityCardTitle"><span className="amenityHeadingIcon">{group.icon}</span><div><h2>{group.title}</h2><p>{group.subtitle}</p></div></div><div className="amenityToggleGrid">{group.items.map((item) => <button type="button" className={`amenityToggleItem ${selectedAmenities.includes(item) ? "selected" : ""}`} key={item} onClick={() => setSelectedAmenities((current) => current.includes(item) ? current.filter((name) => name !== item) : [...current, item])}><span className="miniSwitch"><i /></span><span className="amenityItemIcon">✦</span><span>{item}</span></button>)}</div></section>)}<div className="amenityReferenceActions"><button type="button" className="btn secondary" onClick={() => setStep(0)}>Back</button><button type="button" className="btn" onClick={() => setStep(3)}>Update &amp; Continue</button></div></div><aside className="amenitiesSummaryRail"><section className="amenityReferenceCard"><div className="amenityCardTitle"><span className="amenityHeadingIcon">▥</span><div><h2>Amenities Summary</h2><p>Overview of selected amenities</p></div></div><div className="summaryMetric"><b>✓</b><strong>{selectedAmenities.length}</strong><span>Selected amenities<small>Total amenities across all categories</small></span></div><div className="summaryMetric"><b>★</b><strong>{popularAmenities.filter((item) => selectedAmenities.includes(item)).length}</strong><span>Popular highlights<small>Showcased to guests</small></span></div><div className="summaryMetric"><b>♜</b><strong>{selectedAmenities.filter((item) => ["Multi-cuisine Restaurant", "Breakfast Buffet", "Coffee Shop", "In-room Dining", "Barbecue", "Kids Menu"].includes(item)).length}</strong><span>Dining facilities<small>Food &amp; dining options</small></span></div><div className="summaryMetric"><b>♢</b><strong>{selectedAmenities.filter((item) => groupContains(item, "Accessibility & Safety")).length}</strong><span>Safety features<small>Accessibility &amp; safety amenities</small></span></div></section><section className="amenityReferenceCard guestHighlights"><div className="amenityCardTitle"><span className="amenityHeadingIcon">♛</span><div><h2>Guest-facing Highlights</h2><p>Preview of top amenities shown to guests</p></div></div><div className="guestPreview"><b>{hotel.name || "RainWood Aurum Kodaikanal"}</b><small>A perfect blend of comfort and nature</small></div><div className="guestTags">{popularAmenities.filter((item) => selectedAmenities.includes(item)).slice(0, 6).map((item) => <span key={item}>✓ {item}</span>)}</div><p className="amenityTip">ⓘ &nbsp; <b>Tip:</b> Select only guest-facing amenities that are operational and currently available.</p></section></aside></section>
         )}
-        {false && step === 2 && (
+        {showLegacyAmenities && step === 2 && (
           <section className="formCard wizardCard amenitiesCard">
             <div className="amenitiesToolbar">
               <button
@@ -1468,7 +1603,26 @@ export default function NewHotelWizard() {
             </div>
           </section>
         )}
-        {step === 3 && (
+        {step === 3 && hotelId && (
+          <HotelImagesMedia
+            hotelName={hotel.name}
+            images={catalog?.images ?? []}
+            videos={catalog?.videos ?? []}
+            virtualTourUrl={hotel.virtualTourUrl}
+            pendingImages={imageFiles.map((file, index) => ({ name: file.name, url: imagePreviewUrls[index] ?? "" }))}
+            busy={busy}
+            onUpload={(files, category) => void handleHotelImageSelection(files, category)}
+            onDelete={(image) => void deleteHotelImage(image)}
+            onSetMain={(image) => void updateHotelImage(image.id, { isMain: true })}
+            onReorder={(imageIds) => void reorderHotelImages(imageIds)}
+            onUploadVideo={(file) => void uploadHotelVideo(file)}
+            onDeleteVideo={(video) => void deleteHotelVideo(video)}
+            onSaveVirtualTour={saveVirtualTour}
+            onBack={() => setStep(2)}
+            onContinue={() => setStep(4)}
+          />
+        )}
+        {step === 4 && (
           <section className="formCard wizardCard">
             <h2>Price Book</h2>
             <p>
@@ -1817,12 +1971,12 @@ export default function NewHotelWizard() {
               )}
             </section>
             <WizardButtons
-              onBack={() => setStep(2)}
-              onNext={() => setStep(4)}
+              onBack={() => setStep(3)}
+              onNext={() => setStep(5)}
             />
           </section>
         )}
-        {step === 4 && (
+        {step === 5 && (
           <section className="hotelReviewStep">
             <div className="reviewColumns">
               <form className="reviewFormCard" onSubmit={saveReview}>
@@ -1852,10 +2006,10 @@ export default function NewHotelWizard() {
                 <div className="reviewTableFooter"><span>Showing {reviewFirst} to {reviewLast} of {filteredReviews.length} entries</span><div><button type="button" disabled={reviewPage <= 1} onClick={() => setReviewPage((page) => Math.max(1, page - 1))}>Previous</button><button type="button" disabled={reviewPage >= reviewPageCount} onClick={() => setReviewPage((page) => Math.min(reviewPageCount, page + 1))}>Next</button></div></div>
               </section>
             </div>
-            <div className="reviewStepActions"><button type="button" className="backButton" onClick={() => setStep(3)}>Back</button><button type="button" className="primaryButton" onClick={() => setStep(5)}>Update &amp; Continue</button></div>
+            <div className="reviewStepActions"><button type="button" className="backButton" onClick={() => setStep(4)}>Back</button><button type="button" className="primaryButton" onClick={() => setStep(6)}>Update &amp; Continue</button></div>
           </section>
         )}
-        {step === 5 && (
+        {step === 6 && (
           <section className="hotelPreviewStep">
             <div className="hotelPreviewCard">
               <h2>Basic Info</h2>
@@ -1870,8 +2024,8 @@ export default function NewHotelWizard() {
             </div>
           </section>
         )}
-        {hotelId && step >= 6 && step <= 9 && (
-          <HotelExtendedSections hotelId={hotelId} hotel={{ id: hotelId, ...hotel }} initialSection={(["policy", "contacts", "location", "documents"] as const)[step - 6]} />
+        {hotelId && step >= 7 && step <= 10 && (
+          <HotelExtendedSections hotelId={hotelId} hotel={{ id: hotelId, ...hotel }} initialSection={(["policy", "contacts", "location", "documents"] as const)[step - 7]} />
         )}
       </div>
       {deleteTarget && (

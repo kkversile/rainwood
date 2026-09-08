@@ -234,6 +234,8 @@ model Hotel {
   mobile            String?
   email             String?
   place             String?
+  propertyType      String?
+  location          String?
   country           String?
   state             String?
   address           String?
@@ -249,9 +251,11 @@ model Hotel {
   seoDescription    String?
   canonicalPath     String?
   ogImageUrl        String?
+  virtualTourUrl    String?
   axisPropertyId    String?            @unique
   rooms             RoomType[]
   images            HotelImage[]
+  videos            HotelVideo[]
   amenities         HotelAmenity[]
   reviews           HotelReview[]
   taxes             Tax[]
@@ -347,11 +351,30 @@ model HotelImage {
   hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   url       String
   altText   String
+  category  String   @default("OTHERS")
+  isMain    Boolean  @default(false)
   sortOrder Int      @default(0)
   published Boolean  @default(true)
   createdAt DateTime @default(now())
 
   @@index([hotelId, published, sortOrder])
+}
+
+model HotelVideo {
+  id           String   @id @default(cuid())
+  hotelId      String
+  hotel        Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  fileId       String
+  url          String
+  title        String
+  fileName     String
+  mimeType     String
+  size         Int
+  duration     String?
+  thumbnailUrl String?
+  createdAt    DateTime @default(now())
+
+  @@index([hotelId, createdAt])
 }
 
 model Amenity {

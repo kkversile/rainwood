@@ -1,0 +1,77 @@
+.hotelLeafletMap {
+  height: 112px;
+  margin: 10px 0;
+  overflow: hidden;
+  border: 1px solid #dbe5ee;
+  border-radius: 6px;
+  background: #dcebf4;
+}
+
+/* The legacy editor skin hides wizard footers globally; Basic Details still
+   needs its navigation action below the form. */
+.hotelBasicLayout .wizardButtons {
+  display: flex !important;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.hotelLeafletMap .leaflet-container {
+  height: 100%;
+  width: 100%;
+  font: 10px/1.2 Arial, sans-serif;
+}
+
+.hotelLeafletMap .leaflet-control-zoom {
+  margin: 6px !important;
+}
+
+.hotelLeafletMap .leaflet-control-zoom a {
+  width: 20px;
+  height: 20px;
+  line-height: 18px;
+  color: #123e6e;
+}
+
+.hotelLeafletMap .leaflet-control-attribution {
+  padding: 1px 3px;
+  font-size: 8px;
+}
+
+.hotelImageMosaic .pendingImageLabel {
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 9px;
+}
+
+.rainwoodMapMarker {
+  border: 0;
+  background: transparent;
+}
+
+.rainwoodMapMarker span {
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  background: #ed3d2c;
+  box-shadow: 0 1px 3px rgba(18, 62, 110, .35);
+  transform: rotate(-45deg);
+}
+
+.rainwoodMapMarker span::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+}

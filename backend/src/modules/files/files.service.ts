@@ -12,8 +12,8 @@ const ALLOWED: Record<string, FileKind> = { 'image/jpeg': 'PAYMENT_PROOF', 'imag
 export class FilesService {
   constructor(private p: PrismaService, private c: ConfigService) {}
 
-  async save(buffer: Buffer, originalName: string, mimeType: string, kind: FileKind, userId?: string) {
-    const max = Number(this.c.get('MAX_UPLOAD_BYTES', 5 * 1024 * 1024));
+  async save(buffer: Buffer, originalName: string, mimeType: string, kind: FileKind, userId?: string, maxBytes?: number) {
+    const max = maxBytes ?? Number(this.c.get('MAX_UPLOAD_BYTES', 5 * 1024 * 1024));
     if (!buffer?.length || buffer.length > max) throw new BadRequestException('File is empty or exceeds the upload limit');
     if (kind === 'PAYMENT_PROOF' && ALLOWED[mimeType] !== kind) throw new BadRequestException('Only PDF, PNG, and JPEG payment proofs are accepted');
     this.validateMagic(buffer, mimeType);
@@ -61,6 +61,9 @@ export class FilesService {
     const pdf = buffer.subarray(0, 5).toString() === '%PDF-';
     const png = buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     const jpeg = buffer.subarray(0, 3).equals(Buffer.from([255, 216, 255]));
-    if ((mimeType === 'application/pdf' && !pdf) || (mimeType === 'image/png' && !png) || (mimeType === 'image/jpeg' && !jpeg)) throw new BadRequestException('File content does not match its MIME type');
+    const webp = buffer.subarray(0, 4).toString() === 'RIFF' && buffer.subarray(8, 12).toString() === 'WEBP';
+    const mp4 = buffer.subarray(4, 8).toString() === 'ftyp';
+    const webm = buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+    if ((mimeType === 'application/pdf' && !pdf) || (mimeType === 'image/png' && !png) || (mimeType === 'image/jpeg' && !jpeg) || (mimeType === 'image/webp' && !webp) || (mimeType === 'video/mp4' && !mp4) || (mimeType === 'video/webm' && !webm)) throw new BadRequestException('File content does not match its MIME type');
   }
 }

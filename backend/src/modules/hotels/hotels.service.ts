@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
-import { AmenityDto, HotelContentDto, HotelImageDto, HotelReviewDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
+import { AmenityDto, HotelContentDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
 import { FilesService } from '../files/files.service';
 import ExcelJS from 'exceljs';
 
@@ -13,7 +13,8 @@ export class HotelsService {
       where: { active: true },
       orderBy: { name: 'asc' },
       include: {
-        images: { where: { published: true, url: { not: '/rainwood-placeholder.svg' } }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }] },
+        images: { where: { published: true, url: { not: '/rainwood-placeholder.svg' } }, orderBy: [{ isMain: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }] },
+        videos: { orderBy: { createdAt: 'desc' } },
         amenities: { include: { amenity: true } },
         rooms: { where: { active: true }, include: { images: { where: { published: true }, orderBy: { sortOrder: 'asc' } }, ratePlans: { where: { active: true } } } },
       },
@@ -24,7 +25,8 @@ export class HotelsService {
     const hotel = await this.prisma.hotel.findFirst({
       where: { slug, active: true },
       include: {
-        images: { where: { published: true, url: { not: '/rainwood-placeholder.svg' } }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }] },
+        images: { where: { published: true, url: { not: '/rainwood-placeholder.svg' } }, orderBy: [{ isMain: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }] },
+        videos: { orderBy: { createdAt: 'desc' } },
         amenities: { include: { amenity: true } },
         taxes: { where: { active: true } },
         charges: { where: { active: true } },
@@ -59,7 +61,7 @@ export class HotelsService {
     const from = startDate ? new Date(`${startDate}T00:00:00.000Z`) : undefined;
     const to = endDate ? new Date(`${endDate}T00:00:00.000Z`) : undefined;
     const validRange = from && to && !Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime()) && from <= to;
-    return this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId }, include: { images: { where: { published: true, url: { not: '/rainwood-placeholder.svg' } }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }] }, amenities: { include: { amenity: true } }, rooms: { orderBy: { name: 'asc' }, include: { images: { where: { published: true }, orderBy: { sortOrder: 'asc' } }, ratePlans: { orderBy: { name: 'asc' }, include: { rates: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } }, inventory: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } } } });
+    return this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId }, include: { images: { where: { published: true, url: { not: '/rainwood-placeholder.svg' } }, orderBy: [{ isMain: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }] }, videos: { orderBy: { createdAt: 'desc' } }, amenities: { include: { amenity: true } }, rooms: { orderBy: { name: 'asc' }, include: { images: { where: { published: true }, orderBy: { sortOrder: 'asc' } }, ratePlans: { orderBy: { name: 'asc' }, include: { rates: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } }, inventory: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } } } });
   }
 
   async pricebookExport(hotelId: string) {
@@ -121,7 +123,28 @@ export class HotelsService {
 
   async addImage(hotelId: string, body: HotelImageDto) {
     await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
-    return this.prisma.hotelImage.create({ data: { hotelId, url: body.url.trim(), altText: body.altText?.trim() || 'RainWood hotel image', sortOrder: body.sortOrder ?? 0, published: body.published ?? true } });
+    const imageCount = await this.prisma.hotelImage.count({ where: { hotelId, url: { not: '/rainwood-placeholder.svg' } } });
+    const currentMain = await this.prisma.hotelImage.findFirst({ where: { hotelId, isMain: true, published: true, url: { not: '/rainwood-placeholder.svg' } }, select: { id: true } });
+    const isVisible = (body.published ?? true) && body.url.trim() !== '/rainwood-placeholder.svg';
+    const isMain = body.isMain ?? (!currentMain && isVisible);
+    if (isMain) await this.prisma.hotelImage.updateMany({ where: { hotelId }, data: { isMain: false } });
+    return this.prisma.hotelImage.create({ data: { hotelId, url: body.url.trim(), altText: body.altText?.trim() || 'RainWood hotel image', category: body.category ?? 'OTHERS', isMain, sortOrder: body.sortOrder ?? imageCount, published: body.published ?? true } });
+  }
+
+  async updateImage(hotelId: string, imageId: string, body: HotelImageUpdateDto) {
+    const image = await this.prisma.hotelImage.findFirst({ where: { id: imageId, hotelId } });
+    if (!image) throw new NotFoundException('Hotel image not found');
+    if (body.isMain) await this.prisma.hotelImage.updateMany({ where: { hotelId, id: { not: imageId } }, data: { isMain: false } });
+    return this.prisma.hotelImage.update({ where: { id: imageId }, data: body });
+  }
+
+  async reorderImages(hotelId: string, body: HotelImageOrderDto) {
+    const imageIds = [...new Set(body.imageIds)];
+    if (imageIds.length !== body.imageIds.length) throw new BadRequestException('Image order contains duplicates');
+    const owned = await this.prisma.hotelImage.count({ where: { hotelId, id: { in: imageIds } } });
+    if (owned !== imageIds.length) throw new BadRequestException('Image order contains an invalid image');
+    await this.prisma.$transaction(imageIds.map((id, sortOrder) => this.prisma.hotelImage.update({ where: { id }, data: { sortOrder } })));
+    return this.prisma.hotelImage.findMany({ where: { hotelId }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }] });
   }
 
   async deleteImage(hotelId: string, imageId: string) {
@@ -129,8 +152,25 @@ export class HotelsService {
     if (!image) throw new NotFoundException('Hotel image not found');
     const fileId = image.url.match(/\/files\/public\/([^/?#]+)/)?.[1];
     await this.prisma.hotelImage.delete({ where: { id: image.id } });
+    if (image.isMain) {
+      const next = await this.prisma.hotelImage.findFirst({ where: { hotelId, published: true, url: { not: '/rainwood-placeholder.svg' } }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] });
+      if (next) await this.prisma.hotelImage.update({ where: { id: next.id }, data: { isMain: true } });
+    }
     if (fileId) await this.files.remove(fileId);
     return { deleted: true, imageId: image.id, fileId: fileId ?? null };
+  }
+
+  async addVideo(hotelId: string, body: HotelVideoDto) {
+    await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
+    return this.prisma.hotelVideo.create({ data: { hotelId, ...body, title: body.title.trim() } });
+  }
+
+  async deleteVideo(hotelId: string, videoId: string) {
+    const video = await this.prisma.hotelVideo.findFirst({ where: { id: videoId, hotelId } });
+    if (!video) throw new NotFoundException('Hotel video not found');
+    await this.prisma.hotelVideo.delete({ where: { id: video.id } });
+    await this.files.remove(video.fileId);
+    return { deleted: true, videoId };
   }
 
   async createRoom(hotelId: string, body: RoomTypeDto) {

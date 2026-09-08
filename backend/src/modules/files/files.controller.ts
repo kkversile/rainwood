@@ -18,10 +18,18 @@ export class FilesController {
 
   @Post('hotel-image')
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (_request, file, callback) => callback(null, ['image/jpeg', 'image/png'].includes(file.mimetype)) }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (_request, file, callback) => callback(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) }))
   uploadHotelImage(@UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: any) {
-    if (!file) throw new BadRequestException('A JPEG or PNG hotel image is required');
+    if (!file) throw new BadRequestException('A JPEG, PNG, or WebP hotel image is required');
     return this.s.save(file.buffer, file.originalname, file.mimetype, 'OTHER', user.id);
+  }
+
+  @Post('hotel-video')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 150 * 1024 * 1024 }, fileFilter: (_request, file, callback) => callback(null, ['video/mp4', 'video/webm'].includes(file.mimetype)) }))
+  uploadHotelVideo(@UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: any) {
+    if (!file) throw new BadRequestException('An MP4 or WebM hotel video is required');
+    return this.s.save(file.buffer, file.originalname, file.mimetype, 'OTHER', user.id, 150 * 1024 * 1024);
   }
 
   @Post('hotel-document')
@@ -35,7 +43,7 @@ export class FilesController {
   @Get('public/:id')
   async publicImage(@Param('id') id: string) {
     const { file, buffer } = await this.s.get(id);
-    if (!file.mimeType.startsWith('image/')) throw new BadRequestException('Only image files can be displayed publicly');
+    if (!file.mimeType.startsWith('image/') && !file.mimeType.startsWith('video/')) throw new BadRequestException('Only image and video files can be displayed publicly');
     return new StreamableFile(buffer, { type: file.mimeType, disposition: 'inline' });
   }
 

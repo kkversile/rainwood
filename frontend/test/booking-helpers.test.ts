@@ -7,11 +7,13 @@ test('dateInDays generates UTC date-only values', () => {
 });
 
 test('search validation rejects reversed dates and invalid occupancy', () => {
-  assert.equal(validateSearchInput({ checkIn: '2026-08-03', checkOut: '2026-08-02', adults: 2, children: 0, rooms: 1 }), 'Check-out must be after check-in.');
-  assert.equal(validateSearchInput({ checkIn: '2026-08-02', checkOut: '2026-08-03', adults: 0, children: 0, rooms: 1 }), 'At least one adult is required.');
-  assert.equal(validateSearchInput({ checkIn: '2026-08-02', checkOut: '2026-08-03', adults: 2, children: 0, rooms: 0 }), 'At least one room is required.');
+  const checkIn = dateInDays(2);
+  const checkOut = dateInDays(3);
+  assert.equal(validateSearchInput({ checkIn: checkOut, checkOut: checkIn, adults: 2, children: 0, rooms: 1 }), 'Check-out must be after check-in.');
+  assert.equal(validateSearchInput({ checkIn, checkOut, adults: 0, children: 0, rooms: 1 }), 'At least one adult is required.');
+  assert.equal(validateSearchInput({ checkIn, checkOut, adults: 2, children: 0, rooms: 0 }), 'At least one room is required.');
 });
 
 test('search validation accepts a normal one-night stay', () => {
-  assert.equal(validateSearchInput({ checkIn: '2026-08-02', checkOut: '2026-08-03', adults: 2, children: 1, rooms: 1 }), null);
+  assert.equal(validateSearchInput({ checkIn: dateInDays(1), checkOut: dateInDays(2), adults: 2, children: 1, rooms: 1 }), null);
 });

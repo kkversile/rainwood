@@ -1,0 +1,714 @@
+.imagesMediaWorkspace {
+  color: #1e293b;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.hotelEditShell > .adminContent:has(.imagesMediaWorkspace) {
+  background: #f8fafc;
+}
+
+.imagesMediaIntro {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.imagesMediaIntroText {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.imagesMediaTitleIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  margin-top: 2px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.imagesMediaTitleIcon svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 2;
+}
+
+.imagesMediaIntroText > div {
+  max-width: 576px;
+}
+
+.imagesMediaIntro h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.imagesMediaIntro p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.625;
+}
+
+.imagesGuidelines {
+  flex: 0 0 384px;
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f0f6ff;
+  color: #475569;
+  font-size: 11px;
+}
+
+.imagesGuidelines b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: #1e3a8a;
+  font-size: 12px;
+}
+
+.imagesGuidelines b svg {
+  width: 16px;
+  height: 16px;
+  color: #2563eb;
+}
+
+.imagesGuidelines ul {
+  margin: 0;
+  padding-left: 17px;
+}
+
+.imagesGuidelines li {
+  margin-top: 4px;
+  line-height: 1.2;
+}
+
+.imagesMediaToolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.mediaFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.mediaFilters button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.mediaFilters button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mediaFilters button:hover {
+  background: #f8fafc;
+}
+
+.mediaFilters button.active {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.mediaUploadActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-end;
+}
+
+.mediaUploadActions label,
+.uploadVideoButton {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  margin: 0;
+  padding: 0 14px;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.mediaUploadActions label:hover,
+.uploadVideoButton:hover {
+  background: #eff6ff;
+}
+
+.mediaUploadActions svg,
+.uploadVideoButton svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mediaUploadActions input,
+.uploadVideoButton input,
+.uploadMoreMedia input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hotelMediaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 32px;
+}
+
+.hotelMediaCard {
+  min-width: 0;
+}
+
+.hotelMediaCard.dragging {
+  opacity: 0.45;
+}
+
+.hotelMediaImage {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #e2e8f0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.hotelMediaImage > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hotelMediaCard > p {
+  overflow: hidden;
+  margin: 6px 0 0;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mainPhotoBadge,
+.pendingMediaBadge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.pendingMediaBadge {
+  background: rgba(217, 119, 6, 0.9);
+}
+
+.mainPhotoStar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: #64748b;
+  cursor: pointer;
+  box-shadow: 0 4px 6px rgba(15, 23, 42, 0.15);
+}
+
+.mainPhotoStar svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mainPhotoStar.active {
+  background: #fbbf24;
+  color: #fff;
+}
+
+.mainPhotoStar:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.hotelMediaImageControls {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.hotelMediaImageControls > span,
+.hotelMediaImageControls button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  color: inherit;
+}
+
+.hotelMediaImageControls > span {
+  cursor: grab;
+}
+
+.hotelMediaImageControls button {
+  cursor: pointer;
+}
+
+.hotelMediaImageControls svg {
+  width: 14px;
+  height: 14px;
+}
+
+.hotelMediaImageControls > span:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.hotelMediaImageControls button:hover {
+  background: #e11d48;
+}
+
+.uploadMoreMedia {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  aspect-ratio: 16 / 9;
+  margin: 0;
+  padding: 12px;
+  border: 2px dashed #bfdbfe;
+  border-radius: 8px;
+  background: rgba(239, 246, 255, 0.3);
+  color: #1d4ed8;
+  text-transform: none;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.uploadMoreMedia:hover {
+  border-color: #60a5fa;
+  background: rgba(239, 246, 255, 0.6);
+}
+
+.uploadMoreMedia > span {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 6px;
+  border: 1px solid #3b82f6;
+  border-radius: 4px;
+  color: #2563eb;
+}
+
+.uploadMoreMedia svg {
+  width: 16px;
+  height: 16px;
+}
+
+.uploadMoreMedia > b {
+  color: #1d4ed8;
+  font-size: 12px;
+}
+
+.uploadMoreMedia > small {
+  margin-top: 2px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.bottomMediaRow {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+.mediaPanel {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.mediaPanel header,
+.mediaPanel header > div {
+  display: flex;
+  align-items: center;
+}
+
+.mediaPanel header {
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.mediaPanel header > div {
+  gap: 12px;
+}
+
+.mediaPanel header > div > span {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.mediaPanel header > div > span svg {
+  width: 20px;
+  height: 20px;
+}
+
+.mediaPanel h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.mediaPanel header p {
+  margin: 2px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.videosPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.videosPanel header {
+  margin-bottom: 6px;
+}
+
+.videoPreviewItem {
+  display: grid;
+  grid-template-columns: 144px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.4);
+  text-align: left;
+}
+
+.videoPreviewItem.empty {
+  color: inherit;
+}
+
+.videoThumbnail {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  width: 144px;
+  height: 80px;
+  border-radius: 6px;
+  background: #cbd5e1;
+  color: #64748b;
+}
+
+.videoThumbnail > img,
+.videoThumbnail > video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.videoThumbnail > svg {
+  width: 24px;
+  height: 24px;
+}
+
+.videoThumbnail > span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: auto;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+}
+
+.videoThumbnail > span svg {
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+}
+
+.videoPreviewItem h4 {
+  margin: 0;
+  overflow: hidden;
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.videoPreviewItem p,
+.videoPreviewItem small {
+  display: block;
+  margin: 2px 0 0;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.videoPreviewItem > button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.videoPreviewItem > button:hover {
+  color: #e11d48;
+}
+
+.videoPreviewItem > button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.virtualTourPanel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.virtualTourPanel label {
+  display: block;
+  margin: 0;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  text-transform: none;
+}
+
+.virtualTourPanel label > div {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.virtualTourPanel input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  margin: 0;
+  padding: 0 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  font-size: 12px;
+}
+
+.virtualTourPanel label button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.virtualTourPanel label button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.virtualTourPanel label button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.virtualTourPanel > small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.virtualTourPanel > small svg {
+  width: 14px;
+  height: 14px;
+}
+
+.imagesMediaFooter {
+  display: flex;
+  justify-content: space-between;
+  margin: 20px 0 0;
+}
+
+.imagesMediaFooter .btn {
+  min-width: 108px;
+  border-radius: 8px;
+}
+
+.imagesMediaFooter .secondary {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+}
+
+@media (min-width: 640px) {
+  .imagesMediaToolbar {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .mediaUploadActions {
+    align-self: auto;
+  }
+
+  .hotelMediaGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .hotelMediaGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .imagesMediaWorkspace {
+    padding-top: 6px;
+  }
+
+  .imagesMediaIntro {
+    flex-direction: row;
+    min-height: 170px;
+  }
+
+  .hotelMediaGrid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .bottomMediaRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .mediaUploadActions {
+    width: 100%;
+  }
+
+  .mediaUploadActions label {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .videoPreviewItem {
+    grid-template-columns: 96px minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .videoThumbnail {
+    width: 96px;
+    height: 54px;
+  }
+}
