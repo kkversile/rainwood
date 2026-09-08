@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import type { Hotel } from '../lib/types';
+import { apiAssetUrl } from '../lib/api';
 
 export function HotelListing({ hotels }: { hotels: Hotel[] }) {
   const [destination, setDestination] = useState('all');
@@ -30,7 +31,7 @@ export function HotelListing({ hotels }: { hotels: Hotel[] }) {
     </form>
     <p className="muted" aria-live="polite">Showing {filteredHotels.length} of {hotels.length} published hotels.</p>
     {!filteredHotels.length ? <p className="empty">No hotels match the selected filters.</p> : <div className="demoHotelsCards">{filteredHotels.map((hotel) => {
-      const image = hotel.images?.[0]?.url ?? hotel.ogImageUrl ?? '/rainwood-placeholder.svg';
+      const image = apiAssetUrl(hotel.images?.[0]?.url ?? hotel.ogImageUrl) || '/rainwood-placeholder.svg';
       const mealPlans = Array.from(new Set(hotel.rooms?.flatMap((room) => room.ratePlans?.map((plan) => plan.mealPlan) ?? []) ?? []));
       return <article className="demoHotelsCard" key={hotel.id}><div className="demoHotelsCardImage"><img src={image} alt={hotel.images?.[0]?.altText ?? `${hotel.name} property`} /></div><div className="demoHotelsCardBody"><h2>{hotel.name}</h2><p>{hotel.description ?? 'A thoughtful RainWood stay with direct reservation support.'}</p><div className="demoHotelsTags"><span className="goldTag">{mealPlans[0] ?? 'Direct'}</span><span>{hotel.rooms?.length ?? 0} room categories</span><span>Open</span></div><div className="demoHotelsCardActions"><Link className="btn" href={`/hotels/${hotel.slug}`}>View Rooms</Link><Link className="demoHotelsBookLink" href={bookingHref(hotel)}>Book direct →</Link></div></div></article>;
     })}</div>}

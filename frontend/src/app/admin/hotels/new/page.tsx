@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AdminLayout } from "../../../../components/Shell";
-import { API, apiRequest } from "../../../../lib/api";
+import { API, apiAssetUrl, apiRequest } from "../../../../lib/api";
 import { HotelExtendedSections } from "../../../../components/HotelExtendedSections";
 import { HotelLocationMap } from "../../../../components/HotelLocationMap";
 import { HotelImagesMedia } from "../../../../components/HotelImagesMedia";
@@ -695,7 +695,7 @@ export default function NewHotelWizard() {
       await apiRequest(`/hotels/${id}/images`, {
         method: "POST",
         body: JSON.stringify({
-          url: `${API}/files/public/${stored.id}`,
+          url: `/files/public/${stored.id}`,
           altText: file.name.replace(/\.[^.]+$/, ""),
           category,
           isMain: existingCount === 0 && index === 0,
@@ -821,7 +821,7 @@ export default function NewHotelWizard() {
     try {
       const formData = new FormData(); formData.append("file", file);
       const stored = await apiRequest<{ id: string; originalName: string; mimeType: string; size: number }>("/files/hotel-video", { method: "POST", body: formData });
-      await apiRequest(`/hotels/${hotelId}/videos`, { method: "POST", body: JSON.stringify({ fileId: stored.id, url: `${API}/files/public/${stored.id}`, title: file.name.replace(/\.[^.]+$/, ""), fileName: stored.originalName, mimeType: stored.mimeType, size: stored.size }) });
+      await apiRequest(`/hotels/${hotelId}/videos`, { method: "POST", body: JSON.stringify({ fileId: stored.id, url: `/files/public/${stored.id}`, title: file.name.replace(/\.[^.]+$/, ""), fileName: stored.originalName, mimeType: stored.mimeType, size: stored.size }) });
       await loadCatalog(hotelId);
       setMessage("Video uploaded successfully.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not upload video"); }
@@ -947,7 +947,7 @@ export default function NewHotelWizard() {
         const stored = await apiRequest<{ id: string }>("/files/hotel-image", { method: "POST", body: formData });
         await apiRequest(`/hotels/rooms/${savedRoomId}/images`, {
           method: "POST",
-          body: JSON.stringify({ url: `${API}/files/public/${stored.id}`, altText: file.name.replace(/\.[^.]+$/, ""), sortOrder: row.images.length + index }),
+          body: JSON.stringify({ url: `/files/public/${stored.id}`, altText: file.name.replace(/\.[^.]+$/, ""), sortOrder: row.images.length + index }),
         });
       }
       setRoomRows((current) => current.map((item) => item.id === row.id ? { ...item, galleryFiles: [], galleryPreviewUrls: [] } : item));
@@ -1342,7 +1342,7 @@ export default function NewHotelWizard() {
             <div className="hotelAdvancedFields"><div className="two"><label>Hotel mobile<input value={hotel.mobile} onChange={(e) => setHotel({ ...hotel, mobile: e.target.value })} /></label><label>Hotel email<input type="email" value={hotel.email} onChange={(e) => setHotel({ ...hotel, email: e.target.value })} /></label></div><div className="two"><label>Slug<input value={hotel.slug} onChange={(e) => setHotel({ ...hotel, slug: e.target.value })} required /></label><label>SEO title<input value={hotel.seoTitle} onChange={(e) => setHotel({ ...hotel, seoTitle: e.target.value })} /></label></div><label className="checkLabel"><input type="checkbox" checked={hotel.powerBackup} onChange={(e) => setHotel({ ...hotel, powerBackup: e.target.checked })} /> Power backup</label></div>
             <WizardButtons busy={busy} next={editId ? "Update & Continue" : "Save & Continue"} />
           </form>
-          <aside className="hotelBasicAside"><section className="hotelSideCard hotelImagesCard"><h2>Hotel Images</h2><p>Add high quality images <small>(Recommended size: 1280 x 720)</small></p><div className="hotelImageMosaic">{catalog?.images?.slice(0, 3).map((image, index) => <div className={index === 0 ? "mainImage" : "smallImage"} key={image.id}><img src={image.url} alt={image.altText} /><button type="button" onClick={() => void deleteHotelImage(image)} aria-label="Delete image">▣</button>{index === 0 && <b>Main Photo</b>}</div>)}{imagePreviewUrls.map((url, index) => <div className={index === 0 && !catalog?.images?.length ? "mainImage" : "smallImage"} key={url}><img src={url} alt={imageFiles[index]?.name || "Selected hotel image"} /><b className="pendingImageLabel">Pending</b></div>)}{!catalog?.images?.length && !imagePreviewUrls.length && <div className="imagePlaceholder">No images uploaded</div>}</div><label className="uploadImagesButton">⇧ &nbsp; {busy ? "Uploading..." : "Upload Images"}<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy} onChange={(e) => void handleHotelImageSelection(Array.from(e.target.files ?? []))} /></label><small className="uploadHint">JPG, PNG, WebP up to 5MB each</small></section><section className="hotelSideCard hotelLocationCard"><h2>Location on Map</h2><HotelLocationMap latitude={hotel.latitude} longitude={hotel.longitude} onChange={(latitude, longitude) => setHotel((current) => ({ ...current, latitude, longitude }))} onReverseGeocode={(details) => setHotel((current) => ({ ...current, ...details, location: details.address ?? current.location }))} /><button className="updateLocationButton" type="button" disabled={busy} onClick={() => void saveLocationFromMap()}>⌖ &nbsp; Update Location</button><div className="quickLinks"><b>ⓘ &nbsp; Quick Links</b><a href={`https://www.google.com/maps?q=${hotel.latitude},${hotel.longitude}`} target="_blank" rel="noreferrer">View on Google Maps ↗</a><span>View on Tripadvisor ↗</span><span>View on MakeMyTrip ↗</span><span>View on Goibibo ↗</span><span>View on Booking.com ↗</span></div></section></aside>
+          <aside className="hotelBasicAside"><section className="hotelSideCard hotelImagesCard"><h2>Hotel Images</h2><p>Add high quality images <small>(Recommended size: 1280 x 720)</small></p><div className="hotelImageMosaic">{catalog?.images?.slice(0, 3).map((image, index) => <div className={index === 0 ? "mainImage" : "smallImage"} key={image.id}><img src={apiAssetUrl(image.url)} alt={image.altText} /><button type="button" onClick={() => void deleteHotelImage(image)} aria-label="Delete image">▣</button>{index === 0 && <b>Main Photo</b>}</div>)}{imagePreviewUrls.map((url, index) => <div className={index === 0 && !catalog?.images?.length ? "mainImage" : "smallImage"} key={url}><img src={url} alt={imageFiles[index]?.name || "Selected hotel image"} /><b className="pendingImageLabel">Pending</b></div>)}{!catalog?.images?.length && !imagePreviewUrls.length && <div className="imagePlaceholder">No images uploaded</div>}</div><label className="uploadImagesButton">⇧ &nbsp; {busy ? "Uploading..." : "Upload Images"}<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy} onChange={(e) => void handleHotelImageSelection(Array.from(e.target.files ?? []))} /></label><small className="uploadHint">JPG, PNG, WebP up to 5MB each</small></section><section className="hotelSideCard hotelLocationCard"><h2>Location on Map</h2><HotelLocationMap latitude={hotel.latitude} longitude={hotel.longitude} onChange={(latitude, longitude) => setHotel((current) => ({ ...current, latitude, longitude }))} onReverseGeocode={(details) => setHotel((current) => ({ ...current, ...details, location: details.address ?? current.location }))} /><button className="updateLocationButton" type="button" disabled={busy} onClick={() => void saveLocationFromMap()}>⌖ &nbsp; Update Location</button><div className="quickLinks"><b>ⓘ &nbsp; Quick Links</b><a href={`https://www.google.com/maps?q=${hotel.latitude},${hotel.longitude}`} target="_blank" rel="noreferrer">View on Google Maps ↗</a><span>View on Tripadvisor ↗</span><span>View on MakeMyTrip ↗</span><span>View on Goibibo ↗</span><span>View on Booking.com ↗</span></div></section></aside>
           </div>
         )}
         {step === 1 && (
@@ -1373,7 +1373,7 @@ export default function NewHotelWizard() {
                     <label>Inbuilt Amenities <em>*</em><RoomMultiSelect value={row.inbuiltAmenities} options={["Wi-Fi", "Room Service", "Breakfast", "Swimming Pool", "Parking", "Air Conditioning"]} placeholder="Select amenities" onChange={(value) => updateRoomRow(row.id, { inbuiltAmenities: value })} /></label>
                     <label>Room Gallery <em>*</em><input type="file" accept="image/jpeg,image/png" multiple onChange={(e) => setRoomGalleryFiles(row.id, Array.from(e.target.files ?? []))} /></label>
                   </div>
-                  {(row.images.length || row.galleryFiles.length) ? <div className="roomGalleryPreview"><strong>{row.images.length ? "Uploaded Room Gallery" : "Selected Room Gallery"}</strong><div className="roomGalleryThumbs">{row.images.map((image) => <img key={image.id} src={image.url} alt={image.altText} title={image.altText} />)}{row.galleryFiles.map((file, fileIndex) => <img key={`${file.name}-${file.lastModified}`} src={row.galleryPreviewUrls[fileIndex]} alt={file.name} title={file.name} />)}</div></div> : null}
+                  {(row.images.length || row.galleryFiles.length) ? <div className="roomGalleryPreview"><strong>{row.images.length ? "Uploaded Room Gallery" : "Selected Room Gallery"}</strong><div className="roomGalleryThumbs">{row.images.map((image) => <img key={image.id} src={apiAssetUrl(image.url)} alt={image.altText} title={image.altText} />)}{row.galleryFiles.map((file, fileIndex) => <img key={`${file.name}-${file.lastModified}`} src={row.galleryPreviewUrls[fileIndex]} alt={file.name} title={file.name} />)}</div></div> : null}
                   <div className="roomFoodOptions"><span>Food Included? (Optional)</span><label><input type="checkbox" checked={row.breakfastIncluded} onChange={(e) => updateRoomRow(row.id, { breakfastIncluded: e.target.checked })} /> Breakfast</label><label><input type="checkbox" checked={row.lunchIncluded} onChange={(e) => updateRoomRow(row.id, { lunchIncluded: e.target.checked })} /> Lunch</label><label><input type="checkbox" checked={row.dinnerIncluded} onChange={(e) => updateRoomRow(row.id, { dinnerIncluded: e.target.checked })} /> Dinner</label></div>
                   <div className="roomRowActions"><button className="roomDeleteButton" type="button" onClick={() => deleteRoomRow(row)}>× Delete</button><button className="roomSaveButton" type="button" disabled={busy} onClick={() => void saveRoom(row)}>{row.saved ? "Update" : "Save"}</button></div>
                 </div>

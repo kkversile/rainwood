@@ -22,6 +22,7 @@ import {
   Video,
   type LucideIcon,
 } from 'lucide-react';
+import { apiAssetUrl } from '../lib/api';
 
 type MediaImage = {
   id: string;
@@ -234,7 +235,7 @@ export function HotelImagesMedia({
             key={image.id}
           >
             <div className="hotelMediaImage">
-              <img src={image.url} alt={image.altText} />
+              <img src={apiAssetUrl(image.url)} alt={image.altText} />
               {image.isMain && <span className="mainPhotoBadge">Main Photo</span>}
               <button
                 type="button"
@@ -285,7 +286,7 @@ export function HotelImagesMedia({
           {videos.length ? videos.map((video) => (
             <div className="videoPreviewItem" data-video-id={video.id} key={video.id}>
               <div className="videoThumbnail">
-                <video src={video.url} preload="metadata" poster={video.thumbnailUrl || orderedImages[0]?.url} />
+                <video src={apiAssetUrl(video.url)} preload="metadata" poster={apiAssetUrl(video.thumbnailUrl || orderedImages[0]?.url)} />
                 <span><Play fill="currentColor" /></span>
               </div>
               <div><h4>{video.title}</h4><p>{video.mimeType.replace('video/', '').toUpperCase()} · {formatBytes(video.size)}</p><small>Uploaded on {new Date(video.createdAt).toLocaleDateString()}</small></div>
@@ -294,7 +295,7 @@ export function HotelImagesMedia({
           )) : (
             <div className="videoPreviewItem empty">
               <div className="videoThumbnail">
-                {orderedImages[0] ? <img src={orderedImages[0].url} alt="Hotel walkthrough thumbnail" /> : <ImageIcon />}
+                {orderedImages[0] ? <img src={apiAssetUrl(orderedImages[0].url)} alt="Hotel walkthrough thumbnail" /> : <ImageIcon />}
                 <span><Play fill="currentColor" /></span>
               </div>
               <div><h4>Hotel Walkthrough</h4><p>No video uploaded</p><small>Add an MP4 or WebM walk-through</small></div>

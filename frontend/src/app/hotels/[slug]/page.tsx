@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { publicApi } from '../../../lib/api';
+import { apiAssetUrl, publicApi } from '../../../lib/api';
 import type { Hotel } from '../../../lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -54,7 +54,7 @@ export default async function HotelDetail({ params }: { params: Promise<{ slug: 
         </div>
 
         <div className="demoHotelGallery">
-          {gallery.map((item, index) => <div className={index === 0 ? 'demoHotelGalleryHero' : ''} key={`${item.url}-${index}`}><img src={item.url} alt={item.altText} /></div>)}
+          {gallery.map((item, index) => <div className={index === 0 ? 'demoHotelGalleryHero' : ''} key={`${item.url}-${index}`}><img src={apiAssetUrl(item.url)} alt={item.altText} /></div>)}
         </div>
 
         <div className="demoHotelSplit">

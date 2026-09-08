@@ -1,5 +1,12 @@
 export const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 
+export function apiAssetUrl(value?: string | null) {
+  if (!value) return '';
+  const marker = '/files/public/';
+  const markerIndex = value.indexOf(marker);
+  return markerIndex >= 0 ? `${API}${value.slice(markerIndex)}` : value;
+}
+
 let accessToken: string | null = null;
 
 function browserToken() {
