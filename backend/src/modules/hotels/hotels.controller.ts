@@ -1,6 +1,6 @@
 import { Body, ConflictException, Controller, Delete, Get, Header, Param, Patch, Post, Put, Query, StreamableFile, UseGuards } from '@nestjs/common';
 import { HotelsService } from './hotels.service';
-import { AmenityDto, HotelContactDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelUpdateDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
+import { AmenityDto, CopyRatePlanDto, HotelContactDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelUpdateDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -16,6 +16,41 @@ export class HotelsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   ratePlans() { return this.service.ratePlans(); }
+
+  @Get(':hotelId/rate-plan-masters')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  ratePlanMasters(@Param('hotelId') hotelId: string) { return this.service.ratePlanMasters(hotelId); }
+
+  @Post(':hotelId/rate-plan-masters')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  createRatePlanMaster(@Param('hotelId') hotelId: string, @Body() body: RatePlanMasterDto) { return this.service.createRatePlanMaster(hotelId, body); }
+
+  @Patch('rate-plan-masters/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  updateRatePlanMaster(@Param('id') id: string, @Body() body: Partial<RatePlanMasterDto>) { return this.service.updateRatePlanMaster(id, body); }
+
+  @Delete('rate-plan-masters/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  deleteRatePlanMaster(@Param('id') id: string) { return this.service.deleteRatePlanMaster(id); }
+
+  @Post('rate-plan-masters/:id/assignments')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  assignRatePlan(@Param('id') id: string, @Body() body: RatePlanAssignmentDto) { return this.service.assignRatePlanMaster(id, body); }
+
+  @Patch('rate-plan-assignments/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  updateRatePlanAssignment(@Param('id') id: string, @Body() body: RatePlanAssignmentUpdateDto) { return this.service.updateRatePlanAssignment(id, body); }
+
+  @Delete('rate-plan-assignments/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  deleteRatePlanAssignment(@Param('id') id: string) { return this.service.deleteRatePlanAssignment(id); }
 
   @Get(':slug')
   detail(@Param('slug') slug: string) { return this.service.detail(slug); }
@@ -216,6 +251,11 @@ export class HotelsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   createRatePlan(@Param('roomId') roomId: string, @Body() body: RatePlanDto) { return this.service.createRatePlan(roomId, body); }
+
+  @Post('rate-plans/:id/copy')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  copyRatePlan(@Param('id') id: string, @Body() body: CopyRatePlanDto) { return this.service.copyRatePlan(id, body); }
 
   @Patch('rate-plans/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)

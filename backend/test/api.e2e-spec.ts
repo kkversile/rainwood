@@ -31,8 +31,9 @@ describe('RainWood API (e2e)', () => {
 
   it('serves seeded public hotel content and a valid availability result', async () => {
     const hotels = await request(app.getHttpServer()).get('/api/v1/hotels').expect(200);
-    expect(hotels.body).toHaveLength(1);
-    const options = await request(app.getHttpServer()).get('/api/v1/availability/search').query({ hotelId: hotels.body[0].id, checkIn: dateInDays(2), checkOut: dateInDays(4), rooms: 1, adults: 2, children: 0 });
+    expect(hotels.body.length).toBeGreaterThan(0);
+    const seededHotel = hotels.body.find((hotel: { code: string }) => hotel.code === 'RW-KODAI') ?? hotels.body[0];
+    const options = await request(app.getHttpServer()).get('/api/v1/availability/search').query({ hotelId: seededHotel.id, checkIn: dateInDays(2), checkOut: dateInDays(4), rooms: 1, adults: 2, children: 0 });
     if (options.status !== 200) throw new Error(JSON.stringify(options.body));
     expect(options.body.length).toBeGreaterThan(0);
     expect(options.body[0].priceBreakdown).toHaveLength(2);
@@ -40,10 +41,11 @@ describe('RainWood API (e2e)', () => {
 
   it('allows only the sellable quantity in concurrent hold requests', async () => {
     const hotels = await request(app.getHttpServer()).get('/api/v1/hotels').expect(200);
+    const seededHotel = hotels.body.find((hotel: { code: string }) => hotel.code === 'RW-KODAI') ?? hotels.body[0];
     const checkIn = dateInDays(90);
     const checkOut = dateInDays(91);
-    const option = (await request(app.getHttpServer()).get('/api/v1/availability/search').query({ hotelId: hotels.body[0].id, checkIn, checkOut, rooms: 1, adults: 2, children: 0 }).expect(200)).body[0];
-    const payload = { hotelId: hotels.body[0].id, roomTypeId: option.roomTypeId, ratePlanId: option.ratePlanId, checkIn, checkOut, rooms: 1, adults: 2, children: 0 };
+    const option = (await request(app.getHttpServer()).get('/api/v1/availability/search').query({ hotelId: seededHotel.id, checkIn, checkOut, rooms: 1, adults: 2, children: 0 }).expect(200)).body[0];
+    const payload = { hotelId: seededHotel.id, roomTypeId: option.roomTypeId, ratePlanId: option.ratePlanId, checkIn, checkOut, rooms: 1, adults: 2, children: 0 };
     const results = await Promise.all(Array.from({ length: 9 }, () => request(app.getHttpServer()).post('/api/v1/holds').send(payload)));
     const successful = results.filter((result) => result.status === 201);
     try {

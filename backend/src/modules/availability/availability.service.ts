@@ -23,7 +23,7 @@ export class AvailabilityService {
           where: { active: true },
           include: {
             inventory: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } },
-            ratePlans: { where: { active: true, ...(agentId ? { assignedAgents: { some: { agentId } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } } } },
+            ratePlans: { where: { active: true, master: { active: true }, ...(agentId ? { assignedAgents: { some: { agentId } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } } } },
           },
         },
       },
@@ -41,7 +41,7 @@ export class AvailabilityService {
       where: { id: input.roomTypeId, hotelId: input.hotelId, active: true, hotel: { active: true } },
       include: {
         inventory: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } },
-        ratePlans: { where: { id: input.ratePlanId, active: true, ...(options.agentId ? { assignedAgents: { some: { agentId: options.agentId } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } } } },
+        ratePlans: { where: { id: input.ratePlanId, active: true, master: { active: true }, ...(options.agentId ? { assignedAgents: { some: { agentId: options.agentId } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } } } },
       },
     });
     const plan = room?.ratePlans[0];

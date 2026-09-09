@@ -1,8 +1,9 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
-import { AmenityDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanDto, RoomTypeDto } from './hotels.dto';
+import { AmenityDto, CopyRatePlanDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
 import { FilesService } from '../files/files.service';
 import ExcelJS from 'exceljs';
+import { canonicalMealPlan, canonicalRatePlanCode } from './rate-plan.utils';
 
 @Injectable()
 export class HotelsService {
@@ -16,7 +17,7 @@ export class HotelsService {
         images: { where: { published: true, url: { not: '/rainwood-placeholder.svg' } }, orderBy: [{ isMain: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }] },
         videos: { orderBy: { createdAt: 'desc' } },
         amenities: { include: { amenity: true } },
-        rooms: { where: { active: true }, include: { images: { where: { published: true }, orderBy: { sortOrder: 'asc' } }, ratePlans: { where: { active: true } } } },
+        rooms: { where: { active: true }, include: { images: { where: { published: true }, orderBy: { sortOrder: 'asc' } }, ratePlans: { where: { active: true, master: { active: true } } } } },
       },
     });
   }
@@ -30,7 +31,7 @@ export class HotelsService {
         amenities: { include: { amenity: true } },
         taxes: { where: { active: true } },
         charges: { where: { active: true } },
-        rooms: { where: { active: true }, include: { images: { where: { published: true }, orderBy: { sortOrder: 'asc' } }, ratePlans: { where: { active: true } } } },
+        rooms: { where: { active: true }, include: { images: { where: { published: true }, orderBy: { sortOrder: 'asc' } }, ratePlans: { where: { active: true, master: { active: true } } } } },
       },
     });
     if (!hotel) throw new NotFoundException('Hotel not found');
@@ -127,11 +128,13 @@ export class HotelsService {
     return { deleted: true, id };
   }
 
-  catalog(hotelId: string, startDate?: string, endDate?: string) {
+  async catalog(hotelId: string, startDate?: string, endDate?: string) {
     const from = startDate ? new Date(`${startDate}T00:00:00.000Z`) : undefined;
     const to = endDate ? new Date(`${endDate}T00:00:00.000Z`) : undefined;
     const validRange = from && to && !Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime()) && from <= to;
-    return this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId }, include: { images: { where: { published: true, url: { not: '/rainwood-placeholder.svg' } }, orderBy: [{ isMain: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }] }, videos: { orderBy: { createdAt: 'desc' } }, amenities: { include: { amenity: true } }, rooms: { orderBy: { name: 'asc' }, include: { images: { where: { published: true }, orderBy: { sortOrder: 'asc' } }, ratePlans: { orderBy: { name: 'asc' }, include: { rates: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } }, inventory: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } } } });
+    const hotel = await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId }, include: { images: { where: { published: true, url: { not: '/rainwood-placeholder.svg' } }, orderBy: [{ isMain: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }] }, videos: { orderBy: { createdAt: 'desc' } }, amenities: { include: { amenity: true } }, rooms: { orderBy: { name: 'asc' }, include: { images: { where: { published: true }, orderBy: { sortOrder: 'asc' } }, ratePlans: { orderBy: { name: 'asc' }, include: { master: true, rates: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } }, inventory: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } } } });
+    const today = new Date().toISOString().slice(0, 10);
+    return { ...hotel, rooms: hotel.rooms.map((room) => ({ ...room, totalRooms: room.roomsAvailable, todayAvailable: room.inventory.find((day) => day.date.toISOString().slice(0, 10) === today)?.available ?? null })) };
   }
 
   async pricebookExport(hotelId: string) {
@@ -267,26 +270,178 @@ export class HotelsService {
     return { deleted: true, imageId: image.id, fileId: fileId ?? null };
   }
 
-  async createRatePlan(roomTypeId: string, body: RatePlanDto) {
-    await this.prisma.roomType.findUniqueOrThrow({ where: { id: roomTypeId } });
-    return this.prisma.ratePlan.create({ data: { ...body, roomTypeId, axisRatePlanId: body.axisRatePlanId || undefined } });
+  private isUniqueConflict(error: unknown) {
+    return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'P2002');
   }
 
-  async updateRatePlan(id: string, body: Partial<RatePlanDto>) {
+  private assignmentData(master: { id: string; code: string; name: string; mealPlan: string; description: string | null }, roomTypeId: string, active = true, axisRatePlanId?: string) {
+    return { roomTypeId, masterId: master.id, code: master.code, name: master.name, mealPlan: master.mealPlan, description: master.description, active, axisRatePlanId: axisRatePlanId?.trim() || undefined };
+  }
+
+  async ratePlanMasters(hotelId: string) {
+    await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const masters = await this.prisma.ratePlanMaster.findMany({
+      where: { hotelId },
+      orderBy: [{ active: 'desc' }, { name: 'asc' }],
+      include: {
+        hotel: { select: { id: true, name: true, city: true } },
+        assignments: {
+          orderBy: { roomType: { name: 'asc' } },
+          include: {
+            roomType: { select: { id: true, name: true, code: true, hotelId: true } },
+            rates: { where: { date: { gte: today } }, orderBy: { amount: 'asc' }, take: 1, select: { amount: true, date: true } },
+            lines: { where: { reservation: { status: { in: ['CONFIRMED', 'COMPLETED', 'MODIFIED'] } } }, select: { reservationId: true } },
+            holdLines: { where: { hold: { status: 'ACTIVE', expiresAt: { gt: new Date() } } }, select: { holdId: true } },
+            _count: { select: { rates: true } },
+          },
+        },
+      },
+    });
+    return masters.map((master) => {
+      const assignments = master.assignments.map((assignment) => ({
+        ...assignment,
+        startingRate: assignment.rates[0]?.amount ?? null,
+        confirmedBookingCount: new Set(assignment.lines.map((line) => line.reservationId)).size,
+        activeHoldCount: new Set(assignment.holdLines.map((line) => line.holdId)).size,
+        rates: undefined,
+        lines: undefined,
+        holdLines: undefined,
+      }));
+      const prices = assignments.map((assignment) => assignment.startingRate).filter((amount) => amount !== null);
+      return {
+        ...master,
+        assignments,
+        startingRate: prices.length ? prices.reduce((lowest, amount) => Number(amount) < Number(lowest) ? amount : lowest) : null,
+        confirmedBookingCount: new Set(master.assignments.flatMap((assignment) => assignment.lines.map((line) => line.reservationId))).size,
+        activeHoldCount: new Set(master.assignments.flatMap((assignment) => assignment.holdLines.map((line) => line.holdId))).size,
+      };
+    });
+  }
+
+  async createRatePlanMaster(hotelId: string, body: RatePlanMasterDto) {
+    const code = canonicalRatePlanCode(body.code);
+    const mealPlan = canonicalMealPlan(body.mealPlan);
+    const roomTypeIds = [...new Set(body.roomTypeIds ?? [])];
+    const rooms = roomTypeIds.length ? await this.prisma.roomType.findMany({ where: { id: { in: roomTypeIds } }, select: { id: true, hotelId: true } }) : [];
+    if (rooms.length !== roomTypeIds.length) throw new NotFoundException('One or more selected room types do not exist.');
+    if (rooms.some((room) => room.hotelId !== hotelId)) throw new BadRequestException('A rate plan can only be assigned to room types in the same hotel.');
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const master = await tx.ratePlanMaster.create({ data: { hotelId, code, name: body.name.trim(), mealPlan, description: body.description?.trim() || undefined, active: body.active ?? true } });
+        if (roomTypeIds.length) await tx.ratePlan.createMany({ data: roomTypeIds.map((roomTypeId) => this.assignmentData(master, roomTypeId)) });
+        return tx.ratePlanMaster.findUniqueOrThrow({ where: { id: master.id }, include: { assignments: { include: { roomType: true } } } });
+      });
+    } catch (error) {
+      if (this.isUniqueConflict(error)) throw new ConflictException(`Rate plan code ${code} already exists for this hotel, or is already assigned to a selected room.`);
+      throw error;
+    }
+  }
+
+  async updateRatePlanMaster(id: string, body: Partial<RatePlanMasterDto>) {
+    const existing = await this.prisma.ratePlanMaster.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Rate plan not found');
+    const code = body.code === undefined ? existing.code : canonicalRatePlanCode(body.code);
+    const name = body.name === undefined ? existing.name : body.name.trim();
+    const mealPlan = body.mealPlan === undefined ? existing.mealPlan : canonicalMealPlan(body.mealPlan);
+    const description = body.description === undefined ? existing.description : body.description.trim() || null;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const master = await tx.ratePlanMaster.update({ where: { id }, data: { code, name, mealPlan, description, active: body.active } });
+        await tx.ratePlan.updateMany({ where: { masterId: id }, data: { code, name, mealPlan, description } });
+        return master;
+      });
+    } catch (error) {
+      if (this.isUniqueConflict(error)) throw new ConflictException(`Rate plan code ${code} already exists for this hotel.`);
+      throw error;
+    }
+  }
+
+  async assignRatePlanMaster(masterId: string, body: RatePlanAssignmentDto) {
+    const [master, room] = await Promise.all([
+      this.prisma.ratePlanMaster.findUnique({ where: { id: masterId } }),
+      this.prisma.roomType.findUnique({ where: { id: body.roomTypeId }, select: { id: true, hotelId: true } }),
+    ]);
+    if (!master) throw new NotFoundException('Rate plan not found');
+    if (!room) throw new NotFoundException('Room type not found');
+    if (master.hotelId !== room.hotelId) throw new BadRequestException('A rate plan can only be assigned to a room type in the same hotel.');
+    try {
+      return await this.prisma.ratePlan.create({ data: this.assignmentData(master, room.id, body.active ?? true, body.axisRatePlanId), include: { roomType: true, master: true } });
+    } catch (error) {
+      if (this.isUniqueConflict(error)) throw new ConflictException('This rate plan is already assigned to the selected room, or its AxisRooms ID is already in use.');
+      throw error;
+    }
+  }
+
+  async updateRatePlanAssignment(id: string, body: RatePlanAssignmentUpdateDto) {
     await this.prisma.ratePlan.findUniqueOrThrow({ where: { id } });
-    return this.prisma.ratePlan.update({ where: { id }, data: { ...body, axisRatePlanId: body.axisRatePlanId || undefined } });
+    try {
+      return await this.prisma.ratePlan.update({ where: { id }, data: { active: body.active, axisRatePlanId: body.axisRatePlanId === undefined ? undefined : body.axisRatePlanId.trim() || null }, include: { master: true, roomType: true } });
+    } catch (error) {
+      if (this.isUniqueConflict(error)) throw new ConflictException('This AxisRooms rate-plan ID is already mapped for the room type.');
+      throw error;
+    }
+  }
+
+  async deleteRatePlanAssignment(id: string) {
+    const assignment = await this.prisma.ratePlan.findUnique({ where: { id }, include: { _count: { select: { rates: true, lines: true, holdLines: true, cancellationRules: true, assignedAgents: true } } } });
+    if (!assignment) throw new NotFoundException('Rate-plan assignment not found');
+    const dependencies = Object.values(assignment._count).reduce((total, count) => total + count, 0);
+    if (dependencies > 0) throw new ConflictException('This assignment has rates, mappings or booking history. Deactivate it instead of removing it.');
+    return this.prisma.ratePlan.delete({ where: { id } });
+  }
+
+  async deleteRatePlanMaster(id: string) {
+    const master = await this.prisma.ratePlanMaster.findUnique({ where: { id }, include: { _count: { select: { assignments: true } } } });
+    if (!master) throw new NotFoundException('Rate plan not found');
+    if (master._count.assignments) throw new ConflictException('Remove unused room assignments or deactivate this rate plan instead of deleting it.');
+    return this.prisma.ratePlanMaster.delete({ where: { id } });
+  }
+
+  // Compatibility endpoint: creating under a room now creates/reuses a hotel master
+  // and creates only the room assignment.
+  async createRatePlan(roomTypeId: string, body: RatePlanDto) {
+    const room = await this.prisma.roomType.findUnique({ where: { id: roomTypeId }, select: { id: true, hotelId: true } });
+    if (!room) throw new NotFoundException('Room type not found');
+    const code = canonicalRatePlanCode(body.code);
+    let master = await this.prisma.ratePlanMaster.findUnique({ where: { hotelId_code: { hotelId: room.hotelId, code } } });
+    if (!master) {
+      try {
+        master = await this.prisma.ratePlanMaster.create({ data: { hotelId: room.hotelId, code, name: body.name.trim(), mealPlan: canonicalMealPlan(body.mealPlan), description: body.description?.trim() || undefined, active: body.active ?? true } });
+      } catch (error) {
+        if (!this.isUniqueConflict(error)) throw error;
+        master = await this.prisma.ratePlanMaster.findUniqueOrThrow({ where: { hotelId_code: { hotelId: room.hotelId, code } } });
+      }
+    }
+    return this.assignRatePlanMaster(master.id, { roomTypeId, active: body.active, axisRatePlanId: body.axisRatePlanId });
+  }
+
+  // Compatibility endpoint: metadata updates affect the hotel master; mapping and
+  // active state remain room-assignment settings.
+  async updateRatePlan(id: string, body: Partial<RatePlanDto>) {
+    const existing = await this.prisma.ratePlan.findUnique({ where: { id }, include: { master: true } });
+    if (!existing) throw new NotFoundException('Rate-plan assignment not found');
+    if (body.code !== undefined || body.name !== undefined || body.mealPlan !== undefined || body.description !== undefined) await this.updateRatePlanMaster(existing.masterId, body);
+    return this.updateRatePlanAssignment(id, { active: body.active, axisRatePlanId: body.axisRatePlanId });
+  }
+
+  // Deprecated copy route now means assign the same master. Only future room-level
+  // rates are optionally copied; mappings and historical relationships never are.
+  async copyRatePlan(id: string, body: CopyRatePlanDto) {
+    const source = await this.prisma.ratePlan.findUnique({ where: { id }, include: { master: true, rates: { where: { date: { gte: new Date() } } } } });
+    if (!source) throw new NotFoundException('Rate-plan assignment not found');
+    const assigned = await this.assignRatePlanMaster(source.masterId, { roomTypeId: body.targetRoomTypeId });
+    if (body.copyRates && source.rates.length) await this.prisma.rateDay.createMany({ data: source.rates.map((rate) => ({ ratePlanId: assigned.id, date: rate.date, amount: rate.amount, taxAmount: rate.taxAmount, childAmount: rate.childAmount, extraAdultAmount: rate.extraAdultAmount, occupancyPrices: rate.occupancyPrices ?? undefined, cta: rate.cta, ctd: rate.ctd, minLos: rate.minLos, maxLos: rate.maxLos })) });
+    return this.prisma.ratePlan.findUniqueOrThrow({ where: { id: assigned.id }, include: { roomType: true, master: true, rates: true } });
   }
 
   ratePlans() {
-    return this.prisma.ratePlan.findMany({ orderBy: [{ active: 'desc' }, { name: 'asc' }], include: { roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } }, _count: { select: { rates: true, lines: true, holdLines: true } } } });
+    return this.prisma.ratePlan.findMany({ orderBy: [{ active: 'desc' }, { name: 'asc' }], include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } }, _count: { select: { rates: true, lines: true, holdLines: true } } } });
   }
 
-  async deleteRatePlan(id: string) {
-    const plan = await this.prisma.ratePlan.findUnique({ where: { id }, include: { _count: { select: { rates: true, lines: true, holdLines: true, cancellationRules: true } } } });
-    if (!plan) throw new NotFoundException('Rate plan not found');
-    const dependencies = plan._count.rates + plan._count.lines + plan._count.holdLines + plan._count.cancellationRules;
-    if (dependencies > 0) throw new ConflictException('This rate plan has rates or booking history. Deactivate it instead of deleting it.');
-    return this.prisma.ratePlan.delete({ where: { id } });
+  deleteRatePlan(id: string) {
+    return this.deleteRatePlanAssignment(id);
   }
 
   async saveInventory(roomTypeId: string, body: InventoryBatchDto) {

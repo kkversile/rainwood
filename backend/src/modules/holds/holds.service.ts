@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma.service';
@@ -145,8 +145,10 @@ export class HoldsService {
         return await this.p.$transaction(operation, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
       } catch (error: any) {
         lastError = error;
-        const serializationFailure = error?.code === 'P2034' || (error?.code === 'P2010' && error?.meta?.code === '40001');
-        if (!serializationFailure || attempt === 7) throw error;
+        const adapterCode = error?.meta?.driverAdapterError?.cause?.originalCode;
+        const serializationFailure = error?.code === 'P2034' || (error?.code === 'P2010' && (error?.meta?.code === '40001' || adapterCode === '40001'));
+        if (!serializationFailure) throw error;
+        if (attempt === 7) throw new ConflictException('Inventory is currently being held by another request. Please retry.');
         await new Promise((resolve) => setTimeout(resolve, 35 * (attempt + 1) + Math.floor(Math.random() * 25)));
       }
     }

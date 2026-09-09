@@ -34,7 +34,8 @@ async function main() {
     await prisma.hotelAmenity.upsert({ where: { hotelId_amenityId: { hotelId: hotel.id, amenityId: amenity.id } }, update: {}, create: { hotelId: hotel.id, amenityId: amenity.id } });
   }
   const room = await prisma.roomType.upsert({ where: { hotelId_code: { hotelId: hotel.id, code: 'PVR' } }, update: { active: true, name: 'Premium Valley Room', maxAdults: 3, maxChildren: 2, maxOccupancy: 4, axisRoomId: 'AXIS-ROOM-PVR' }, create: { hotelId: hotel.id, code: 'PVR', name: 'Premium Valley Room', description: 'A bright room with valley views.', maxAdults: 3, maxChildren: 2, maxOccupancy: 4, axisRoomId: 'AXIS-ROOM-PVR' } });
-  const plan = await prisma.ratePlan.upsert({ where: { roomTypeId_code: { roomTypeId: room.id, code: 'CP' } }, update: { active: true, name: 'CP - Breakfast', mealPlan: 'CP', axisRatePlanId: 'AXIS-RATE-CP' }, create: { roomTypeId: room.id, code: 'CP', name: 'CP - Breakfast', mealPlan: 'CP', description: 'Room with breakfast included.', axisRatePlanId: 'AXIS-RATE-CP' } });
+  const cpMaster = await prisma.ratePlanMaster.upsert({ where: { hotelId_code: { hotelId: hotel.id, code: 'CP' } }, update: { active: true, name: 'CP - Breakfast', mealPlan: 'CP', description: 'Room with breakfast included.' }, create: { hotelId: hotel.id, code: 'CP', name: 'CP - Breakfast', mealPlan: 'CP', description: 'Room with breakfast included.' } });
+  const plan = await prisma.ratePlan.upsert({ where: { roomTypeId_masterId: { roomTypeId: room.id, masterId: cpMaster.id } }, update: { active: true, code: cpMaster.code, name: cpMaster.name, mealPlan: cpMaster.mealPlan, description: cpMaster.description, axisRatePlanId: 'AXIS-RATE-CP' }, create: { roomTypeId: room.id, masterId: cpMaster.id, code: cpMaster.code, name: cpMaster.name, mealPlan: cpMaster.mealPlan, description: cpMaster.description, axisRatePlanId: 'AXIS-RATE-CP' } });
   const masterPlans = [
     { code: 'A', name: 'Preferred Partner Rate', mealPlan: 'EP', description: 'Plan A - Nett contract', amount: 4800, taxAmount: 576 },
     { code: 'B', name: 'Contracted Nett Rate', mealPlan: 'EP', description: 'Plan B - Nett contract', amount: 5000, taxAmount: 600 },
@@ -44,9 +45,10 @@ async function main() {
   ] as const;
   const seededMasterPlans = [] as { id: string; code: string; amount: number; taxAmount: number }[];
   for (const item of masterPlans) {
-    const masterPlan = await prisma.ratePlan.upsert({ where: { roomTypeId_code: { roomTypeId: room.id, code: item.code } }, update: { active: true, name: item.name, mealPlan: item.mealPlan, description: item.description, axisRatePlanId: `AXIS-RATE-${item.code}` }, create: { roomTypeId: room.id, code: item.code, name: item.name, mealPlan: item.mealPlan, description: item.description, axisRatePlanId: `AXIS-RATE-${item.code}` } });
-    seededMasterPlans.push({ id: masterPlan.id, code: item.code, amount: item.amount, taxAmount: item.taxAmount });
-    await prisma.cancellationRule.upsert({ where: { hotelId_ratePlanId_type: { hotelId: hotel.id, ratePlanId: masterPlan.id, type: 'FREE_CANCELLATION' } }, update: { cutoffHours: 48, value: 0, active: true }, create: { hotelId: hotel.id, ratePlanId: masterPlan.id, type: 'FREE_CANCELLATION', cutoffHours: 48, value: 0 } });
+    const definition = await prisma.ratePlanMaster.upsert({ where: { hotelId_code: { hotelId: hotel.id, code: item.code } }, update: { active: true, name: item.name, mealPlan: item.mealPlan, description: item.description }, create: { hotelId: hotel.id, code: item.code, name: item.name, mealPlan: item.mealPlan, description: item.description } });
+    const assignment = await prisma.ratePlan.upsert({ where: { roomTypeId_masterId: { roomTypeId: room.id, masterId: definition.id } }, update: { active: true, code: definition.code, name: definition.name, mealPlan: definition.mealPlan, description: definition.description, axisRatePlanId: `AXIS-RATE-${item.code}` }, create: { roomTypeId: room.id, masterId: definition.id, code: definition.code, name: definition.name, mealPlan: definition.mealPlan, description: definition.description, axisRatePlanId: `AXIS-RATE-${item.code}` } });
+    seededMasterPlans.push({ id: assignment.id, code: item.code, amount: item.amount, taxAmount: item.taxAmount });
+    await prisma.cancellationRule.upsert({ where: { hotelId_ratePlanId_type: { hotelId: hotel.id, ratePlanId: assignment.id, type: 'FREE_CANCELLATION' } }, update: { cutoffHours: 48, value: 0, active: true }, create: { hotelId: hotel.id, ratePlanId: assignment.id, type: 'FREE_CANCELLATION', cutoffHours: 48, value: 0 } });
   }
   const agentPasswordHash = await bcrypt.hash(process.env.SEED_AGENT_PASSWORD ?? 'Agent@Rainwood2026!', 12);
   const seededAgents = [

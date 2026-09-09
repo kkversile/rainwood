@@ -226,60 +226,78 @@ model RefreshToken {
 }
 
 model Hotel {
-  id                String             @id @default(cuid())
-  code              String             @unique
-  name              String
-  slug              String             @unique
-  city              String
-  mobile            String?
-  email             String?
-  place             String?
-  propertyType      String?
-  location          String?
-  country           String?
-  state             String?
-  address           String?
-  pincode           String?
-  latitude          String?
-  longitude         String?
-  category          String?
-  margin            String?
-  powerBackup       Boolean            @default(false)
-  description       String?
-  active            Boolean            @default(true)
-  seoTitle          String?
-  seoDescription    String?
-  canonicalPath     String?
-  ogImageUrl        String?
-  virtualTourUrl    String?
-  axisPropertyId    String?            @unique
-  rooms             RoomType[]
-  images            HotelImage[]
-  videos            HotelVideo[]
-  amenities         HotelAmenity[]
-  reviews           HotelReview[]
-  taxes             Tax[]
-  charges           Charge[]
-  cancellationRules CancellationRule[]
-  policy            HotelPolicy?
-  contacts          HotelContact[]
-  documents         HotelDocument[]
-  locationProfile   HotelLocationProfile?
+  id                  String                    @id @default(cuid())
+  code                String                    @unique
+  name                String
+  slug                String                    @unique
+  city                String
+  mobile              String?
+  email               String?
+  place               String?
+  propertyType        String?
+  location            String?
+  country             String?
+  state               String?
+  address             String?
+  pincode             String?
+  latitude            String?
+  longitude           String?
+  category            String?
+  margin              String?
+  powerBackup         Boolean                   @default(false)
+  description         String?
+  active              Boolean                   @default(true)
+  seoTitle            String?
+  seoDescription      String?
+  canonicalPath       String?
+  ogImageUrl          String?
+  virtualTourUrl      String?
+  axisPropertyId      String?                   @unique
+  rooms               RoomType[]
+  ratePlanMasters     RatePlanMaster[]
+  images              HotelImage[]
+  videos              HotelVideo[]
+  amenities           HotelAmenity[]
+  reviews             HotelReview[]
+  taxes               Tax[]
+  charges             Charge[]
+  cancellationRules   CancellationRule[]
+  policy              HotelPolicy?
+  contacts            HotelContact[]
+  documents           HotelDocument[]
+  locationProfile     HotelLocationProfile?
   locationAttractions HotelLocationAttraction[]
-  locationTransports HotelLocationTransport[]
-  reservations      Reservation[]
-  holds             InventoryHold[]
-  waitlist          WaitlistEntry[]
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  locationTransports  HotelLocationTransport[]
+  reservations        Reservation[]
+  holds               InventoryHold[]
+  waitlist            WaitlistEntry[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
 
   @@index([active, slug])
+}
+
+model RatePlanMaster {
+  id          String     @id @default(cuid())
+  hotelId     String
+  hotel       Hotel      @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  code        String
+  name        String
+  mealPlan    String
+  description String?
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  assignments RatePlan[]
+
+  @@unique([hotelId, code])
+  @@index([hotelId, active])
 }
 
 model HotelLocationProfile {
   id              String   @id @default(cuid())
   hotelId         String   @unique
-  hotel            Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  hotel           Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   addressLine1    String?
   addressLine2    String?
   timezone        String   @default("IST (UTC +5:30)")
@@ -500,6 +518,8 @@ model RatePlan {
   id                String              @id @default(cuid())
   roomTypeId        String
   roomType          RoomType            @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  masterId          String
+  master            RatePlanMaster      @relation(fields: [masterId], references: [id], onDelete: Restrict)
   code              String
   name              String
   mealPlan          String
@@ -513,6 +533,7 @@ model RatePlan {
   assignedAgents    AgentRatePlan[]
 
   @@unique([roomTypeId, code])
+  @@unique([roomTypeId, masterId])
   @@unique([roomTypeId, axisRatePlanId])
   @@index([roomTypeId, active])
 }

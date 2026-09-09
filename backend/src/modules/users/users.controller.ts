@@ -38,7 +38,7 @@ export class UsersController {
   @Put('agents/:id/rate-plans') async mapRatePlans(@Param('id') id: string, @Body() d: AgentRatePlanMappingDto) {
     const agent = await this.p.user.findFirstOrThrow({ where: { id, role: 'AGENT' }, select: { id: true } });
     const ratePlanIds = [...new Set(d.ratePlanIds ?? [])];
-    const validPlans = await this.p.ratePlan.findMany({ where: { id: { in: ratePlanIds }, active: true }, select: { id: true } });
+    const validPlans = await this.p.ratePlan.findMany({ where: { id: { in: ratePlanIds }, active: true, master: { active: true } }, select: { id: true } });
     if (validPlans.length !== ratePlanIds.length) throw new Error('One or more selected rate plans are invalid or inactive.');
     await this.p.$transaction([
       this.p.agentRatePlan.deleteMany({ where: { agentId: agent.id } }),

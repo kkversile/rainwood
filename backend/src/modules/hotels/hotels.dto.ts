@@ -126,6 +126,31 @@ export class RatePlanDto {
   @IsOptional() @IsString() axisRatePlanId?: string;
 }
 
+export class RatePlanMasterDto {
+  @IsString() @MinLength(2) code!: string;
+  @IsString() @MinLength(2) name!: string;
+  @IsString() @IsIn(['EP', 'CP', 'MAP', 'AP']) mealPlan!: string;
+  @IsOptional() @IsString() @MaxLength(10_000) description?: string;
+  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsArray() @IsString({ each: true }) roomTypeIds?: string[];
+}
+
+export class RatePlanAssignmentDto {
+  @IsString() @MinLength(1) roomTypeId!: string;
+  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsString() axisRatePlanId?: string;
+}
+
+export class RatePlanAssignmentUpdateDto {
+  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsString() axisRatePlanId?: string;
+}
+
+export class CopyRatePlanDto {
+  @IsString() @MinLength(1) targetRoomTypeId!: string;
+  @IsOptional() @IsBoolean() copyRates?: boolean;
+}
+
 export class InventoryDayDto {
   @IsDateString() date!: string;
   @IsInt() @Min(0) available!: number;
