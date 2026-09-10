@@ -24,15 +24,7 @@ type OccupancyKey =
   | "single"
   | "double"
   | "triple"
-  | "quad"
-  | "extrabed"
-  | "extraadult"
-  | "extrachild"
-  | "extraadult2"
-  | "extrachild2"
-  | "extraadult3"
-  | "extrachild3"
-  | "extrainfant";
+  | "quad";
 type InventoryDay = {
   id: string;
   date: string;
@@ -166,9 +158,9 @@ type Hotel = {
 type HotelReview = { id: string; rating: number; description: string; createdAt: string; updatedAt?: string };
 type DateRange = { id: string; start: string; end: string };
 type PricingValues = {
-  amount: number;
-  taxAmount: number;
-  occupancyPrices: Record<OccupancyKey, number>;
+  amount: string | number;
+  taxAmount: string | number;
+  occupancyPrices: Partial<Record<OccupancyKey, string | number>>;
 };
 type InventoryValues = { available: number; stopSell: boolean };
 const occupancyFields: { key: OccupancyKey; label: string }[] = [
@@ -176,14 +168,6 @@ const occupancyFields: { key: OccupancyKey; label: string }[] = [
   { key: "double", label: "Double (INR)" },
   { key: "triple", label: "Triple (INR)" },
   { key: "quad", label: "Quad (INR)" },
-  { key: "extrabed", label: "Extra bed (INR)" },
-  { key: "extraadult", label: "Extra adult (INR)" },
-  { key: "extrachild", label: "Extra child (INR)" },
-  { key: "extraadult2", label: "Extra adult 2 (INR)" },
-  { key: "extrachild2", label: "Extra child 2 (INR)" },
-  { key: "extraadult3", label: "Extra adult 3 (INR)" },
-  { key: "extrachild3", label: "Extra child 3 (INR)" },
-  { key: "extrainfant", label: "Extra infant (INR)" },
 ];
 const amenityGroups = [
   { title: "Property Amenities", subtitle: "General facilities available at the property", icon: "▥", control: "switch", items: ["24x7 Front Desk", "Lift", "Power Backup", "Banquet Hall", "Conference Room", "Business Centre", "Luggage Storage", "Laundry", "Travel Desk", "Valet Parking", "EV Charging", "Garden", "Terrace", "Doctor on Call"] },
@@ -348,21 +332,10 @@ function nextDateRange(lastEnd: string) {
 }
 function emptyPricing(): PricingValues {
   return {
-    amount: 0,
-    taxAmount: 0,
+    amount: "",
+    taxAmount: "",
     occupancyPrices: {
-      single: 0,
-      double: 0,
-      triple: 0,
-      quad: 0,
-      extrabed: 0,
-      extraadult: 0,
-      extrachild: 0,
-      extraadult2: 0,
-      extrachild2: 0,
-      extraadult3: 0,
-      extrachild3: 0,
-      extrainfant: 0,
+      single: "", double: "", triple: "", quad: "",
     },
   };
 }
@@ -638,12 +611,11 @@ export default function NewHotelWizard() {
             );
             const values = emptyPricing();
             const rate = plan?.rates?.[0];
-            values.amount = Number(rate?.amount ?? 0);
-            values.taxAmount = Number(rate?.taxAmount ?? 0);
+            values.amount = rate?.amount === undefined ? "" : String(rate.amount);
+            values.taxAmount = rate?.taxAmount === undefined ? "" : String(rate.taxAmount);
             occupancyFields.forEach((field) => {
-              values.occupancyPrices[field.key] = Number(
-                rate?.occupancyPrices?.[field.key] ?? 0,
-              );
+              const value = rate?.occupancyPrices?.[field.key];
+              values.occupancyPrices[field.key] = value === undefined || value === null ? "" : String(value);
             });
             return [item.id, values];
           }),
@@ -1207,16 +1179,15 @@ export default function NewHotelWizard() {
         return;
       }
       const values = pricingByRoom[target.id] ?? emptyPricing();
+      const amount = Number(values.amount || values.occupancyPrices.double || values.occupancyPrices.single);
+      if (!Number.isFinite(amount) || amount < 0) { setError(`Enter a base or occupancy rate for ${target.name}.`); return; }
+      const occupancyPrices = Object.fromEntries(Object.entries(values.occupancyPrices).filter(([, value]) => value !== undefined && String(value).trim() !== "").map(([key, value]) => [key, Number(value)]));
       await request(`/hotels/rate-plans/${plan.id}/rates`, {
         days: selectedDates.map((date) => ({
           date,
-          amount: Number(
-            values.amount ||
-              values.occupancyPrices.double ||
-              values.occupancyPrices.single,
-          ),
-          taxAmount: Number(values.taxAmount),
-          occupancyPrices: values.occupancyPrices,
+          amount,
+          ...(String(values.taxAmount).trim() !== "" ? { taxAmount: Number(values.taxAmount) } : {}),
+          ...(Object.keys(occupancyPrices).length ? { occupancyPrices } : {}),
         })),
       });
     }
@@ -1782,7 +1753,7 @@ export default function NewHotelWizard() {
                               updatePricing(item.id, {
                                 occupancyPrices: {
                                   ...values.occupancyPrices,
-                                  [field.key]: Number(e.target.value),
+                                  [field.key]: e.target.value,
                                 },
                               })
                             }

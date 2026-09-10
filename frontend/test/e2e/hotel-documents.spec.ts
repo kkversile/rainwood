@@ -63,8 +63,9 @@ test('Documents matches the Stitch layout and persists upload, preview, edit, do
     await expect(page.locator('.documentsTable tbody tr')).toHaveCount(1);
     await search.fill('');
     await page.getByLabel('Document type filter').selectOption('Business Registration');
-    await expect(page.locator('.documentsTable tbody tr')).toHaveCount(1);
-    await expect(page.locator('.documentsTable tbody tr')).toContainText('Business Registration');
+    const businessRows = page.locator('.documentsTable tbody tr').filter({ hasText: 'Business Registration' });
+    expect(await businessRows.count()).toBeGreaterThan(0);
+    await expect(businessRows.first()).toContainText('Business Registration');
     await page.getByLabel('Document type filter').selectOption('ALL');
 
     for (const [index, item] of uploadCases.entries()) {

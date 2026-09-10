@@ -1,5 +1,8 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
+import { normalizeOccupancyPrices } from '../../common/rate-pricing';
+import { parseDateOnly } from '../../common/dates';
 import { AmenityDto, CopyRatePlanDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
 import { FilesService } from '../files/files.service';
 import ExcelJS from 'exceljs';
@@ -454,6 +457,21 @@ export class HotelsService {
   async saveRates(ratePlanId: string, body: RateBatchDto) {
     const plan = await this.prisma.ratePlan.findUnique({ where: { id: ratePlanId } });
     if (!plan) throw new NotFoundException('Rate plan not found');
-    return this.prisma.$transaction(body.days.map((day) => this.prisma.rateDay.upsert({ where: { ratePlanId_date: { ratePlanId, date: new Date(`${day.date}T00:00:00.000Z`) } }, create: { ratePlanId, date: new Date(`${day.date}T00:00:00.000Z`), amount: day.amount, taxAmount: day.taxAmount ?? 0, childAmount: day.childAmount ?? 0, extraAdultAmount: day.extraAdultAmount ?? 0, occupancyPrices: day.occupancyPrices ?? undefined, cta: Boolean(day.cta), ctd: Boolean(day.ctd), minLos: day.minLos ?? 1, maxLos: day.maxLos }, update: { amount: day.amount, taxAmount: day.taxAmount ?? 0, childAmount: day.childAmount ?? 0, extraAdultAmount: day.extraAdultAmount ?? 0, occupancyPrices: day.occupancyPrices ?? undefined, cta: Boolean(day.cta), ctd: Boolean(day.ctd), minLos: day.minLos ?? 1, maxLos: day.maxLos } })));
+    return this.prisma.$transaction(async (tx) => {
+      const results = [];
+      for (const day of body.days) {
+        const date = parseDateOnly(day.date, 'rate date');
+        if (day.minLos !== undefined && day.maxLos !== undefined && day.maxLos !== null && day.maxLos < day.minLos) throw new BadRequestException('maxLos must be greater than or equal to minLos.');
+        const occupancyPrices = normalizeOccupancyPrices(day.occupancyPrices);
+        const existing = await tx.rateDay.findUnique({ where: { ratePlanId_date: { ratePlanId, date } } });
+        if (!existing && day.amount === undefined) throw new BadRequestException(`A base amount is required for ${day.date}.`);
+        if (existing) {
+          results.push(await tx.rateDay.update({ where: { id: existing.id }, data: { amount: day.amount === undefined ? undefined : day.amount, taxAmount: day.taxAmount === undefined ? undefined : day.taxAmount, childAmount: day.childAmount === undefined ? undefined : day.childAmount, extraAdultAmount: day.extraAdultAmount === undefined ? undefined : day.extraAdultAmount, occupancyPrices: occupancyPrices === null ? Prisma.DbNull : occupancyPrices === undefined ? undefined : occupancyPrices, cta: day.cta === undefined ? undefined : day.cta, ctd: day.ctd === undefined ? undefined : day.ctd, minLos: day.minLos === undefined ? undefined : day.minLos, maxLos: day.maxLos === undefined ? undefined : day.maxLos } }));
+        } else {
+          results.push(await tx.rateDay.create({ data: { ratePlanId, date, amount: day.amount!, taxAmount: day.taxAmount ?? 0, childAmount: day.childAmount ?? 0, extraAdultAmount: day.extraAdultAmount ?? 0, occupancyPrices: occupancyPrices ?? undefined, cta: day.cta ?? false, ctd: day.ctd ?? false, minLos: day.minLos ?? 1, maxLos: day.maxLos ?? null } }));
+        }
+      }
+      return results;
+    });
   }
 }

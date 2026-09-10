@@ -97,9 +97,10 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
     setError(''); setBusy(true);
     try {
       const created = await apiRequest<{ reference: string }>(`/reservations/from-hold/${encodeURIComponent(hold.token)}`, { method: 'POST', body: JSON.stringify({ guestName: guest.name, email: guest.email, mobile: guest.mobile, source: agentMode ? 'AGENT' : 'WEBSITE' }) });
-      await apiRequest<{ providerOrderId: string }>(`/payments/${encodeURIComponent(created.reference)}/order`, { method: 'POST', headers: { 'idempotency-key': `web:${created.reference}:${crypto.randomUUID()}` } });
-      setReservation(await apiRequest<ReservationSummary>(`/reservations/${encodeURIComponent(created.reference)}`));
-      setStep('payment');
+      const loaded = await apiRequest<ReservationSummary>(`/reservations/${encodeURIComponent(created.reference)}`);
+      setReservation(loaded);
+      if (Number(loaded.balanceAmount) <= 0 || loaded.paymentStatus === 'PAID') setStep('confirmation');
+      else { await apiRequest<{ providerOrderId: string }>(`/payments/${encodeURIComponent(created.reference)}/order`, { method: 'POST', headers: { 'idempotency-key': `web:${created.reference}:${crypto.randomUUID()}` } }); setStep('payment'); }
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create reservation'); }
     finally { setBusy(false); }
   }

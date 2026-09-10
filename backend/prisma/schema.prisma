@@ -55,6 +55,7 @@ enum PaymentStatus {
 
 enum PaymentMode {
   GATEWAY
+  WALLET
   UPI
   BANK_TRANSFER
   CASH
@@ -187,6 +188,7 @@ model User {
   approvedCancellations  CancellationRequest[]     @relation("CancellationApprover")
   createdModifications   ReservationModification[] @relation("ModificationCreator")
   assignedRatePlans      AgentRatePlan[]
+  agentHolds             InventoryHold[]           @relation("AgentHolds")
   wallet                 AgentWallet?
   createdAt              DateTime                  @default(now())
   updatedAt              DateTime                  @updatedAt
@@ -551,15 +553,36 @@ model ContactRequest {
 }
 
 model AgentRatePlan {
-  id         String   @id @default(cuid())
-  agentId    String
-  agent      User     @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  ratePlanId String
-  ratePlan   RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
+  id          String         @id @default(cuid())
+  agentId     String
+  agent       User           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  ratePlanId  String
+  ratePlan    RatePlan       @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+  active      Boolean        @default(true)
+  pricingMode String         @default("BASE")
+  rates       AgentRateDay[]
+  createdAt   DateTime       @default(now())
 
   @@unique([agentId, ratePlanId])
   @@index([ratePlanId])
+  @@index([agentId, active])
+}
+
+model AgentRateDay {
+  id               String        @id @default(cuid())
+  agentRatePlanId  String
+  agentRatePlan    AgentRatePlan @relation(fields: [agentRatePlanId], references: [id], onDelete: Cascade)
+  date             DateTime      @db.Date
+  amount           Decimal?
+  taxAmount        Decimal?
+  childAmount      Decimal?
+  extraAdultAmount Decimal?
+  occupancyPrices  Json?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@unique([agentRatePlanId, date])
+  @@index([date, agentRatePlanId])
 }
 
 model AgentWallet {
@@ -664,6 +687,8 @@ model InventoryHold {
   tokenHash              String              @unique
   hotelId                String
   hotel                  Hotel               @relation(fields: [hotelId], references: [id])
+  agentId                String?
+  agent                  User?               @relation("AgentHolds", fields: [agentId], references: [id], onDelete: SetNull)
   status                 HoldStatus          @default(ACTIVE)
   guestEmail             String?
   expiresAt              DateTime

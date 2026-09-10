@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma.service';
@@ -39,6 +39,7 @@ export class HoldsService {
         data: {
           tokenHash: sha256(rawToken),
           hotelId: sortedLines[0].hotelId,
+          agentId: agentId ?? null,
           guestEmail: input.guestEmail,
           expiresAt: expiry,
           lines: {
@@ -67,9 +68,11 @@ export class HoldsService {
     return { ...result, token: rawToken };
   }
 
-  async get(rawToken: string) {
+  async get(rawToken: string, user?: { id: string; role?: string }) {
     const hold = await this.p.inventoryHold.findUnique({ where: { tokenHash: sha256(rawToken) }, include: { lines: { include: { nights: true, roomType: true, ratePlan: true } }, hotel: true } });
     if (!hold) throw new NotFoundException('Hold not found');
+    const authorizedAdmin = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION'].includes(user?.role ?? '');
+    if (hold.agentId && (!user || (user.id !== hold.agentId && !authorizedAdmin))) throw new ForbiddenException('This agent hold belongs to another agent.');
     if (hold.status === 'ACTIVE' && hold.expiresAt <= new Date()) {
       await this.release(hold.id, 'EXPIRED');
       return { ...hold, status: 'EXPIRED' as const };

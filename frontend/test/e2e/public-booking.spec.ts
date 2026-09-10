@@ -10,11 +10,11 @@ function dateInDays(days: number) {
 test('guest can search, hold, pay in mock mode, and reach confirmation', async ({ page }) => {
   const checkIn = dateInDays(40 + (new Date().getUTCMinutes() % 30));
   const checkOut = dateInDays(41 + (new Date().getUTCMinutes() % 30));
-  await page.goto(`/booking?checkIn=${checkIn}&checkOut=${checkOut}`);
+  await page.goto(`/rainwood/booking?checkIn=${checkIn}&checkOut=${checkOut}`);
   await expect(page.getByRole('heading', { name: 'Book your stay' })).toBeVisible();
   await page.getByRole('button', { name: 'Check live availability' }).click();
-  await expect(page.getByRole('heading', { name: 'Select a room and rate' })).toBeVisible();
-  await page.getByRole('button', { name: 'Hold this room' }).first().click();
+  await expect(page.getByRole('heading', { name: 'Choose your room' })).toBeVisible();
+  await page.getByRole('button', { name: 'Book this room' }).first().click();
   await expect(page.getByRole('heading', { name: 'Guest details' })).toBeVisible();
   await page.getByLabel('Full name').fill('Playwright Guest');
   await page.getByLabel('Email').fill(`playwright-${Date.now()}@example.com`);

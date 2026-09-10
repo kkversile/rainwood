@@ -1,5 +1,10 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsEmail, IsInt, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsEmail, IsInt, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+
+export class HoldOccupancyDto {
+  @Type(() => Number) @IsInt() @Min(1) @Max(100) adults!: number;
+  @Type(() => Number) @IsInt() @Min(0) @Max(100) children = 0;
+}
 
 export class HoldLineDto {
   @IsString()
@@ -34,6 +39,12 @@ export class HoldLineDto {
   @Min(0)
   @Max(100)
   children = 0;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => HoldOccupancyDto)
+  occupancies?: HoldOccupancyDto[];
 }
 
 export class HoldCreateDto extends HoldLineDto {

@@ -13,5 +13,6 @@ export class HoldsController {
   create(@Body() body: HoldCreateDto, @CurrentUser() user?: any) { return this.s.create(body, user?.role === 'AGENT' ? user.id : undefined); }
 
   @Get(':token')
-  get(@Param('token') token: string) { return this.s.get(token); }
+  @UseGuards(OptionalJwtAuthGuard)
+  get(@Param('token') token: string, @CurrentUser() user?: any) { return this.s.get(token, user ? { id: user.id, role: user.role } : undefined); }
 }
