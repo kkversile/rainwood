@@ -159,15 +159,15 @@ export class InventoryDayDto {
 
 export class RateDayDto {
   @IsDateString() date!: string;
-  @IsNumber() @Min(0) amount!: number;
+  @IsOptional() @IsNumber() @Min(0) amount?: number;
   @IsOptional() @IsNumber() @Min(0) taxAmount?: number;
   @IsOptional() @IsNumber() @Min(0) childAmount?: number;
   @IsOptional() @IsNumber() @Min(0) extraAdultAmount?: number;
-  @IsOptional() @IsObject() occupancyPrices?: Record<string, number>;
+  @IsOptional() @IsObject() occupancyPrices?: Record<string, number> | null;
   @IsOptional() @IsBoolean() cta?: boolean;
   @IsOptional() @IsBoolean() ctd?: boolean;
   @IsOptional() @IsInt() @Min(1) minLos?: number;
-  @IsOptional() @IsInt() @Min(1) maxLos?: number;
+  @IsOptional() @IsInt() @Min(1) maxLos?: number | null;
 }
 
 export class InventoryBatchDto { @IsArray() @ValidateNested({ each: true }) @Type(() => InventoryDayDto) days!: InventoryDayDto[]; }

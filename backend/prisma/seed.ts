@@ -65,8 +65,9 @@ async function main() {
   const planByCode = Object.fromEntries(seededMasterPlans.map((item) => [item.code, item.id]));
   const agentAssignments = [[agentUsers[0].id, ['A', 'B']], [agentUsers[1].id, ['C', 'D']], [agentUsers[2].id, ['B', 'E']]] as const;
   for (const [agentId, codes] of agentAssignments) {
-    await prisma.agentRatePlan.deleteMany({ where: { agentId } });
-    for (const code of codes) await prisma.agentRatePlan.create({ data: { agentId, ratePlanId: planByCode[code] } });
+    const selectedPlanIds = codes.map((code) => planByCode[code]);
+    for (const ratePlanId of selectedPlanIds) await prisma.agentRatePlan.upsert({ where: { agentId_ratePlanId: { agentId, ratePlanId } }, create: { agentId, ratePlanId, active: true }, update: { active: true } });
+    await prisma.agentRatePlan.updateMany({ where: { agentId, ratePlanId: { notIn: selectedPlanIds } }, data: { active: false } });
   }
   await prisma.cancellationRule.upsert({ where: { hotelId_ratePlanId_type: { hotelId: hotel.id, ratePlanId: plan.id, type: 'FREE_CANCELLATION' } }, update: { cutoffHours: 48, value: 0, active: true }, create: { hotelId: hotel.id, ratePlanId: plan.id, type: 'FREE_CANCELLATION', cutoffHours: 48, value: 0 } });
   const today = new Date();

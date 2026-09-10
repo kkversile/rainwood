@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { HotelsService } from './hotels.service';
 import { canonicalMealPlan, canonicalRatePlanCode } from './rate-plan.utils';
 
@@ -26,7 +27,7 @@ describe('hotel-level rate plans', () => {
         update: jest.fn().mockResolvedValue({ id: 'assignment-1', active: false }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      rateDay: { upsert: jest.fn() },
+      rateDay: { upsert: jest.fn(), findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'day-1' }), update: jest.fn().mockResolvedValue({ id: 'day-1' }) },
       $transaction: jest.fn(async (work: any) => typeof work === 'function' ? work(prisma) : Promise.all(work)),
     };
     service = new HotelsService(prisma, {} as any);
@@ -78,8 +79,17 @@ describe('hotel-level rate plans', () => {
 
   it('writes RateDay against the room assignment id', async () => {
     prisma.ratePlan.findUnique.mockResolvedValueOnce({ id: 'assignment-1' });
-    prisma.rateDay.upsert.mockReturnValue(Promise.resolve({ id: 'day-1' }));
     await service.saveRates('assignment-1', { days: [{ date: '2026-09-12', amount: 3500 }] });
-    expect(prisma.rateDay.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ ratePlanId: 'assignment-1', amount: 3500 }) }));
+    expect(prisma.rateDay.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ ratePlanId: 'assignment-1', amount: 3500 }) }));
+  });
+
+  it('preserves omitted fields and clears explicit nullable rate fields', async () => {
+    const existing = { id: 'day-1', amount: 3500, taxAmount: 420, childAmount: 600, extraAdultAmount: 800, occupancyPrices: { double: 4000 }, cta: false, ctd: false, minLos: 1, maxLos: 7 };
+    prisma.rateDay.findUnique.mockResolvedValue(existing);
+    await service.saveRates('assignment-1', { days: [{ date: '2026-09-12', cta: true }] });
+    expect(prisma.rateDay.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ amount: undefined, taxAmount: undefined, childAmount: undefined, extraAdultAmount: undefined, occupancyPrices: undefined, cta: true, maxLos: undefined }) }));
+    prisma.rateDay.update.mockClear();
+    await service.saveRates('assignment-1', { days: [{ date: '2026-09-12', amount: 3500, occupancyPrices: null, maxLos: null }] });
+    expect(prisma.rateDay.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ occupancyPrices: Prisma.DbNull, maxLos: null }) }));
   });
 });

@@ -1,5 +1,10 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsDateString, IsInt, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+
+export class RoomOccupancyDto {
+  @Type(() => Number) @IsInt() @Min(1) @Max(100) adults!: number;
+  @Type(() => Number) @IsInt() @Min(0) @Max(100) children = 0;
+}
 
 export class AvailabilityQueryDto {
   @IsOptional()
@@ -32,4 +37,10 @@ export class AvailabilityQueryDto {
   @Min(0)
   @Max(100)
   children = 0;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RoomOccupancyDto)
+  occupancies?: RoomOccupancyDto[];
 }

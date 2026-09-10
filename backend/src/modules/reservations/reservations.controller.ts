@@ -16,7 +16,7 @@ export class ReservationsController {
   create(@Param('token') token: string, @Body() body: CreateReservationDto, @CurrentUser() user?: any) {
     const source = body.source ?? 'WEBSITE';
     if (source !== 'WEBSITE' && !(source === 'AGENT' && user?.role === 'AGENT')) throw new BadRequestException('Public reservations must use the WEBSITE source');
-    return this.s.createFromHold(token, body, user?.role === 'AGENT' ? { id: user.id } : undefined);
+    return this.s.createFromHold(token, body, user ? { id: user.id, role: user.role } : undefined);
   }
 
   @Post('manual')
@@ -24,7 +24,7 @@ export class ReservationsController {
   @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'AGENT' as any)
   manual(@Body() body: ManualReservationDto, @CurrentUser() user: any) {
     const { holdToken, ...reservation } = body;
-    return this.s.createFromHold(holdToken, reservation, { id: user.id });
+    return this.s.createFromHold(holdToken, reservation, { id: user.id, role: user.role });
   }
 
   @Get()
