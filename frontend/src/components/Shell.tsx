@@ -28,6 +28,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const visibleLinks = links.filter(([href]) => href !== '/agent/login' || !pathname.startsWith('/agent'));
   if (pathname.startsWith('/admin')) return <>{children}</>;
+  if (pathname === '/login') return <>{children}</>;
   if (pathname.startsWith('/agent') && pathname !== '/agent/login' && pathname !== '/agent/register') return <>{children}</>;
   return <><div className="topbar">RainWood Hotels · Official direct booking</div><header className="siteHeader"><Link className="brand" href="/">{logoUrl ? <img className="siteLogo" src={apiAssetUrl(logoUrl)} alt="RainWood Hotels" style={{ display: 'block', maxWidth: '180px', maxHeight: '48px', width: 'auto', height: 'auto', objectFit: 'contain' }} /> : <>RAINWOOD <span>HOTELS</span></>}</Link><nav aria-label="Primary navigation">{visibleLinks.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}<StaffDashboardLink /></nav></header>{children}<footer><div><b>RainWood Hotels</b><p>Direct booking, transparent rates and reservation support.</p></div><div><Link href="/policies">Policies</Link> · <Link href="/contact">Contact</Link></div></footer></>;
 }
