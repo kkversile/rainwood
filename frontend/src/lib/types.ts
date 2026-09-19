@@ -28,6 +28,7 @@ export type AvailabilityOption = {
   children: number;
   total: number;
   taxTotal: number;
+  availableRooms?: number;
   priceBreakdown: { date: string; baseAmount: number; taxAmount: number; extrasAmount: number; totalAmount: number }[];
   restrictions: { cta: boolean; ctd: boolean; minLos: number | null; maxLos: number | null };
 };

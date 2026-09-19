@@ -6,8 +6,31 @@ import { apiAssetUrl, apiRequest } from '../lib/api';
 import type { AvailabilityOption, Hotel, ReservationSummary } from '../lib/types';
 import { dateInDays, nextDate, validateSearchInput } from '../lib/booking-helpers';
 
-type Hold = { token: string; expiresAt: string; lines: { quotedTotal: number | string }[] };
+type Hold = { token: string; expiresAt: string; lines: { quotedTotal: number | string; quotedTax?: number | string }[] };
+type Wallet = { balance: number | string; currency?: string };
 type Step = 'search' | 'room' | 'guest' | 'payment' | 'confirmation';
+type GuestForm = {
+  salutation: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  countryCode: string;
+  mobile: string;
+  address: string;
+  gstin: string;
+  companyName: string;
+  billingAddress: string;
+  internalRemark: string;
+  mailMessage: string;
+  referenceNo: string;
+  agree: boolean;
+};
+
+const initialGuest: GuestForm = {
+  salutation: 'Mr', firstName: '', lastName: '', email: '', countryCode: '+91', mobile: '',
+  address: '', gstin: '', companyName: '', billingAddress: '', internalRemark: '',
+  mailMessage: '', referenceNo: '', agree: false,
+};
 
 function money(value: number) {
   return `INR ${Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -15,6 +38,10 @@ function money(value: number) {
 
 function resultHotelIdsFor(options: AvailabilityOption[]) {
   return Array.from(new Set(options.map((option) => option.hotelId)));
+}
+
+function fullGuestName(guest: GuestForm) {
+  return [guest.salutation, guest.firstName.trim(), guest.lastName.trim()].filter(Boolean).join(' ');
 }
 
 export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {}) {
@@ -31,7 +58,8 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
   const [selected, setSelected] = useState<AvailabilityOption | null>(null);
   const [hold, setHold] = useState<Hold | null>(null);
   const [reservation, setReservation] = useState<ReservationSummary | null>(null);
-  const [guest, setGuest] = useState({ name: '', email: '', mobile: '' });
+  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [guest, setGuest] = useState<GuestForm>(initialGuest);
   const [step, setStep] = useState<Step>('search');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -52,6 +80,11 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
   }, [params]);
 
   useEffect(() => {
+    if (!agentMode) return;
+    apiRequest<Wallet>('/wallet').then(setWallet).catch((reason: Error) => setError(reason.message));
+  }, [agentMode]);
+
+  useEffect(() => {
     if (!hold) return;
     const timer = window.setInterval(() => {
       if (new Date(hold.expiresAt).getTime() <= Date.now()) {
@@ -63,7 +96,10 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
   }, [hold]);
 
   const selectedHotel = useMemo(() => hotels.find((hotel) => hotel.id === hotelId), [hotelId, hotels]);
-  const resultHotelIds = useMemo(() => Array.from(new Set(options.map((option) => option.hotelId))), [options]);
+  const resultHotelIds = useMemo(() => resultHotelIdsFor(options), [options]);
+  const holdTotal = hold?.lines.reduce((total, line) => total + Number(line.quotedTotal), 0) ?? Number(selected?.total ?? 0);
+  const walletBalance = Number(wallet?.balance ?? 0);
+  const nights = selected?.nights ?? Math.max(1, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86_400_000));
 
   async function search(event: FormEvent) {
     event.preventDefault(); setError(''); setBusy(true);
@@ -84,7 +120,12 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
   }
 
   async function createHold(option: AvailabilityOption) {
-    setError(''); setBusy(true);
+    setError('');
+    if (agentMode && wallet && walletBalance < Number(option.total)) {
+      setError(`Wallet balance is ${money(walletBalance)} but this booking needs ${money(Number(option.total))}. Recharge your wallet before booking.`);
+      return;
+    }
+    setBusy(true);
     try {
       const created = await apiRequest<Hold>('/holds', { method: 'POST', body: JSON.stringify({ hotelId: option.hotelId, roomTypeId: option.roomTypeId, ratePlanId: option.ratePlanId, checkIn, checkOut, adults, children, rooms }) });
       setSelected(option); setHold(created); setStep('guest');
@@ -94,13 +135,29 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
 
   async function submitGuest(event: FormEvent) {
     event.preventDefault(); if (!hold) return;
+    if (!guest.agree) { setError('Please confirm the hotel booking and cancellation policies.'); return; }
     setError(''); setBusy(true);
     try {
-      const created = await apiRequest<{ reference: string }>(`/reservations/from-hold/${encodeURIComponent(hold.token)}`, { method: 'POST', body: JSON.stringify({ guestName: guest.name, email: guest.email, mobile: guest.mobile, source: agentMode ? 'AGENT' : 'WEBSITE' }) });
+      const billing = [guest.companyName && `Bill to company: ${guest.companyName}`, guest.billingAddress && `Billing address: ${guest.billingAddress}`, guest.referenceNo && `Agent reference: ${guest.referenceNo}`].filter(Boolean).join('\n');
+      const internal = [guest.internalRemark, guest.mailMessage && `Mail message: ${guest.mailMessage}`].filter(Boolean).join('\n');
+      const created = await apiRequest<{ reference: string }>(`/reservations/from-hold/${encodeURIComponent(hold.token)}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          guestName: fullGuestName(guest), email: guest.email, mobile: `${guest.countryCode} ${guest.mobile}`.trim(),
+          address: guest.address, gstin: guest.gstin, billingInstruction: billing || undefined,
+          internalRemark: internal || undefined, source: agentMode ? 'AGENT' : 'WEBSITE',
+        }),
+      });
       const loaded = await apiRequest<ReservationSummary>(`/reservations/${encodeURIComponent(created.reference)}`);
       setReservation(loaded);
-      if (Number(loaded.balanceAmount) <= 0 || loaded.paymentStatus === 'PAID') setStep('confirmation');
-      else { await apiRequest<{ providerOrderId: string }>(`/payments/${encodeURIComponent(created.reference)}/order`, { method: 'POST', headers: { 'idempotency-key': `web:${created.reference}:${crypto.randomUUID()}` } }); setStep('payment'); }
+      if (agentMode) {
+        setWallet(await apiRequest<Wallet>('/wallet'));
+        setStep('confirmation');
+      } else if (Number(loaded.balanceAmount) <= 0 || loaded.paymentStatus === 'PAID') setStep('confirmation');
+      else {
+        await apiRequest<{ providerOrderId: string }>(`/payments/${encodeURIComponent(created.reference)}/order`, { method: 'POST', headers: { 'idempotency-key': `web:${created.reference}:${crypto.randomUUID()}` } });
+        setStep('payment');
+      }
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create reservation'); }
     finally { setBusy(false); }
   }
@@ -116,20 +173,28 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
     finally { setBusy(false); }
   }
 
+  function updateGuest<K extends keyof GuestForm>(key: K, value: GuestForm[K]) {
+    setGuest((current) => ({ ...current, [key]: value }));
+  }
+
+  const steps = agentMode ? [['search', 'Search'], ['room', 'Room'], ['guest', 'Guest'], ['confirmation', 'Confirmation']] : [['search', 'Search'], ['room', 'Room'], ['guest', 'Guest'], ['payment', 'Payment'], ['confirmation', 'Confirmation']];
+
   return <div className="page bookingWorkspace">
-    <div className="pageTitle public"><span>Secure direct reservation</span><h1>Book your stay</h1><p>{selectedHotel?.name ?? 'Live availability, transparent pricing and confirmation in one flow.'}</p></div>
-    <ol className="steps horizontal" aria-label="Booking progress">{[['search', 'Search'], ['room', 'Room'], ['guest', 'Guest'], ['payment', 'Payment'], ['confirmation', 'Confirmation']].map(([value, label]) => <li className={step === value ? 'active' : ''} key={value}>{label}</li>)}</ol>
+    <div className="pageTitle public"><span>{agentMode ? 'Partner reservation desk' : 'Secure direct reservation'}</span><h1>{agentMode ? 'Create agent booking' : 'Book your stay'}</h1><p>{selectedHotel?.name ?? (agentMode ? 'Search assigned rates, add guest details and confirm against your wallet.' : 'Live availability, transparent pricing and confirmation in one flow.')}</p></div>
+    {agentMode && <div className="agentBookingWallet"><div><span>Available wallet balance</span><strong>{wallet ? money(walletBalance) : 'Loading...'}</strong></div><a className="smallBtn" href="/agent/wallet">Recharge wallet</a></div>}
+    <ol className="steps horizontal" aria-label="Booking progress">{steps.map(([value, label]) => <li className={step === value ? 'active' : ''} key={value}>{label}</li>)}</ol>
     {error && <p className="error" role="alert">{error}</p>}
     {step === 'search' && <form className="formCard bookingForm" onSubmit={search}>
-      <h2>Find your stay</h2>
+      <h2>Choose your stay</h2>
+      <p className="mutedText">{agentMode ? 'Only hotels and rate plans assigned to your agent account will be shown.' : 'Select dates and occupancy to see live room availability.'}</p>
       <label>Hotel<select value={hotelId} onChange={(event) => setHotelId(event.target.value)}><option value="">All hotels</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name} - {hotel.city}</option>)}</select></label>
       <div className="two"><label>Check-in<input type="date" min={dateInDays(0)} value={checkIn} onChange={(event) => { const value = event.target.value < dateInDays(0) ? dateInDays(0) : event.target.value; setCheckIn(value); if (checkOut <= value) setCheckOut(nextDate(value)); }} required /></label><label>Check-out<input type="date" min={nextDate(checkIn)} value={checkOut} onChange={(event) => setCheckOut(event.target.value < nextDate(checkIn) ? nextDate(checkIn) : event.target.value)} required /></label></div>
-      <div className="three"><label>Adults<input type="number" min="1" max="100" value={adults} onChange={(event) => setAdults(Number(event.target.value))} required /></label><label>Children<input type="number" min="0" max="100" value={children} onChange={(event) => setChildren(Number(event.target.value))} /></label><label>Rooms<input type="number" min="1" max="20" value={rooms} onChange={(event) => setRooms(Number(event.target.value))} required /></label></div>
-      <button className="btn full" disabled={busy}>{busy ? 'Checking...' : 'Check live availability'}</button>
+      <div className="three"><label>Adults<input type="number" min="1" max="100" value={adults} onChange={(event) => setAdults(Number(event.target.value))} required /></label><label>Children<input type="number" min="0" max="100" value={children} onChange={(event) => setChildren(Number(event.target.value))} /></label><label>Total rooms<input type="number" min="1" max="20" value={rooms} onChange={(event) => setRooms(Number(event.target.value))} required /></label></div>
+      <button className="btn full" disabled={busy}>{busy ? 'Checking...' : 'Show available rooms'}</button>
     </form>}
-    {step === 'room' && <section className="bookingResults"><div className="sectionHead left"><span>{checkIn} to {checkOut}</span><h2>Choose your room</h2><p>Select a room type and meal plan to continue your booking.</p></div>{options.length === 0 ? <p className="empty">No room plan is available for those dates. Try different dates or occupancy.</p> : <div className="bookingRoomGrid">{resultHotelIds.map((resultHotelId) => { const hotel = hotels.find((item) => item.id === resultHotelId); const hotelOptions = options.filter((option) => option.hotelId === resultHotelId); const roomChoices = Array.from(new Map(hotelOptions.map((option) => [option.roomTypeId, option])).values()); const selection = hotelSelections[resultHotelId] ?? { roomTypeId: roomChoices[0]?.roomTypeId ?? '', ratePlanId: roomChoices[0]?.ratePlanId ?? '' }; const rateChoices = Array.from(new Map(hotelOptions.filter((option) => option.roomTypeId === selection.roomTypeId).map((option) => [option.ratePlanId, option])).values()); const selectedOption = hotelOptions.find((option) => option.roomTypeId === selection.roomTypeId && option.ratePlanId === selection.ratePlanId) ?? rateChoices[0] ?? hotelOptions[0]; const setSelection = (next: { roomTypeId: string; ratePlanId: string }) => setHotelSelections((current) => ({ ...current, [resultHotelId]: next })); return <article className="bookingRoomCard" key={resultHotelId}><div className="bookingRoomImage"><img src={apiAssetUrl(hotel?.images?.[0]?.url ?? hotel?.ogImageUrl) || '/rainwood-placeholder.svg'} alt={hotel?.images?.[0]?.altText ?? hotel?.name ?? 'RainWood Hotels'} /></div><div className="bookingRoomBody"><span className="bookingRoomCity">{hotel?.city}</span><h3>{hotel?.name}</h3><p className="bookingRoomHotel">Choose the room type and meal plan for your stay.</p><div className="bookingRoomSelectors"><label>Room type<select value={selection.roomTypeId} onChange={(event) => { const nextRoomTypeId = event.target.value; const nextRate = hotelOptions.find((option) => option.roomTypeId === nextRoomTypeId); setSelection({ roomTypeId: nextRoomTypeId, ratePlanId: nextRate?.ratePlanId ?? '' }); }}>{roomChoices.map((option) => <option key={option.roomTypeId} value={option.roomTypeId}>{option.roomType}</option>)}</select></label><label>Meal plan<select value={selection.ratePlanId} onChange={(event) => setSelection({ ...selection, ratePlanId: event.target.value })}>{rateChoices.map((option) => <option key={option.ratePlanId} value={option.ratePlanId}>{option.ratePlan} · {option.mealPlan}</option>)}</select></label></div><div className="bookingRoomMeta"><span>Meal plan</span><strong>{selectedOption.mealPlan}</strong><span>{selectedOption.nights} night{selectedOption.nights === 1 ? '' : 's'}</span><span>{selectedOption.rooms} room{selectedOption.rooms === 1 ? '' : 's'}</span></div><div className="bookingRoomRate"><div><small>Total price</small><strong>{money(selectedOption.total)}</strong><span>Taxes included: {money(selectedOption.taxTotal)}</span></div><button className="btn" onClick={() => void createHold(selectedOption)} disabled={busy}>{busy ? 'Loading...' : 'Book this room'}</button></div></div></article>; })}</div>}</section>}
-    {step === 'guest' && hold && <form className="formCard" onSubmit={submitGuest}><h2>Guest details</h2><p className="notice">Inventory is held until {new Date(hold.expiresAt).toLocaleTimeString()}.</p><label>Full name<input value={guest.name} onChange={(event) => setGuest({ ...guest, name: event.target.value })} required minLength={2} autoComplete="name" /></label><label>Email<input type="email" value={guest.email} onChange={(event) => setGuest({ ...guest, email: event.target.value })} required autoComplete="email" /></label><label>Mobile<input value={guest.mobile} onChange={(event) => setGuest({ ...guest, mobile: event.target.value })} required autoComplete="tel" /></label><button className="btn full" disabled={busy}>{busy ? 'Creating...' : 'Review and continue to payment'}</button></form>}
+    {step === 'room' && <section className="bookingResults"><div className="sectionHead left"><span>{checkIn} to {checkOut} · {nights} night{nights === 1 ? '' : 's'}</span><h2>Choose a room and rate</h2><p>{agentMode ? 'Rates shown are limited to your active agent assignments.' : 'Select a room type and meal plan to continue your booking.'}</p></div>{options.length === 0 ? <p className="empty">No room plan is available for those dates. Try different dates or occupancy.</p> : <div className="bookingRoomGrid">{resultHotelIds.map((resultHotelId) => { const hotel = hotels.find((item) => item.id === resultHotelId); const hotelOptions = options.filter((option) => option.hotelId === resultHotelId); const roomChoices = Array.from(new Map(hotelOptions.map((option) => [option.roomTypeId, option])).values()); const selection = hotelSelections[resultHotelId] ?? { roomTypeId: roomChoices[0]?.roomTypeId ?? '', ratePlanId: roomChoices[0]?.ratePlanId ?? '' }; const rateChoices = Array.from(new Map(hotelOptions.filter((option) => option.roomTypeId === selection.roomTypeId).map((option) => [option.ratePlanId, option])).values()); const selectedOption = hotelOptions.find((option) => option.roomTypeId === selection.roomTypeId && option.ratePlanId === selection.ratePlanId) ?? rateChoices[0] ?? hotelOptions[0]; const setSelection = (next: { roomTypeId: string; ratePlanId: string }) => setHotelSelections((current) => ({ ...current, [resultHotelId]: next })); return <article className="bookingRoomCard" key={resultHotelId}><div className="bookingRoomImage"><img src={apiAssetUrl(hotel?.images?.[0]?.url ?? hotel?.ogImageUrl) || '/rainwood-placeholder.svg'} alt={hotel?.images?.[0]?.altText ?? hotel?.name ?? 'RainWood Hotels'} /></div><div className="bookingRoomBody"><span className="bookingRoomCity">{hotel?.city}</span><h3>{hotel?.name}</h3><p className="bookingRoomHotel">{selectedOption.roomType}</p><div className="bookingRoomSelectors"><label>Room type<select value={selection.roomTypeId} onChange={(event) => { const nextRoomTypeId = event.target.value; const nextRate = hotelOptions.find((option) => option.roomTypeId === nextRoomTypeId); setSelection({ roomTypeId: nextRoomTypeId, ratePlanId: nextRate?.ratePlanId ?? '' }); }}>{roomChoices.map((option) => <option key={option.roomTypeId} value={option.roomTypeId}>{option.roomType}</option>)}</select></label><label>Rate / meal plan<select value={selection.ratePlanId} onChange={(event) => setSelection({ ...selection, ratePlanId: event.target.value })}>{rateChoices.map((option) => <option key={option.ratePlanId} value={option.ratePlanId}>{option.ratePlan} · {option.mealPlan}</option>)}</select></label></div><div className="bookingRoomMeta"><span>Available {selectedOption.availableRooms ?? ' - '}</span><strong>{selectedOption.mealPlan}</strong><span>{selectedOption.rooms} room{selectedOption.rooms === 1 ? '' : 's'}</span><span>{selectedOption.adults} adult{selectedOption.adults === 1 ? '' : 's'}</span></div><div className="bookingRoomRate"><div><small>Grand total</small><strong>{money(selectedOption.total)}</strong><span>Taxes: {money(selectedOption.taxTotal)}</span></div><button type="button" className="btn" onClick={() => void createHold(selectedOption)} disabled={busy}>{busy ? 'Holding...' : agentMode ? 'Add to cart' : 'Book this room'}</button></div></div></article>; })}</div>}</section>}
+    {step === 'guest' && hold && <section className="bookingCheckoutGrid"><aside className="formCard bookingCart"><div className="rangeSectionHeader"><div><span className="eyebrow">Cart details</span><h2>{selected?.roomType}</h2></div><span className="status ok">Held</span></div><p className="mutedText">{selected?.ratePlan} · {selected?.mealPlan}</p><dl className="bookingSummary"><div><dt>Stay</dt><dd>{checkIn} to {checkOut} ({nights} night{nights === 1 ? '' : 's'})</dd></div><div><dt>Rooms / guests</dt><dd>{rooms} room{rooms === 1 ? '' : 's'} · {adults} adults · {children} children</dd></div><div><dt>Room total</dt><dd>{money(holdTotal)}</dd></div></dl><p className="notice">Inventory held until {new Date(hold.expiresAt).toLocaleTimeString()}.</p>{agentMode && <p className={walletBalance >= holdTotal ? 'walletCheck okText' : 'walletCheck errorText'}>Wallet after booking: {money(walletBalance - holdTotal)}</p>}</aside><form className="formCard bookingGuestForm" onSubmit={submitGuest}><div className="rangeSectionHeader"><div><span className="eyebrow">Guest details</span><h2>Complete reservation</h2></div><span>{agentMode ? 'Wallet booking' : 'Pay at confirmation'}</span></div><div className="three"><label>Salutation<select value={guest.salutation} onChange={(event) => updateGuest('salutation', event.target.value)}><option>Mr</option><option>Mrs</option><option>Ms</option><option>Dr</option></select></label><label>First name<input value={guest.firstName} onChange={(event) => updateGuest('firstName', event.target.value)} autoComplete="given-name" required /></label><label>Last name<input value={guest.lastName} onChange={(event) => updateGuest('lastName', event.target.value)} autoComplete="family-name" required /></label></div><div className="two"><label>Mobile number<div className="phoneInput"><input className="phoneCode" value={guest.countryCode} onChange={(event) => updateGuest('countryCode', event.target.value)} aria-label="Country code" required /><input value={guest.mobile} onChange={(event) => updateGuest('mobile', event.target.value)} autoComplete="tel" required /></div></label><label>Email address<input type="email" value={guest.email} onChange={(event) => updateGuest('email', event.target.value)} autoComplete="email" required /></label></div><label>Guest address<textarea rows={2} value={guest.address} onChange={(event) => updateGuest('address', event.target.value)} /></label><div className="two"><label>GST / tax number<input value={guest.gstin} onChange={(event) => updateGuest('gstin', event.target.value)} /></label><label>Bill to company<input value={guest.companyName} onChange={(event) => updateGuest('companyName', event.target.value)} /></label></div><label>Billing address<textarea rows={2} value={guest.billingAddress} onChange={(event) => updateGuest('billingAddress', event.target.value)} /></label><div className="two"><label>Internal notes<textarea rows={2} value={guest.internalRemark} onChange={(event) => updateGuest('internalRemark', event.target.value)} /></label><label>Mail message<textarea rows={2} value={guest.mailMessage} onChange={(event) => updateGuest('mailMessage', event.target.value)} /></label></div><label>Agent reference number<input value={guest.referenceNo} onChange={(event) => updateGuest('referenceNo', event.target.value)} placeholder="Optional" /></label><label className="checkLabel"><input type="checkbox" checked={guest.agree} onChange={(event) => updateGuest('agree', event.target.checked)} required /> I agree to the hotel booking and cancellation policies</label><button className="btn full" disabled={busy}>{busy ? 'Confirming...' : agentMode ? `Confirm booking · ${money(holdTotal)}` : 'Review and continue to payment'}</button></form></section>}
     {step === 'payment' && reservation && <section className="formCard"><h2>Payment</h2><p>Reservation <b>{reservation.reference}</b> is ready for secure payment.</p><div className="summary"><p>Total <strong>{money(Number(reservation.totalAmount))}</strong></p><p>Balance due <strong>{money(Number(reservation.balanceAmount))}</strong></p></div><button className="btn full" onClick={completeMockPayment} disabled={busy}>{busy ? 'Processing payment...' : 'Complete mock payment'}</button><p className="hint">Local mock mode sends a signed provider event through the backend webhook processor.</p></section>}
-    {step === 'confirmation' && reservation && <section className="formCard confirmation"><span className="status ok">Confirmed</span><h2>Booking confirmed</h2><p>Thank you, {reservation.guestName}. Your reference is <b>{reservation.reference}</b>.</p><p>{reservation.hotel.name} - {reservation.checkIn} to {reservation.checkOut}</p><p>Payment status: <b>{reservation.paymentStatus}</b></p><a className="btn" href={`/booking/confirmation?reference=${encodeURIComponent(reservation.reference)}`}>View confirmation</a></section>}
+    {step === 'confirmation' && reservation && <section className="formCard confirmation"><span className="status ok">Confirmed</span><h2>Booking confirmed</h2><p>Thank you, {reservation.guestName}. Your reference is <b>{reservation.reference}</b>.</p><p>{reservation.hotel.name} - {reservation.checkIn} to {reservation.checkOut}</p><p>Payment status: <b>{reservation.paymentStatus}</b></p>{agentMode && <p className="notice">The booking amount was deducted from your agent wallet.</p>}<div className="actions"><a className="btn" href={`/booking/confirmation?reference=${encodeURIComponent(reservation.reference)}`}>View confirmation</a>{agentMode && <a className="btn secondary" href="/agent/bookings">View my bookings</a>}</div></section>}
   </div>;
 }
