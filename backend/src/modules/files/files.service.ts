@@ -42,8 +42,10 @@ export class FilesService {
     return true;
   }
 
-  async authorize(fileId: string, user: { role: string }) {
+  async authorize(fileId: string, user: { id: string; role: string }) {
     if (['SUPER_ADMIN', 'ADMIN', 'ACCOUNTS', 'RESERVATION'].includes(user.role)) return this.get(fileId);
+    const file = await this.p.storedFile.findUnique({ where: { id: fileId } });
+    if (file?.createdById === user.id) return this.get(fileId);
     throw new ForbiddenException('You are not allowed to access this file');
   }
 

@@ -40,6 +40,22 @@ export class FilesController {
     return this.s.save(file.buffer, file.originalname, file.mimetype, 'OTHER', user.id);
   }
 
+  @Post('agent-document')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (_request, file, callback) => callback(null, ['image/jpeg', 'image/png', 'application/pdf'].includes(file.mimetype)) }))
+  uploadAgentDocument(@UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: any) {
+    if (!file) throw new BadRequestException('A PDF, PNG, or JPEG agent document is required');
+    return this.s.save(file.buffer, file.originalname, file.mimetype, 'OTHER', user.id);
+  }
+
+  @Post('profile-image')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 2 * 1024 * 1024 }, fileFilter: (_request, file, callback) => callback(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) }))
+  uploadProfileImage(@UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: any) {
+    if (!file) throw new BadRequestException('A JPEG, PNG, or WebP profile image is required');
+    return this.s.save(file.buffer, file.originalname, file.mimetype, 'OTHER', user.id, 2 * 1024 * 1024);
+  }
+
   @Get('public/:id')
   async publicImage(@Param('id') id: string) {
     const { file, buffer } = await this.s.get(id);

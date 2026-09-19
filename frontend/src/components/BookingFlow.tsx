@@ -8,7 +8,8 @@ import { dateInDays, nextDate, validateSearchInput } from '../lib/booking-helper
 
 type Hold = { token: string; expiresAt: string; lines: { quotedTotal: number | string; quotedTax?: number | string }[] };
 type Wallet = { balance: number | string; currency?: string };
-type Step = 'search' | 'room' | 'guest' | 'payment' | 'confirmation';
+type AssignedHotelPlan = { hotel: { name: string; city: string } };
+type Step = 'hotels' | 'search' | 'room' | 'guest' | 'payment' | 'confirmation';
 type GuestForm = {
   salutation: string;
   firstName: string;
@@ -55,6 +56,61 @@ function displayDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
+const fallbackHotelImages: Record<string, string> = {
+  'rainwood-aurum-kodaikanal': 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=900&q=80',
+  'rainwood-lakeshore-alleppey': 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=900&q=80',
+  'rainwood-misty-hills-munnar': 'https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=900&q=80',
+};
+
+function AgentHotelImage({ hotel, alt }: { hotel?: Hotel; alt: string }) {
+  const source = apiAssetUrl(hotel?.images?.[0]?.url ?? hotel?.ogImageUrl);
+  const fallback = (hotel?.slug && fallbackHotelImages[hotel.slug]) || 'https://images.unsplash.com/photo-1564501049412-61c2a3083791?auto=format&fit=crop&w=900&q=80';
+  const [imageUrl, setImageUrl] = useState(source || fallback);
+
+  useEffect(() => setImageUrl(source || fallback), [fallback, source]);
+
+  return <img src={imageUrl} alt={alt} onError={() => setImageUrl((current) => current === fallback ? current : fallback)} />;
+}
+
+function AgentHotelSelection({ hotels, onSelect }: { hotels: Hotel[]; onSelect: (hotelId: string) => void }) {
+  const [city, setCity] = useState('all');
+  const [query, setQuery] = useState('');
+  const cities = Array.from(new Set(hotels.map((hotel) => hotel.city))).sort();
+  const filteredHotels = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return hotels.filter((hotel) => {
+      const cityMatches = city === 'all' || hotel.city === city;
+      const queryMatches = !normalizedQuery || `${hotel.name} ${hotel.city} ${hotel.description ?? ''}`.toLowerCase().includes(normalizedQuery);
+      return cityMatches && queryMatches;
+    });
+  }, [city, hotels, query]);
+
+  return <section className="agentHotelSelection" aria-label="Choose a hotel">
+    <aside className="agentHotelFilters">
+      <h2>Filter your stay</h2>
+      <label htmlFor="agent-hotel-city">Select city</label>
+      <select id="agent-hotel-city" value={city} onChange={(event) => setCity(event.target.value)}>
+        <option value="all">All cities</option>
+        {cities.map((item) => <option key={item} value={item}>{item}</option>)}
+      </select>
+    </aside>
+    <div className="agentHotelCatalog">
+      <div className="agentHotelCatalogToolbar">
+        <div><span className="agentHotelRibbon">All available hotels &amp; resorts</span><strong>{filteredHotels.length}</strong></div>
+        <div className="agentHotelSearch"><input aria-label="Search hotel's name" placeholder="Search hotel's name" value={query} onChange={(event) => setQuery(event.target.value)} /><button type="button" onClick={() => setQuery(query.trim())}>Go</button></div>
+      </div>
+      {!filteredHotels.length ? <p className="empty">No assigned hotels match your search.</p> : <div className="agentHotelGrid">
+        {filteredHotels.map((hotel) => {
+          return <article className="agentHotelCard" key={hotel.id}>
+            <div className="agentHotelCardImage"><AgentHotelImage hotel={hotel} alt={hotel.images?.[0]?.altText ?? `${hotel.name} property`} /></div>
+            <div className="agentHotelCardBody"><div className="agentHotelStars" aria-label="RainWood hotel">★★★★★</div><h3>{hotel.name}</h3><p>{hotel.city}</p><button type="button" className="btn" onClick={() => onSelect(hotel.id)}>Book now</button></div>
+          </article>;
+        })}
+      </div>}
+    </div>
+  </section>;
+}
+
 function AgentBookingRail({
   checkIn,
   checkOut,
@@ -70,6 +126,7 @@ function AgentBookingRail({
   onRooms,
   onBook,
   onShowTariff,
+  onChangeHotel,
 }: {
   checkIn: string;
   checkOut: string;
@@ -85,8 +142,10 @@ function AgentBookingRail({
   onRooms: (value: number) => void;
   onBook: () => void;
   onShowTariff: () => void;
+  onChangeHotel?: () => void;
 }) {
   return <aside className="agentBookingRail" aria-label="Booking criteria">
+    {onChangeHotel && <button type="button" className="agentChangeHotel" onClick={onChangeHotel}>← Change hotel</button>}
     <label>Checkin Date<input type="date" value={checkIn} onChange={(event) => onCheckIn(event.target.value)} /></label>
     <label>Nights<input type="number" min="1" max="30" value={nights} onChange={(event) => onNights(Math.max(1, Number(event.target.value) || 1))} /></label>
     <label>Checkout Date<input type="date" value={checkOut} onChange={(event) => onCheckOut(event.target.value)} /></label>
@@ -142,7 +201,6 @@ function AgentRoomResults({
             const roomKey = `${resultHotelId}:${roomTypeId}`;
             const expanded = Boolean(expandedRoomTypes[roomKey]);
             const available = Math.max(...roomOptions.map((option) => Number(option.availableRooms ?? 0)));
-            const image = apiAssetUrl(hotel?.images?.[0]?.url ?? hotel?.ogImageUrl) || '/rainwood-placeholder.svg';
             return <article className={`agentAbadRoom${expanded ? ' expanded' : ''}`} key={roomKey}>
               <div className="agentAbadRoomHeader">
                 <div><strong>{primary.roomType}</strong><span>({available} Available)</span></div>
@@ -150,7 +208,7 @@ function AgentRoomResults({
                 <button type="button" className="agentRoomToggle" aria-label={`${expanded ? 'Collapse' : 'Expand'} ${primary.roomType}`} aria-expanded={expanded} onClick={() => onToggleRoom(roomKey)}>{expanded ? '−' : '+'}</button>
               </div>
               {expanded && <div className="agentAbadRoomDetails">
-                <div className="agentAbadRoomImage"><img src={image} alt={hotel?.images?.[0]?.altText ?? primary.roomType} /></div>
+                <div className="agentAbadRoomImage"><AgentHotelImage hotel={hotel} alt={hotel?.images?.[0]?.altText ?? primary.roomType} /></div>
                 <div className="agentTariffContent">
                   {roomOptions.map((option) => {
                     const selectedInCart = cartOption?.roomTypeId === option.roomTypeId && cartOption.ratePlanId === option.ratePlanId;
@@ -219,15 +277,20 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
   const [reservation, setReservation] = useState<ReservationSummary | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [guest, setGuest] = useState<GuestForm>(initialGuest);
-  const [step, setStep] = useState<Step>('search');
+  const [step, setStep] = useState<Step>(agentMode ? 'hotels' : 'search');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [hotelPickerOpen, setHotelPickerOpen] = useState(false);
 
   useEffect(() => {
-    apiRequest<Hotel[]>('/hotels').then((items) => {
-      setHotels(items);
+    apiRequest<Hotel[]>('/hotels').then(async (items) => {
+      const agentItems = agentMode ? await apiRequest<AssignedHotelPlan[]>('/reservations/mine/rate-plans') : [];
+      const assignedHotels = new Set(agentItems.map((plan) => `${plan.hotel.name}::${plan.hotel.city}`));
+      const nextHotels = agentMode ? items.filter((item) => assignedHotels.has(`${item.name}::${item.city}`)) : items;
+      setHotels(nextHotels);
       const requestedSlug = params.get('hotel');
-      setHotelId(requestedSlug ? items.find((item) => item.slug === requestedSlug)?.id ?? '' : '');
+      const requestedHotel = requestedSlug ? nextHotels.find((item) => item.slug === requestedSlug) : undefined;
+      setHotelId(requestedHotel?.id ?? '');
       const requestedCheckIn = params.get('checkIn');
       const requestedCheckOut = params.get('checkOut');
       if (requestedCheckIn) setCheckIn(requestedCheckIn < dateInDays(0) ? dateInDays(1) : requestedCheckIn);
@@ -235,6 +298,7 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
       if (params.get('adults')) setAdults(Number(params.get('adults')));
       if (params.get('children')) setChildren(Number(params.get('children')));
       if (params.get('rooms')) setRooms(Number(params.get('rooms')));
+      if (agentMode && requestedHotel) setStep('search');
     }).catch((reason: Error) => setError(reason.message));
   }, [params]);
 
@@ -259,6 +323,21 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
   const holdTotal = hold?.lines.reduce((total, line) => total + Number(line.quotedTotal), 0) ?? Number(selected?.total ?? 0);
   const walletBalance = Number(wallet?.balance ?? 0);
   const nights = selected?.nights ?? Math.max(1, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86_400_000));
+
+  function openHotelPicker() {
+    setHotelPickerOpen(true);
+  }
+
+  function selectHotel(selectedId: string) {
+    setHotelPickerOpen(false);
+    setHotelId(selectedId);
+    setOptions([]);
+    setSelected(null);
+    setHold(null);
+    setCartOption(null);
+    setExpandedRoomTypes({});
+    setStep('search');
+  }
 
   async function searchBooking() {
     setError(''); setBusy(true);
@@ -354,10 +433,12 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
   return <div className={`page bookingWorkspace${agentMode ? ' agentBookingFlow' : ''}`}>
     <div className="pageTitle public"><span>{agentMode ? 'Partner reservation desk' : 'Secure direct reservation'}</span><h1>{agentMode ? 'Create agent booking' : 'Book your stay'}</h1><p>{selectedHotel?.name ?? (agentMode ? 'Search assigned rates, add guest details and confirm against your wallet.' : 'Live availability, transparent pricing and confirmation in one flow.')}</p></div>
     {agentMode && <div className="agentBookingWallet"><div><span>Available wallet balance</span><strong>{wallet ? money(walletBalance) : 'Loading...'}</strong></div><a className="smallBtn" href="/agent/wallet">Recharge wallet</a></div>}
-    <ol className="steps horizontal" aria-label="Booking progress">{steps.map(([value, label]) => <li className={step === value ? 'active' : ''} key={value}>{label}</li>)}</ol>
+    {step !== 'hotels' && <ol className="steps horizontal" aria-label="Booking progress">{steps.map(([value, label]) => <li className={step === value ? 'active' : ''} key={value}>{label}</li>)}</ol>}
     {error && <p className="error" role="alert">{error}</p>}
-    {agentMode && step !== 'confirmation' && step !== 'search' && <AgentBookingRail checkIn={checkIn} checkOut={checkOut} nights={nights} adults={adults} children={children} rooms={rooms} onCheckIn={(value) => { setCheckIn(value); if (checkOut <= value) setCheckOut(nextDate(value)); }} onCheckOut={(value) => setCheckOut(value < nextDate(checkIn) ? nextDate(checkIn) : value)} onNights={(value) => setCheckOut(dateAfterNights(checkIn, value))} onAdults={setAdults} onChildren={setChildren} onRooms={setRooms} onBook={() => { if (step === 'room') { if (cartOption) void createHold(cartOption); else setError('Select a room tariff before booking.'); } else void searchBooking(); }} onShowTariff={() => { if (options.length) setStep('room'); else void searchBooking(); }} />}
-    {step === 'search' && agentMode && <div className="agentSearchLayout"><AgentBookingRail checkIn={checkIn} checkOut={checkOut} nights={nights} adults={adults} children={children} rooms={rooms} onCheckIn={(value) => { setCheckIn(value); if (checkOut <= value) setCheckOut(nextDate(value)); }} onCheckOut={(value) => setCheckOut(value < nextDate(checkIn) ? nextDate(checkIn) : value)} onNights={(value) => setCheckOut(dateAfterNights(checkIn, value))} onAdults={setAdults} onChildren={setChildren} onRooms={setRooms} onBook={() => void searchBooking()} onShowTariff={() => void searchBooking()} /><section className="agentHotelIntro"><span>Selected property</span><h2>{selectedHotel?.name ?? 'Choose your hotel'}</h2><p>{selectedHotel?.city ?? 'Select a property and stay dates from the booking rail.'}</p><p className="agentHotelIntroHint">Assigned partner rates and live availability will appear here after you search.</p></section></div>}
+    {agentMode && step !== 'confirmation' && step !== 'search' && step !== 'hotels' && <AgentBookingRail checkIn={checkIn} checkOut={checkOut} nights={nights} adults={adults} children={children} rooms={rooms} onCheckIn={(value) => { setCheckIn(value); if (checkOut <= value) setCheckOut(nextDate(value)); }} onCheckOut={(value) => setCheckOut(value < nextDate(checkIn) ? nextDate(checkIn) : value)} onNights={(value) => setCheckOut(dateAfterNights(checkIn, value))} onAdults={setAdults} onChildren={setChildren} onRooms={setRooms} onBook={() => { if (step === 'room') { if (cartOption) void createHold(cartOption); else setError('Select a room tariff before booking.'); } else void searchBooking(); }} onShowTariff={() => { if (options.length) setStep('room'); else void searchBooking(); }} onChangeHotel={step === 'room' ? openHotelPicker : undefined} />}
+    {step === 'hotels' && agentMode && <AgentHotelSelection hotels={hotels} onSelect={selectHotel} />}
+    {agentMode && hotelPickerOpen && <div className="agentHotelModalBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setHotelPickerOpen(false); }}><section className="agentHotelModal" role="dialog" aria-modal="true" aria-labelledby="agent-change-hotel-title"><div className="agentHotelModalHeader"><h2 id="agent-change-hotel-title">Change hotel</h2><button type="button" aria-label="Close change hotel" onClick={() => setHotelPickerOpen(false)}>×</button></div><AgentHotelSelection hotels={hotels} onSelect={selectHotel} /></section></div>}
+    {step === 'search' && agentMode && <div className="agentSearchLayout"><AgentBookingRail checkIn={checkIn} checkOut={checkOut} nights={nights} adults={adults} children={children} rooms={rooms} onCheckIn={(value) => { setCheckIn(value); if (checkOut <= value) setCheckOut(nextDate(value)); }} onCheckOut={(value) => setCheckOut(value < nextDate(checkIn) ? nextDate(checkIn) : value)} onNights={(value) => setCheckOut(dateAfterNights(checkIn, value))} onAdults={setAdults} onChildren={setChildren} onRooms={setRooms} onBook={() => void searchBooking()} onShowTariff={() => void searchBooking()} onChangeHotel={openHotelPicker} /><section className="agentHotelIntro"><span>Selected property</span><h2>{selectedHotel?.name ?? 'Choose your hotel'}</h2><p>{selectedHotel?.city ?? 'Select a property and stay dates from the booking rail.'}</p><p className="agentHotelIntroHint">Select dates and occupancy, then use Book or Show Tariff to check assigned availability.</p></section></div>}
     {step === 'search' && !agentMode && <div className="agentSearchLayout"><form className="formCard bookingForm" onSubmit={search}>
       <h2>Choose your stay</h2>
       <p className="mutedText">{agentMode ? 'Only hotels and rate plans assigned to your agent account will be shown.' : 'Select dates and occupancy to see live room availability.'}</p>

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Optional, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
 import { PrismaService } from '../../common/prisma.service';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { AgentRateBatchDto, AgentRatePlanUpdateDto } from './users.dto';
 import { normalizeOccupancyPrices } from '../../common/rate-pricing';
 import { parseDateOnly } from '../../common/dates';
+import { AgentsService } from '../agents/agents.service';
 
 class CreateUserDto {
   @IsEmail() email!: string;
@@ -32,13 +33,15 @@ class AgentRatePlanMappingDto {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('SUPER_ADMIN', 'ADMIN')
 export class UsersController {
-  constructor(private p: PrismaService) {}
+  constructor(private p: PrismaService, @Optional() private agentsService?: AgentsService) {}
   @Get('') list() { return this.p.user.findMany({ select: { id: true, email: true, name: true, role: true, active: true, createdAt: true } }); }
   @Get('agents') agents() { return this.p.user.findMany({ where: { role: 'AGENT' }, select: { id: true, email: true, name: true, role: true, active: true, createdAt: true, assignedRatePlans: { include: { ratePlan: { include: { roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } }, orderBy: { createdAt: 'asc' } }); }
   @Post('') async create(@Body() d: CreateUserDto) { return this.p.user.create({ data: { email: d.email.toLowerCase(), name: d.name, role: (d.role || 'RESERVATION') as any, passwordHash: await bcrypt.hash(d.password, 12), active: true }, select: { id: true, email: true, name: true, role: true, active: true } }); }
   @Post('agents') async createAgent(@Body() d: CreateUserDto) { return this.p.user.create({ data: { email: d.email.toLowerCase(), name: d.name, passwordHash: await bcrypt.hash(d.password, 12), role: 'AGENT', active: true }, select: { id: true, email: true, name: true, role: true, active: true } }); }
   @Patch(':id') update(@Param('id') id: string, @Body() d: UpdateUserDto) { return this.p.user.update({ where: { id }, data: { name: d.name, role: d.role as any, active: d.active, tokenVersion: d.revokeSessions ? { increment: 1 } : undefined }, select: { id: true, email: true, name: true, role: true, active: true } }); }
   @Patch('agents/:id') updateAgent(@Param('id') id: string, @Body() d: UpdateUserDto) { return this.p.user.update({ where: { id, role: 'AGENT' }, data: { name: d.name, active: d.active, tokenVersion: d.revokeSessions ? { increment: 1 } : undefined }, select: { id: true, email: true, name: true, role: true, active: true } }); }
+  @Get('agents/:agentId/documents') agentDocuments(@Param('agentId') agentId: string) { return this.agentsService!.listDocuments(agentId); }
+  @Patch('agents/:agentId/documents/:id') reviewAgentDocument(@Param('agentId') agentId: string, @Param('id') id: string, @Body() body: { status?: string; reviewRemark?: string }) { return this.agentsService!.reviewDocument(agentId, id, body.status ?? '', body.reviewRemark); }
   @Put('agents/:id/rate-plans') async mapRatePlans(@Param('id') id: string, @Body() d: AgentRatePlanMappingDto) {
     const agent = await this.p.user.findFirstOrThrow({ where: { id, role: 'AGENT' }, select: { id: true } });
     const ratePlanIds = [...new Set(d.ratePlanIds ?? [])];

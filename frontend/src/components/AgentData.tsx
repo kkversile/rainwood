@@ -3,17 +3,17 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiRequest, clearAccessToken, setAccessToken } from '../lib/api';
-import { AgentShell } from './Shell';
+import { AgentPortalShell } from './AgentPortalShell';
 
 export type AgentUser = { id: string; name: string; email: string; role: string };
-export type AgentReservation = { reference: string; guestName: string; checkIn: string; checkOut: string; status: string; paymentStatus: string; totalAmount: number | string; balanceAmount: number | string; hotel: { name: string }; lines: { roomType: { name: string }; ratePlan: { name: string }; rooms: number }[] };
+export type AgentReservation = { reference: string; guestName: string; checkIn: string; checkOut: string; createdAt?: string; status: string; paymentStatus: string; totalAmount: number | string; advanceAmount?: number | string; balanceAmount: number | string; hotel: { name: string; city: string }; lines: { roomType: { name: string }; ratePlan: { name: string }; rooms: number }[] };
 
 export function AgentWorkspace({ title, children }: { title: string; children: (user: AgentUser) => React.ReactNode }) {
   const router = useRouter(); const [user, setUser] = useState<AgentUser | null>(null);
   useEffect(() => { apiRequest<{ accessToken: string; user: AgentUser }>('/auth/refresh', { method: 'POST' }).then((session) => { if (session.user.role !== 'AGENT') { router.replace('/agent/login'); return; } setAccessToken(session.accessToken); setUser(session.user); }).catch(() => router.replace('/agent/login')); }, [router]);
   async function logout() { await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => undefined); clearAccessToken(); router.replace('/agent/login'); }
   if (!user) return <main className="page"><p className="loading">Loading agent portal...</p></main>;
-  return <AgentShell title={title} user={user} onLogout={() => void logout()}>{children(user)}</AgentShell>;
+  return <AgentPortalShell title={title} user={user} onLogout={() => void logout()}>{children(user)}</AgentPortalShell>;
 }
 
 export function AgentReservations() {

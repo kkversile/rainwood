@@ -1,5 +1,6 @@
 'use client';
 
-import { AgentReservations, AgentWorkspace } from '../../../components/AgentData';
+import { AgentWorkspace } from '../../../components/AgentData';
+import { AgentBookingTracker } from '../../../components/AgentReports';
 
-export default function AgentBookingsPage() { return <AgentWorkspace title="My Bookings">{() => <AgentReservations />}</AgentWorkspace>; }
+export default function AgentBookingsPage() { return <AgentWorkspace title="Booking Tracker">{() => <AgentBookingTracker />}</AgentWorkspace>; }

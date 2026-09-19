@@ -1,6 +1,11 @@
 import type { Metadata } from 'next';
 import 'leaflet/dist/leaflet.css';
 import './globals.css';
+import './agent-booking-selection.css';
+import './agent-reports.css';
+import './agent-report-tweaks.css';
+import './agent-settings.css';
+import './agent-announcements.css';
 import './amenities-final.css';
 import './amenities-icons.css';
 import './amenities-icons-fix.css';

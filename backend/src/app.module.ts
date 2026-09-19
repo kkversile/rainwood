@@ -21,6 +21,7 @@ import { ReconciliationModule } from './modules/reconciliation/reconciliation.mo
 import { WalletModule } from './modules/wallet/wallet.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { SiteSettingsModule } from './modules/site-settings/site-settings.module';
+import { AgentsModule } from './modules/agents/agents.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { SiteSettingsModule } from './modules/site-settings/site-settings.module
     WalletModule,
     ContactModule,
     SiteSettingsModule,
+    AgentsModule,
   ],
 })
 export class AppModule {}

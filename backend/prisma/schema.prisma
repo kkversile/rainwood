@@ -116,6 +116,12 @@ enum FileKind {
   OTHER
 }
 
+enum AgentDocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum ContactRequestStatus {
   NEW
   IN_PROGRESS
@@ -183,6 +189,9 @@ model User {
   auditLogs              AuditLog[]                @relation("AuditActor")
   createdReservations    Reservation[]             @relation("ReservationCreator")
   uploadedFiles          StoredFile[]              @relation("FileUploader")
+  agentDocuments         AgentDocument[]
+  profileImageFileId      String?                   @unique
+  profileImageFile        StoredFile?               @relation("ProfileImage", fields: [profileImageFileId], references: [id], onDelete: SetNull)
   verifiedPayments       Payment[]                 @relation("PaymentVerifier")
   requestedCancellations CancellationRequest[]     @relation("CancellationRequester")
   approvedCancellations  CancellationRequest[]     @relation("CancellationApprover")
@@ -596,6 +605,24 @@ model AgentWallet {
   updatedAt    DateTime            @updatedAt
 }
 
+model AgentDocument {
+  id           String              @id @default(cuid())
+  agentId      String
+  agent        User                @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  documentType String
+  description  String?
+  fileId       String
+  file         StoredFile          @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  status       AgentDocumentStatus @default(PENDING)
+  reviewRemark String?
+  reviewedAt   DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([agentId, status, createdAt])
+  @@unique([agentId, documentType])
+}
+
 model WalletTransaction {
   id           String                @id @default(cuid())
   walletId     String
@@ -919,6 +946,8 @@ model StoredFile {
   createdBy     User?     @relation("FileUploader", fields: [createdById], references: [id], onDelete: SetNull)
   paymentProofs Payment[] @relation("PaymentProof")
   vouchers      Voucher[] @relation("VoucherFile")
+  agentDocuments AgentDocument[]
+  profileImageUser User?         @relation("ProfileImage")
   createdAt     DateTime  @default(now())
 }
 

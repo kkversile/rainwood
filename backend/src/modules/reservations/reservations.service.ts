@@ -116,7 +116,7 @@ export class ReservationsService {
   }
 
   async listForUser(userId: string) {
-    return this.p.reservation.findMany({ where: { createdById: userId }, orderBy: { createdAt: 'desc' }, take: 100, select: { reference: true, guestName: true, checkIn: true, checkOut: true, source: true, status: true, paymentStatus: true, totalAmount: true, balanceAmount: true, hotel: { select: { name: true } }, lines: { select: { roomType: { select: { name: true } }, ratePlan: { select: { name: true } }, rooms: true } } } });
+    return this.p.reservation.findMany({ where: { createdById: userId }, orderBy: { createdAt: 'desc' }, take: 100, select: { reference: true, guestName: true, checkIn: true, checkOut: true, createdAt: true, source: true, status: true, paymentStatus: true, totalAmount: true, advanceAmount: true, balanceAmount: true, hotel: { select: { name: true, city: true } }, lines: { select: { roomType: { select: { name: true } }, ratePlan: { select: { name: true } }, rooms: true } } } });
   }
 
   async listRatePlansForUser(userId: string) {
