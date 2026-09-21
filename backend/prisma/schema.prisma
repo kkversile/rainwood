@@ -165,6 +165,16 @@ enum WebhookStatus {
   FAILED
 }
 
+enum AgentPaymentPolicy {
+  PERCENTAGE
+  CREDIT
+}
+
+enum SupplementaryChargeScope {
+  AGENTS
+  ALL
+}
+
 model User {
   id                     String                    @id @default(cuid())
   email                  String                    @unique
@@ -182,6 +192,8 @@ model User {
   additionalInformation  String?
   role                   UserRole                  @default(RESERVATION)
   active                 Boolean                   @default(true)
+  agentPaymentPolicy     AgentPaymentPolicy?
+  bookingPaymentPercent  Decimal?                  @db.Decimal(5, 2)
   tokenVersion           Int                       @default(0)
   failedLoginCount       Int                       @default(0)
   lockedUntil            DateTime?
@@ -272,6 +284,7 @@ model Hotel {
   reviews             HotelReview[]
   taxes               Tax[]
   charges             Charge[]
+  supplementaryCharges HotelSupplementaryCharge[]
   cancellationRules   CancellationRule[]
   policy              HotelPolicy?
   contacts            HotelContact[]
@@ -601,6 +614,7 @@ model AgentWallet {
   currency     String              @default("INR")
   balance      Decimal             @default(0) @db.Decimal(14, 2)
   transactions WalletTransaction[]
+  rechargeAttempts WalletRechargeAttempt[]
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 }
@@ -669,6 +683,22 @@ model Charge {
   name    String
   amount  Decimal @db.Decimal(12, 2)
   active  Boolean @default(true)
+}
+
+model HotelSupplementaryCharge {
+  id                 String                    @id @default(cuid())
+  hotelId            String
+  hotel              Hotel                     @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  name               String
+  startDate          DateTime                  @db.Date
+  endDate            DateTime                  @db.Date
+  amountPerRoomNight Decimal                   @db.Decimal(12, 2)
+  scope              SupplementaryChargeScope  @default(AGENTS)
+  active             Boolean                   @default(true)
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@index([hotelId, active, startDate, endDate])
 }
 
 model InventoryDay {
@@ -780,6 +810,7 @@ model Reservation {
   advanceAmount      Decimal                   @default(0) @db.Decimal(12, 2)
   balanceAmount      Decimal                   @db.Decimal(12, 2)
   priceSnapshot      Json
+  paymentTermsSnapshot Json?
   policySnapshot     Json
   specialRequest     String?
   billingInstruction String?
@@ -872,6 +903,25 @@ model PaymentAttempt {
   expiresAt         DateTime?
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
+}
+
+model WalletRechargeAttempt {
+  id                String               @id @default(cuid())
+  walletId          String
+  wallet            AgentWallet          @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  provider          PaymentProvider
+  providerOrderId   String               @unique
+  providerPaymentId String?              @unique
+  idempotencyKey    String               @unique
+  amount            Decimal              @db.Decimal(12, 2)
+  currency          String               @default("INR")
+  status            PaymentAttemptStatus @default(CREATED)
+  providerPayload   Json?
+  expiresAt         DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([walletId, status, createdAt])
 }
 
 model WebhookEvent {

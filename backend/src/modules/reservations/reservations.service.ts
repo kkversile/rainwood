@@ -10,6 +10,7 @@ import { sha256 } from '../../common/security';
 import { serializable } from '../../common/transactions';
 import { assertReservationTransition } from './reservation-state';
 import { RateResolverService } from '../availability/rate-resolver';
+import { calculateAgentBookingPaymentTerms } from '../../common/agent-payment-terms';
 
 @Injectable()
 export class ReservationsService {
@@ -30,17 +31,21 @@ export class ReservationsService {
       const reservationReference = this.reference();
       const bookingTotal = hold.lines.reduce((sum, line) => sum + Number(line.quotedTotal), 0);
       const walletBooking = user?.role === 'AGENT';
+      const agent = walletBooking ? await tx.user.findFirst({ where: { id: user.id, role: 'AGENT', active: true }, select: { id: true, agentPaymentPolicy: true, bookingPaymentPercent: true } }) : null;
+      if (walletBooking && !agent) throw new ForbiddenException('The agent account is not available for booking');
+      const paymentTerms = walletBooking ? calculateAgentBookingPaymentTerms(bookingTotal, agent!) : null;
       const lineSnapshots = hold.lines.map((line) => ({
         breakdown: Array.isArray(line.quotedBreakdown) ? line.quotedBreakdown as any[] : [],
         agentRatePlanId: Array.isArray(line.quotedBreakdown) ? (line.quotedBreakdown as any[]).find((night) => night.agentRatePlanId)?.agentRatePlanId ?? null : null,
       }));
       let walletDebit: { walletId: string; balanceAfter: any } | undefined;
-      if (user?.role === 'AGENT') {
+      if (walletBooking && paymentTerms && paymentTerms.requiredAtBooking > 0) {
         const wallet = await tx.agentWallet.findUnique({ where: { agentId: user.id } });
-        if (!wallet || Number(wallet.balance) < bookingTotal) throw new BadRequestException(`Insufficient wallet balance. Required INR ${bookingTotal.toFixed(2)}.`);
-        const updatedWallet = await tx.agentWallet.update({ where: { id: wallet.id }, data: { balance: { decrement: bookingTotal } } });
+        if (!wallet || Number(wallet.balance) < paymentTerms.requiredAtBooking) throw new BadRequestException(`Insufficient wallet balance. Required INR ${paymentTerms.requiredAtBooking.toFixed(2)}.`);
+        const updatedWallet = await tx.agentWallet.update({ where: { id: wallet.id }, data: { balance: { decrement: paymentTerms.requiredAtBooking } } });
         walletDebit = { walletId: wallet.id, balanceAfter: updatedWallet.balance };
       }
+      const agentPaymentStatus = paymentTerms?.requiredAtBooking === 0 ? 'UNPAID' : paymentTerms?.balanceAtBooking === 0 ? 'PAID' : 'PARTIALLY_PAID';
       const reservation = await tx.reservation.create({
         data: {
           reference: reservationReference,
@@ -48,7 +53,7 @@ export class ReservationsService {
           source: body.source ?? 'WEBSITE',
           sourceName: body.sourceName ?? (user ? 'Agent booking' : undefined),
           status: walletBooking ? 'CONFIRMED' : 'PENDING_PAYMENT',
-          paymentStatus: walletBooking ? 'PAID' : 'UNPAID',
+          paymentStatus: walletBooking ? agentPaymentStatus : 'UNPAID',
           syncStatus: 'PENDING',
           guestName: body.guestName,
           email: body.email.toLowerCase(),
@@ -59,15 +64,16 @@ export class ReservationsService {
           checkOut: hold.lines[0].checkOut,
           totalAmount: hold.lines.reduce((sum, line) => sum + Number(line.quotedTotal), 0),
           taxAmount: hold.lines.reduce((sum, line) => sum + Number(line.quotedTax), 0),
-          advanceAmount: walletBooking ? bookingTotal : 0,
-          balanceAmount: walletBooking ? 0 : bookingTotal,
+          advanceAmount: walletBooking ? paymentTerms!.requiredAtBooking : 0,
+          balanceAmount: walletBooking ? paymentTerms!.balanceAtBooking : bookingTotal,
           priceSnapshot: hold.lines.map((line, index) => ({ roomTypeId: line.roomTypeId, ratePlanId: line.ratePlanId, agentRatePlanId: lineSnapshots[index].agentRatePlanId, priceSource: lineSnapshots[index].breakdown.some((night) => night.priceSource === 'AGENT_OVERRIDE') ? 'AGENT_OVERRIDE' : 'BASE', total: Number(line.quotedTotal), tax: Number(line.quotedTax), breakdown: line.quotedBreakdown })),
           policySnapshot: { policySource: 'hold', capturedAt: new Date().toISOString(), freeCancellationHours: 48, firstNightPenalty: true },
+          paymentTermsSnapshot: paymentTerms ? { agentId: agent!.id, policy: paymentTerms.policy, percentage: paymentTerms.percentage, bookingTotal, requiredAtBooking: paymentTerms.requiredAtBooking, balanceAtBooking: paymentTerms.balanceAtBooking, balanceDueRule: 'AT_CHECK_IN', capturedAt: new Date().toISOString() } : undefined,
           specialRequest: body.specialRequest,
           billingInstruction: body.billingInstruction,
           internalRemark: body.internalRemark,
           createdById: user?.id,
-          ...(walletBooking ? { payments: { create: { amount: bookingTotal, mode: 'WALLET', provider: 'MANUAL', verified: true, verifiedById: user.id, paidAt: new Date(), reference: `WALLET:${reservationReference}` } } } : {}),
+          ...(walletDebit && paymentTerms && paymentTerms.requiredAtBooking > 0 ? { payments: { create: { amount: paymentTerms.requiredAtBooking, mode: 'WALLET', provider: 'MANUAL', verified: true, verifiedById: user!.id, paidAt: new Date(), reference: `WALLET:${reservationReference}` } } } : {}),
           lines: {
             create: hold.lines.map((line, index) => ({
               roomType: { connect: { id: line.roomTypeId } },
@@ -87,8 +93,8 @@ export class ReservationsService {
         },
         include: { lines: { include: { nights: true, roomType: true, ratePlan: true } }, hotel: true },
       });
-      if (walletDebit) await tx.walletTransaction.create({ data: { walletId: walletDebit.walletId, type: 'BOOKING_DEBIT', amount: -bookingTotal, balanceAfter: walletDebit.balanceAfter, reference: reservation.reference, description: `Booking debit for ${reservation.reference}` } });
-      if (walletDebit) await tx.outboxJob.upsert({ where: { idempotencyKey: `voucher:${reservation.id}:v1` }, create: { type: 'GENERATE_VOUCHER', aggregateType: 'Reservation', aggregateId: reservation.id, idempotencyKey: `voucher:${reservation.id}:v1`, payload: { reservationId: reservation.id } }, update: {} });
+      if (walletDebit && paymentTerms) await tx.walletTransaction.create({ data: { walletId: walletDebit.walletId, type: 'BOOKING_DEBIT', amount: -paymentTerms.requiredAtBooking, balanceAfter: walletDebit.balanceAfter, reference: reservation.reference, description: `Booking debit for ${reservation.reference}` } });
+      if (walletBooking) await tx.outboxJob.upsert({ where: { idempotencyKey: `voucher:${reservation.id}:v1` }, create: { type: 'GENERATE_VOUCHER', aggregateType: 'Reservation', aggregateId: reservation.id, idempotencyKey: `voucher:${reservation.id}:v1`, payload: { reservationId: reservation.id } }, update: {} });
       for (const line of hold.lines) {
         for (const night of line.nights) {
           const row = lockRows.find((candidate) => candidate.roomTypeId === line.roomTypeId && toDateOnly(candidate.date) === toDateOnly(night.date));

@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { eachNight, nightsBetween, parseDateOnly } from './dates';
+import { eachNight, nightsBetween, parseDateOnly, parseExcelDateOnly } from './dates';
 
 describe('date-only stay utilities', () => {
   it('generates check-in inclusive/check-out exclusive nights', () => {
@@ -10,5 +10,11 @@ describe('date-only stay utilities', () => {
 
   it('rejects invalid calendar dates', () => {
     expect(() => parseDateOnly('2099-02-30', 'checkIn')).toThrow(BadRequestException);
+  });
+
+  it('accepts ExcelJS Date cells and preserves UTC date-only values', () => {
+    expect(parseExcelDateOnly(new Date('2026-12-25T00:00:00.000Z'), 'date').toISOString()).toBe('2026-12-25T00:00:00.000Z');
+    expect(parseExcelDateOnly('2026-12-25', 'date').toISOString()).toBe('2026-12-25T00:00:00.000Z');
+    expect(() => parseExcelDateOnly(new Date('invalid'), 'date')).toThrow(BadRequestException);
   });
 });

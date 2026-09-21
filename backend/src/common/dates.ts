@@ -11,6 +11,21 @@ export function parseDateOnly(value: string, field: string): Date {
   return date;
 }
 
+export function parseExcelDateOnly(value: unknown, field: string): Date {
+  if (value && typeof value === 'object' && 'result' in value) return parseExcelDateOnly((value as { result?: unknown }).result, field);
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) throw new BadRequestException(`${field} is not a valid calendar date`);
+    const normalized = new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+    return parseDateOnly(normalized.toISOString().slice(0, 10), field);
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const normalized = new Date(Date.UTC(1899, 11, 30) + value * DAY_MS);
+    return parseDateOnly(normalized.toISOString().slice(0, 10), field);
+  }
+  if (typeof value === 'string') return parseDateOnly(value.trim(), field);
+  throw new BadRequestException(`${field} must be an Excel date or YYYY-MM-DD`);
+}
+
 export function toDateOnly(value: Date): string {
   return value.toISOString().slice(0, 10);
 }

@@ -1,12 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma.service';
 import { RechargeWalletDto } from './wallet.dto';
 
 @Injectable()
 export class WalletService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private config: ConfigService) {}
   async get(agentId: string) { return this.prisma.agentWallet.upsert({ where: { agentId }, update: {}, create: { agentId }, include: { transactions: { orderBy: { createdAt: 'desc' }, take: 100 } } }); }
   async recharge(agentId: string, body: RechargeWalletDto) {
+    if (this.config.get('NODE_ENV', 'development') === 'production' || this.config.get('PAYMENT_PROVIDER', 'mock').toLowerCase() !== 'mock') throw new BadRequestException('Wallet recharge must use the verified payment gateway');
     if (!Number.isFinite(body.amount) || body.amount <= 0) throw new BadRequestException('Recharge amount must be positive');
     return this.prisma.$transaction(async (tx) => {
       const wallet = await tx.agentWallet.upsert({ where: { agentId }, update: {}, create: { agentId } });

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AdminLayout } from "../../../components/Shell";
 import { RainwoodDatePicker } from "../../../components/RainwoodDatePicker";
-import { apiRequest } from "../../../lib/api";
+import { apiFileBlob, apiRequest } from "../../../lib/api";
 
 type Plan = {
   id: string;
@@ -22,6 +22,7 @@ type Agent = {
   id: string;
   name: string;
   email: string;
+  companyName?: string | null;
   active: boolean;
   assignedRatePlans: Mapping[];
 };
@@ -144,11 +145,24 @@ export default function AgentMappingsPage() {
   const [editor, setEditor] = useState<RatePayload | null>(null);
   const [editorForm, setEditorForm] = useState(blankEditor);
   const [editorBusy, setEditorBusy] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [agentSearch, setAgentSearch] = useState("");
+  const [hotelFilter, setHotelFilter] = useState("");
+  const [roomFilter, setRoomFilter] = useState("");
+  const [mealFilter, setMealFilter] = useState("");
+  const [planSearch, setPlanSearch] = useState("");
   const editorRef = useRef<HTMLElement | null>(null);
   const agent = useMemo(
     () => agents.find((item) => item.id === agentId),
     [agents, agentId],
   );
+  const visibleAgents = useMemo(() => {
+    const query = agentSearch.trim().toLowerCase();
+    return agents.filter((item) => !query || `${item.name} ${item.companyName ?? ''} ${item.email}`.toLowerCase().includes(query)).slice(0, 50);
+  }, [agentSearch, agents]);
+  const hotels = useMemo(() => Array.from(new Map(plans.map((plan) => [plan.roomType.hotel.name, plan.roomType.hotel.name])).values()).sort(), [plans]);
+  const rooms = useMemo(() => Array.from(new Map(plans.filter((plan) => !hotelFilter || plan.roomType.hotel.name === hotelFilter).map((plan) => [plan.roomType.name, plan.roomType.name])).values()).sort(), [hotelFilter, plans]);
+  const visiblePlans = useMemo(() => { const query = planSearch.trim().toLowerCase(); return plans.filter((plan) => (!hotelFilter || plan.roomType.hotel.name === hotelFilter) && (!roomFilter || plan.roomType.name === roomFilter) && (!mealFilter || plan.mealPlan === mealFilter) && (!query || `${plan.code} ${plan.name} ${plan.mealPlan} ${plan.roomType.name} ${plan.roomType.hotel.name}`.toLowerCase().includes(query))); }, [hotelFilter, mealFilter, planSearch, plans, roomFilter]);
   const editorRows = useMemo<EditorRateRow[]>(() => {
     if (!editor) return [];
     const overrides = new Map(
@@ -373,27 +387,9 @@ export default function AgentMappingsPage() {
     setMessage("");
     try {
       if (editor.pricingMode !== "OVERRIDE") {
-        await apiRequest(
-          `/users/agents/${agentId}/rate-plans/${editor.ratePlan.id}`,
-          {
-            method: "PATCH",
-            body: JSON.stringify({ pricingMode: "OVERRIDE" }),
-          },
-        );
-        setAgents((current) =>
-          current.map((item) =>
-            item.id === agentId
-              ? {
-                  ...item,
-                  assignedRatePlans: item.assignedRatePlans.map((mapping) =>
-                    mapping.ratePlan.id === editor.ratePlan.id
-                      ? { ...mapping, pricingMode: "OVERRIDE" }
-                      : mapping,
-                  ),
-                }
-              : item,
-          ),
-        );
+        setError("Select Use Contract Rate before entering contract rates.");
+        setEditorBusy(false);
+        return;
       }
       const value = (text: string) =>
         text.trim() === "" ? null : Number(text);
@@ -429,19 +425,25 @@ export default function AgentMappingsPage() {
       setEditorBusy(false);
     }
   }
+  async function downloadTemplate() {
+    try { const blob = await apiFileBlob('/users/agents/rate-import-template.xlsx'); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'rainwood-agent-rate-template.xlsx'; link.click(); URL.revokeObjectURL(url); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not download template'); }
+  }
+  async function importRates(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]; if (!file) return; setImportBusy(true); setError(''); setMessage('');
+    try { const form = new FormData(); form.append('file', file); const result = await apiRequest<{ rowsReceived: number; rowsValid: number; rowsInvalid: number; rowsImported: number; rowsUpdated: number; errors: { row: number; field: string; message: string }[] }>('/users/agents/rates/import', { method: 'POST', body: form }); if (result.errors.length) setError(`Received ${result.rowsReceived} row(s): ${result.rowsInvalid} invalid. No rows were saved.\n${result.errors.map((item) => `Row ${item.row} — ${item.field} — ${item.message}`).join('\n')}`); else { setMessage(`Received ${result.rowsReceived}; imported ${result.rowsImported}; updated ${result.rowsUpdated}.`); if (editor) await openEditor(editor.ratePlan.id); } } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import agent rates'); } finally { setImportBusy(false); event.target.value = ''; }
+  }
 
   return (
-    <AdminLayout title="Agent Rate-Plan Mapping">
+    <AdminLayout title="Agent Access & Contract Rates">
       <section className="masterPanel">
-        <div className="listToolbar">
+          <div className="listToolbar">
           <div>
             <span>Access control and negotiated pricing</span>
-            <h2>Assign rate plans to agents</h2>
+            <h2>Agent Access & Contract Rates</h2>
             <p>
-              Assign active room rate plans and optionally maintain
-              agent-specific date rates. Removing access deactivates the mapping
-              and preserves its negotiated rate history.
+              Give agents access to hotel rate plans and maintain negotiated contract rates where needed.
             </p>
+            <div className="rowActions"><button className="smallBtn" type="button" onClick={() => void downloadTemplate()}>Download Agent Rate Template</button><label className="smallBtn">{importBusy ? 'Importing...' : 'Import Agent Rates'}<input type="file" accept=".xlsx,.xlsm" hidden onChange={(event) => void importRates(event)} disabled={importBusy} /></label></div>
           </div>
         </div>
         {error && (
@@ -459,21 +461,13 @@ export default function AgentMappingsPage() {
         ) : (
           <>
             <label>
-              Choose agent
-              <select
-                value={agentId}
-                onChange={(event) => chooseAgent(event.target.value)}
-              >
-                <option value="">Select agent</option>
-                {agents.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} - {item.email}
-                  </option>
-                ))}
-              </select>
+              Agent
+              <input aria-label="Search agents" placeholder="Search agent name, company or email..." value={agentSearch} onChange={(event) => setAgentSearch(event.target.value)} />
             </label>
+            <div className="agentPickerResults" role="listbox" aria-label="Agent results">{visibleAgents.map((item) => <button key={item.id} type="button" className={item.id === agentId ? "selected" : ""} onClick={() => chooseAgent(item.id)} role="option" aria-selected={item.id === agentId}><b>{item.name}</b><span>{item.email}</span></button>)}{!visibleAgents.length && <p className="empty">No agents match this search.</p>}</div>
             {agentId && (
               <>
+                <div className="mappingFilters"><label>Hotel<select value={hotelFilter} onChange={(event) => { setHotelFilter(event.target.value); setRoomFilter(""); }}><option value="">All Hotels</option>{hotels.map((hotel) => <option key={hotel} value={hotel}>{hotel}</option>)}</select></label><label>Room Type<select value={roomFilter} onChange={(event) => setRoomFilter(event.target.value)}><option value="">All Rooms</option>{rooms.map((room) => <option key={room} value={room}>{room}</option>)}</select></label><label>Meal Plan<select value={mealFilter} onChange={(event) => setMealFilter(event.target.value)}><option value="">All Meal Plans</option>{Array.from(new Set(plans.map((plan) => plan.mealPlan))).sort().map((meal) => <option key={meal} value={meal}>{meal}</option>)}</select></label><label>Search plans<input value={planSearch} onChange={(event) => setPlanSearch(event.target.value)} placeholder="CP Breakfast..." /></label></div>
                 <div className="mappingHeader">
                   <h3>{agent?.name}</h3>
                   <span>
@@ -482,7 +476,7 @@ export default function AgentMappingsPage() {
                   </span>
                 </div>
                 <div className="mappingGrid">
-                  {plans.map((plan) => {
+                  {visiblePlans.map((plan) => {
                     const mapping = agent?.assignedRatePlans.find(
                       (item) => item.ratePlan.id === plan.id,
                     );
@@ -513,8 +507,8 @@ export default function AgentMappingsPage() {
                           <div className="mappingPricing">
                             <span>
                               {mapping?.pricingMode === "OVERRIDE"
-                                ? "Agent contract pricing"
-                                : "Using hotel/base rates"}
+                                ? "Using Contract Rate"
+                                : "Using Hotel Rate"}
                             </span>
                             <label>
                               <input
@@ -524,7 +518,7 @@ export default function AgentMappingsPage() {
                                   void setPricingMode(plan.id, "BASE")
                                 }
                               />{" "}
-                              Base
+                              Use Hotel Rate
                             </label>
                             <label>
                               <input
@@ -534,20 +528,11 @@ export default function AgentMappingsPage() {
                                   void setPricingMode(plan.id, "OVERRIDE")
                                 }
                               />{" "}
-                              Contract
+                              Use Contract Rate
                             </label>
                           </div>
                         )}
-                        <button
-                          className="smallBtn secondary"
-                          type="button"
-                          disabled={!persisted || editorBusy}
-                          onClick={() => void openEditor(plan.id)}
-                        >
-                          {mapping?.pricingMode === "OVERRIDE"
-                            ? "Manage agent rates"
-                            : "Set agent rates"}
-                        </button>
+                        {mapping?.pricingMode === "OVERRIDE" && <button className="smallBtn secondary" type="button" disabled={!persisted || editorBusy} onClick={() => void openEditor(plan.id)}>Manage Contract Rates</button>}
                       </div>
                     );
                   })}
@@ -579,8 +564,8 @@ export default function AgentMappingsPage() {
               <div>
                 <h2 id="agent-rate-editor-title">
                   {editor.pricingMode === "OVERRIDE"
-                    ? "Manage agent rates"
-                    : "Set agent rates"}
+                    ? "Manage Contract Rates"
+                    : "Contract Rates"}
                 </h2>
                 <p>
                   {agent?.name} · {editor.ratePlan.roomType.name} ·{" "}
@@ -596,10 +581,7 @@ export default function AgentMappingsPage() {
               </button>
             </div>
             <p className="notice">
-              Base rates remain the source of availability. Agent rates are
-              optional overrides; blank values inherit the base rate.
-              {editor.pricingMode !== "OVERRIDE" &&
-                " Saving an override will enable contract pricing for this plan."}
+              Agent receives negotiated rates where configured. Blank fields continue using the hotel rate.
             </p>
             {error && (
               <p className="error agentRateModalFeedback" role="alert">
@@ -641,12 +623,12 @@ export default function AgentMappingsPage() {
                   </div>
                 </div>
                 <p className="agentRateHint">
-                  Select a date range, enter only the agent overrides you need,
+                  Select a date range, enter only the contract rates you need,
                   then save. Blank fields inherit the hotel rate.
                 </p>
                 <div className="agentRateFormFields">
                   <label>
-                    Agent base rate
+                    Contract Rate
                     <input
                       type="number"
                       min="0"
@@ -662,7 +644,7 @@ export default function AgentMappingsPage() {
                     />
                   </label>
                   <label>
-                    Tax override
+                    Contract Tax
                     <input
                       type="number"
                       min="0"
@@ -678,7 +660,7 @@ export default function AgentMappingsPage() {
                     />
                   </label>
                   <label>
-                    Child override
+                    Child Charge
                     <input
                       type="number"
                       min="0"
@@ -694,7 +676,7 @@ export default function AgentMappingsPage() {
                     />
                   </label>
                   <label>
-                    Extra adult override
+                    Extra Adult Charge
                     <input
                       type="number"
                       min="0"
@@ -712,7 +694,7 @@ export default function AgentMappingsPage() {
                   {(["single", "double", "triple", "quad"] as const).map(
                     (key) => (
                       <label key={key}>
-                        {key[0].toUpperCase() + key.slice(1)} override
+                        {key[0].toUpperCase() + key.slice(1)} Contract Rate
                         <input
                           type="number"
                           min="0"
@@ -734,7 +716,7 @@ export default function AgentMappingsPage() {
                   className="btn agentRateSaveButton"
                   disabled={editorBusy}
                 >
-                  {editorBusy ? "Saving..." : "Save agent rates"}
+                  {editorBusy ? "Saving..." : "Save Contract Rates"}
                 </button>
               </form>
               <div className="agentRatePreview">
@@ -768,8 +750,8 @@ export default function AgentMappingsPage() {
                       ) : (
                         (
                           [
-                            ["Base rate", "base"],
-                            ["Agent rate", "amount"],
+                            ["Hotel Rate", "base"],
+                            ["Agent Will Receive", "amount"],
                             ["Single", "single"],
                             ["Double", "double"],
                             ["Triple", "triple"],
@@ -801,8 +783,8 @@ export default function AgentMappingsPage() {
                 <thead>
                   <tr>
                     <th>Date</th>
-                    <th>Base</th>
-                    <th>Agent override</th>
+                    <th>Hotel Rate</th>
+                    <th>Contract Rate</th>
                     <th>Effective</th>
                     <th>Source</th>
                   </tr>
@@ -825,8 +807,8 @@ export default function AgentMappingsPage() {
                         <td>{money(row.effective?.amount)}</td>
                         <td>
                           {row.effective?.priceSource === "AGENT_OVERRIDE"
-                            ? "Agent"
-                            : "Base"}
+                            ? "Contract Rate"
+                            : "Hotel Rate"}
                         </td>
                       </tr>
                     ))

@@ -1,2 +1,2 @@
-import { Module } from '@nestjs/common'; import { AvailabilityController } from './availability.controller'; import { AvailabilityService } from './availability.service'; import { RateResolverService } from './rate-resolver';
-@Module({controllers:[AvailabilityController],providers:[AvailabilityService, RateResolverService],exports:[AvailabilityService, RateResolverService]}) export class AvailabilityModule{}
+import { Module } from '@nestjs/common'; import { AvailabilityController } from './availability.controller'; import { AvailabilityService } from './availability.service'; import { RateResolverService } from './rate-resolver'; import { SupplementaryChargesModule } from '../supplementary-charges/supplementary-charges.module';
+@Module({ imports: [SupplementaryChargesModule], controllers:[AvailabilityController],providers:[AvailabilityService, RateResolverService],exports:[AvailabilityService, RateResolverService]}) export class AvailabilityModule{}

@@ -28,8 +28,9 @@ export type AvailabilityOption = {
   children: number;
   total: number;
   taxTotal: number;
+  supplementaryTotal: number;
   availableRooms?: number;
-  priceBreakdown: { date: string; baseAmount: number; taxAmount: number; extrasAmount: number; totalAmount: number }[];
+  priceBreakdown: { date: string; baseAmount: number; taxAmount: number; extrasAmount: number; supplementaryAmount: number; supplementaryCharges: { id: string; name: string; amountPerRoomNight: number; rooms: number; amount: number }[]; totalAmount: number }[];
   restrictions: { cta: boolean; ctd: boolean; minLos: number | null; maxLos: number | null };
 };
 
@@ -45,6 +46,7 @@ export type ReservationSummary = {
   totalAmount: number | string;
   advanceAmount: number | string;
   balanceAmount: number | string;
+  paymentTermsSnapshot?: { policy?: string; percentage?: number | string | null } | null;
   hotel: { name: string; slug: string; city: string };
   lines: { roomType: string; ratePlan: string; rooms: number; adults: number; children: number }[];
 };

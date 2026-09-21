@@ -1,4 +1,4 @@
-import { AvailabilityService } from './availability.service';
+import { AvailabilityService, supplementaryScopeFilter } from './availability.service';
 import { RateResolverService } from './rate-resolver';
 
 describe('availability restrictions and pricing', () => {
@@ -86,5 +86,21 @@ describe('availability restrictions and pricing', () => {
     expect(childOption.total).toBe(8400);
     const adultOption = calculate({ ...room, maxAdults: 3, maxChildren: 0, maxOccupancy: 3 }, supplementPlan, { rooms: 1, adults: 3, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2);
     expect(adultOption.priceBreakdown[0].extrasAmount).toBe(800);
+  });
+
+  it('applies named supplementary charges per room and night without taxing them', () => {
+    const calculate = (service as any).calculate.bind(service);
+    const threeNightPlan = { ...plan, rates: [...plan.rates, { ...plan.rates[0], date: new Date('2099-01-12T00:00:00Z') }] };
+    const threeNightRoom = { ...room, inventory: [...room.inventory, { ...room.inventory[0], date: new Date('2099-01-12T00:00:00Z') }].map((day) => ({ ...day, available: 2 })) };
+    const option = calculate(threeNightRoom, threeNightPlan, { rooms: 2, adults: 3, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-13T00:00:00Z'), 3, undefined, [{ id: 'ny', name: 'New Year Supplement', amountPerRoomNight: 1000, startDate: new Date('2099-01-10T00:00:00Z'), endDate: new Date('2099-01-12T00:00:00Z') }]);
+    expect(option.taxTotal).toBe(600);
+    expect(option.supplementaryTotal).toBe(6000);
+    expect(option.priceBreakdown[0].supplementaryAmount).toBe(2000);
+    expect(option.total).toBe(12600);
+  });
+
+  it('uses ALL charges for both agent and public searches while AGENTS stays agent-only', () => {
+    expect(supplementaryScopeFilter('agent-1')).toEqual({ in: ['AGENTS', 'ALL'] });
+    expect(supplementaryScopeFilter()).toBe('ALL');
   });
 });

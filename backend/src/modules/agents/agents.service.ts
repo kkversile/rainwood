@@ -14,7 +14,7 @@ export class AgentsService {
   constructor(private p: PrismaService) {}
 
   async getProfile(agentId: string) {
-    const user = await this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, profileImageFileId: true } });
+    const user = await this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, agentPaymentPolicy: true, bookingPaymentPercent: true, profileImageFileId: true } });
     return { ...user, profileImageUrl: user.profileImageFileId ? `/files/public/${user.profileImageFileId}` : null };
   }
 
@@ -22,7 +22,7 @@ export class AgentsService {
     const allowed = ['name', 'companyName', 'contactPerson', 'mobile', 'gstin', 'place', 'addressLine1', 'addressLine2', 'state', 'pinCode', 'additionalInformation'] as const;
     const data = Object.fromEntries(allowed.map((key) => [key, typeof body[key] === 'string' ? (body[key] as string).trim() || null : undefined]).filter(([, value]) => value !== undefined));
     if (typeof data.name === 'string' && data.name.length < 2) throw new BadRequestException('Name must be at least 2 characters');
-    return this.p.user.update({ where: { id: agentId, role: 'AGENT' }, data, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, profileImageFileId: true } }).then((user) => ({ ...user, profileImageUrl: user.profileImageFileId ? `/files/public/${user.profileImageFileId}` : null }));
+    return this.p.user.update({ where: { id: agentId, role: 'AGENT' }, data, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, agentPaymentPolicy: true, bookingPaymentPercent: true, profileImageFileId: true } }).then((user) => ({ ...user, profileImageUrl: user.profileImageFileId ? `/files/public/${user.profileImageFileId}` : null }));
   }
 
   async setProfileImage(agentId: string, fileId: string) {

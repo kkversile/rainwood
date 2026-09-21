@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, SupplementaryChargeScope } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { addDays, eachNight, nightsBetween, parseDateOnly, todayUtc, toDateOnly } from '../../common/dates';
 import { AvailabilityQueryDto } from './availability.dto';
@@ -8,6 +8,10 @@ import { RateResolverService } from './rate-resolver';
 type Database = PrismaService | Prisma.TransactionClient;
 export type RoomOccupancy = { adults: number; children: number };
 type Selection = { hotelId: string; roomTypeId: string; ratePlanId: string; checkIn: string; checkOut: string; rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[] };
+
+export function supplementaryScopeFilter(agentId?: string) {
+  return agentId ? { in: [SupplementaryChargeScope.AGENTS, SupplementaryChargeScope.ALL] } : SupplementaryChargeScope.ALL;
+}
 
 @Injectable()
 export class AvailabilityService {
@@ -22,6 +26,7 @@ export class AvailabilityService {
     const hotels = await this.prisma.hotel.findMany({
       where: query.hotelId ? { id: query.hotelId, active: true } : { active: true },
       include: {
+        supplementaryCharges: { where: { active: true, scope: supplementaryScopeFilter(agentId), startDate: { lte: to }, endDate: { gte: from } } },
         rooms: {
           where: { active: true },
           include: {
@@ -32,7 +37,7 @@ export class AvailabilityService {
       },
     });
     if (!hotels.length) throw new BadRequestException('Hotel is unavailable');
-    const options = hotels.flatMap((hotel) => hotel.rooms.flatMap((room) => room.ratePlans.map((plan) => this.calculate(room, plan, normalized, from, to, nights, agentId))));
+    const options = hotels.flatMap((hotel) => hotel.rooms.flatMap((room) => room.ratePlans.map((plan) => this.calculate(room, plan, normalized, from, to, nights, agentId, hotel.supplementaryCharges))));
     return options.filter((option) => option.available).map(({ available, ...option }) => option);
   }
 
@@ -44,13 +49,14 @@ export class AvailabilityService {
     const room = await db.roomType.findFirst({
       where: { id: input.roomTypeId, hotelId: input.hotelId, active: true, hotel: { active: true } },
       include: {
+        hotel: { include: { supplementaryCharges: { where: { active: true, scope: supplementaryScopeFilter(options.agentId), startDate: { lte: to }, endDate: { gte: from } } } } },
         inventory: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } },
           ratePlans: { where: { id: input.ratePlanId, active: true, master: { active: true }, ...(options.agentId ? { assignedAgents: { some: { agentId: options.agentId, active: true } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, ...(options.agentId ? { assignedAgents: { where: { agentId: options.agentId, active: true }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } } } } } : {}) } },
       },
     });
     const plan = room?.ratePlans[0];
     if (!room || !plan) throw new BadRequestException('Room or rate plan is unavailable');
-    const quote = this.calculate(room, plan, normalized, from, to, nightsBetween(from, to), options.agentId);
+    const quote = this.calculate(room, plan, normalized, from, to, nightsBetween(from, to), options.agentId, room.hotel.supplementaryCharges);
     if (!quote.available && options.checkInventory !== false) throw new BadRequestException('Inventory or restrictions are no longer available');
     const { available: _available, ...result } = quote;
     return result;
@@ -73,7 +79,7 @@ export class AvailabilityService {
     }
   }
 
-  private calculate(room: any, plan: any, input: { rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[] }, from: Date, to: Date, nights: number, agentId?: string) {
+  private calculate(room: any, plan: any, input: { rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[] }, from: Date, to: Date, nights: number, agentId?: string, supplementaryCharges: any[] = []) {
     const occupiedNights = eachNight(from, to);
     const inventoryByDate = new Map<string, any>(room.inventory.map((day: any) => [toDateOnly(day.date), day]));
     const rateByDate = new Map<string, any>(plan.rates.map((day: any) => [toDateOnly(day.date), day]));
@@ -105,10 +111,14 @@ export class AvailabilityService {
       const base = roomBreakdown.reduce((sum, item) => sum + item.baseAmount, 0);
       const tax = Number(rate?.taxAmount ?? 0) * input.rooms;
       const extras = roomBreakdown.reduce((sum, item) => sum + item.supplementAmount, 0);
-      return { date: toDateOnly(night), rooms: roomBreakdown, occupancy: occupancyKeys, baseAmount: base, taxAmount: tax, extrasAmount: extras, totalAmount: base + tax + extras, priceSource: rate?.priceSource ?? 'BASE', agentRatePlanId: rate?.agentRatePlanId ?? null };
+      const applicableCharges = supplementaryCharges.filter((charge) => toDateOnly(charge.startDate) <= toDateOnly(night) && toDateOnly(charge.endDate) >= toDateOnly(night));
+      const supplementaryChargeLines = applicableCharges.map((charge) => ({ id: charge.id, name: charge.name, amountPerRoomNight: Number(charge.amountPerRoomNight), rooms: input.rooms, amount: Math.round(Number(charge.amountPerRoomNight) * input.rooms * 100) / 100 }));
+      const supplementaryAmount = supplementaryChargeLines.reduce((sum, charge) => sum + charge.amount, 0);
+      return { date: toDateOnly(night), rooms: roomBreakdown, occupancy: occupancyKeys, baseAmount: base, taxAmount: tax, extrasAmount: extras, supplementaryCharges: supplementaryChargeLines, supplementaryAmount, totalAmount: base + tax + extras + supplementaryAmount, priceSource: rate?.priceSource ?? 'BASE', agentRatePlanId: rate?.agentRatePlanId ?? null };
     });
     const total = breakdown.reduce((sum, item) => sum + item.totalAmount, 0);
     const taxTotal = breakdown.reduce((sum, item) => sum + item.taxAmount, 0);
+    const supplementaryTotal = breakdown.reduce((sum, item) => sum + Number(item.supplementaryAmount ?? 0), 0);
     return {
       hotelId: room.hotelId,
       roomTypeId: room.id,
@@ -124,6 +134,7 @@ export class AvailabilityService {
       children: input.children,
       total,
       taxTotal,
+      supplementaryTotal,
       available: inventoryAvailable && restrictionsValid && occupancyValid,
       availableRooms: inventoryComplete ? Math.min(...occupiedNights.map((night) => {
         const day = inventoryByDate.get(toDateOnly(night));

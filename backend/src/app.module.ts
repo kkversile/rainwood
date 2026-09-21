@@ -22,6 +22,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { SiteSettingsModule } from './modules/site-settings/site-settings.module';
 import { AgentsModule } from './modules/agents/agents.module';
+import { SupplementaryChargesModule } from './modules/supplementary-charges/supplementary-charges.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { AgentsModule } from './modules/agents/agents.module';
     ContactModule,
     SiteSettingsModule,
     AgentsModule,
+    SupplementaryChargesModule,
   ],
 })
 export class AppModule {}

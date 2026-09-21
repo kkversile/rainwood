@@ -11,6 +11,12 @@ import { ManualPaymentDto, MockCompletionDto } from './payments.dto';
 export class PaymentsService {
   constructor(private p: PrismaService, private c: ConfigService, private audit: AuditService) {}
 
+  async getWalletRechargeAttempt(agentId: string, attemptId: string) {
+    const attempt = await this.p.walletRechargeAttempt.findFirst({ where: { id: attemptId, wallet: { agentId } }, select: { id: true, status: true, amount: true, currency: true, provider: true } });
+    if (!attempt) throw new NotFoundException('Recharge attempt not found');
+    return attempt;
+  }
+
   private providerFromConfig(): PaymentProvider {
     const provider = this.c.get('PAYMENT_PROVIDER', 'mock').toLowerCase();
     if (provider === 'razorpay') return 'RAZORPAY';
@@ -22,6 +28,27 @@ export class PaymentsService {
     if (provider === 'RAZORPAY') return new RazorpayGateway(this.c);
     if (provider === 'CASHFREE') throw new BadRequestException('Cashfree adapter requires the merchant API version and credentials');
     return new MockGateway(this.c);
+  }
+
+  async createWalletRechargeOrder(agentId: string, amount: number, idempotencyKey: string) {
+    if (!idempotencyKey || idempotencyKey.length < 8) throw new BadRequestException('A stable idempotency-key is required');
+    if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('Recharge amount must be positive');
+    const wallet = await this.p.agentWallet.upsert({ where: { agentId }, update: {}, create: { agentId } });
+    const existing = await this.p.walletRechargeAttempt.findUnique({ where: { idempotencyKey } });
+    if (existing) { if (existing.walletId !== wallet.id) throw new BadRequestException('Idempotency key belongs to another wallet'); return existing; }
+    const provider = this.providerFromConfig();
+    const order = await this.gateway(provider).createOrder({ amount: Math.round(amount * 100) / 100, currency: wallet.currency, reference: `wallet:${agentId}:${idempotencyKey}` });
+    const providerOrderId = String(order.id ?? order.orderId ?? ''); if (!providerOrderId) throw new BadRequestException('Payment provider did not return an order ID');
+    return this.p.walletRechargeAttempt.create({ data: { walletId: wallet.id, provider, providerOrderId, idempotencyKey, amount: Math.round(amount * 100) / 100, currency: wallet.currency, status: 'PENDING', providerPayload: order as Prisma.InputJsonValue, expiresAt: new Date(Date.now() + 30 * 60_000) } });
+  }
+
+  async mockCompleteWalletRecharge(agentId: string, attemptId: string, status: 'SUCCESS' | 'FAILED') {
+    if (this.providerFromConfig() !== 'MOCK') throw new BadRequestException('Mock wallet recharge is disabled for the active provider');
+    const attempt = await this.p.walletRechargeAttempt.findFirst({ where: { id: attemptId, wallet: { agentId }, status: 'PENDING' } });
+    if (!attempt) throw new BadRequestException('No pending wallet recharge attempt exists');
+    const payload = { eventId: `mock:wallet:${attempt.id}:${status}`, orderId: attempt.providerOrderId, paymentId: `mock_wallet_payment_${attempt.id}`, status, amount: Number(attempt.amount), currency: attempt.currency };
+    const raw = Buffer.from(JSON.stringify(payload)); const signature = new MockGateway(this.c).sign(raw);
+    return this.webhook('MOCK', raw, { 'x-mock-signature': signature }, payload);
   }
 
   async createOrder(reference: string, idempotencyKey: string) {
@@ -57,8 +84,25 @@ export class PaymentsService {
       const result = await this.p.$transaction(async (tx) => {
         await tx.webhookEvent.update({ where: { id: event.id }, data: { status: 'PROCESSING', attempts: { increment: 1 } } });
         const attempt = await tx.paymentAttempt.findUnique({ where: { providerOrderId: normalized.orderId } });
-        if (!attempt || attempt.provider !== provider) throw new BadRequestException('Unknown payment order');
-        if (normalized.currency !== attempt.currency || Math.abs(normalized.amount - Number(attempt.amount)) > 0.01) throw new BadRequestException('Payment amount or currency mismatch');
+        const walletAttempt = attempt ? null : await tx.walletRechargeAttempt.findUnique({ where: { providerOrderId: normalized.orderId } });
+        const selectedAttempt = attempt ?? walletAttempt;
+        if (!selectedAttempt || selectedAttempt.provider !== provider) throw new BadRequestException('Unknown payment order');
+        if (normalized.currency !== selectedAttempt.currency || Math.abs(normalized.amount - Number(selectedAttempt.amount)) > 0.01) throw new BadRequestException('Payment amount or currency mismatch');
+        if (walletAttempt) {
+          if (walletAttempt.status === 'SUCCESS' && normalized.status === 'SUCCESS') { await tx.webhookEvent.update({ where: { id: event.id }, data: { status: 'PROCESSED', processedAt: new Date(), completedAt: new Date() } }); return { ok: true, duplicate: true, walletId: walletAttempt.walletId, status: normalized.status }; }
+          if (normalized.status === 'SUCCESS') {
+            await tx.walletRechargeAttempt.update({ where: { id: walletAttempt.id }, data: { status: 'SUCCESS', providerPaymentId: normalized.paymentId } });
+            const wallet = await tx.agentWallet.findUniqueOrThrow({ where: { id: walletAttempt.walletId } });
+            const updatedWallet = await tx.agentWallet.update({ where: { id: wallet.id }, data: { balance: { increment: walletAttempt.amount } } });
+            await tx.walletTransaction.create({ data: { walletId: wallet.id, type: 'RECHARGE', amount: walletAttempt.amount, balanceAfter: updatedWallet.balance, reference: `RECHARGE:${walletAttempt.id}`, description: 'Verified agent wallet recharge' } });
+            await tx.webhookEvent.update({ where: { id: event.id }, data: { status: 'PROCESSED', processedAt: new Date(), completedAt: new Date() } });
+            return { ok: true, walletId: wallet.id, status: normalized.status };
+          }
+          await tx.walletRechargeAttempt.update({ where: { id: walletAttempt.id }, data: { status: 'FAILED', providerPaymentId: normalized.paymentId } });
+          await tx.webhookEvent.update({ where: { id: event.id }, data: { status: 'PROCESSED', processedAt: new Date(), completedAt: new Date() } });
+          return { ok: true, walletId: walletAttempt.walletId, status: normalized.status };
+        }
+        if (!attempt) throw new BadRequestException('Unknown payment order');
         if (attempt.status === 'SUCCESS' && normalized.status === 'SUCCESS') {
           await tx.webhookEvent.update({ where: { id: event.id }, data: { status: 'PROCESSED', processedAt: new Date(), completedAt: new Date() } });
           return { ok: true, duplicate: true, reservationId: attempt.reservationId, status: normalized.status };

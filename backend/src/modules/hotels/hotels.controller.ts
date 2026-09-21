@@ -1,9 +1,11 @@
-import { Body, ConflictException, Controller, Delete, Get, Header, Param, Patch, Post, Put, Query, StreamableFile, UseGuards } from '@nestjs/common';
+import { Body, ConflictException, Controller, Delete, Get, Header, Param, Patch, Post, Put, Query, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { HotelsService } from './hotels.service';
 import { AmenityDto, CopyRatePlanDto, HotelContactDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelUpdateDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
+import { CurrentUser } from '../../common/current-user.decorator';
 
 @Controller('hotels')
 export class HotelsController {
@@ -186,6 +188,19 @@ export class HotelsController {
   @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   @Header('Content-Disposition', 'attachment; filename="rainwood-pricebook.xlsx"')
   async pricebook(@Param('hotelId') hotelId: string) { return new StreamableFile(await this.service.pricebookExport(hotelId)); }
+
+  @Get(':hotelId/rates/import-template.xlsx')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="rainwood-base-rate-template.xlsx"')
+  async baseRateTemplate(@Param('hotelId') hotelId: string) { return new StreamableFile(await this.service.baseRateTemplate(hotelId)); }
+
+  @Post(':hotelId/rates/import')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  importBaseRates(@Param('hotelId') hotelId: string, @UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) { return this.service.importBaseRates(hotelId, file, user.id); }
 
   @Post(':hotelId/amenities')
   @UseGuards(JwtAuthGuard, RolesGuard)

@@ -5,6 +5,10 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import type { AgentReservation } from './AgentData';
 import { apiRequest } from '../lib/api';
 
+declare global {
+  interface Window { Razorpay?: new (options: Record<string, unknown>) => { open: () => void }; }
+}
+
 type TrackerMode = 'booking' | 'checkIn' | 'checkOut' | 'cancelled';
 
 type Wallet = {
@@ -44,6 +48,16 @@ function money(value: number | string) {
 
 function csvCell(value: unknown) {
   return `"${String(value ?? '').replaceAll('"', '""')}"`;
+}
+
+async function loadRazorpayCheckout() {
+  if (window.Razorpay) return;
+  await new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[data-razorpay-checkout]');
+    if (existing) { existing.addEventListener('load', () => resolve(), { once: true }); existing.addEventListener('error', () => reject(new Error('Could not load Razorpay Checkout')), { once: true }); return; }
+    const script = document.createElement('script'); script.src = 'https://checkout.razorpay.com/v1/checkout.js'; script.async = true; script.dataset.razorpayCheckout = 'true'; script.onload = () => resolve(); script.onerror = () => reject(new Error('Could not load Razorpay Checkout')); document.body.appendChild(script);
+  });
+  if (!window.Razorpay) throw new Error('Razorpay Checkout is unavailable');
 }
 
 export function downloadCsv(filename: string, headers: string[], rows: unknown[][]) {
@@ -151,7 +165,30 @@ export function AgentWalletReport({ mode = 'wallet' }: { mode?: 'wallet' | 'adva
 
   async function recharge(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError(''); setMessage('');
-    try { const updated = await apiRequest<Wallet>('/wallet/recharge', { method: 'POST', body: JSON.stringify({ amount: Number(amount), reference: `AGENT-RECHARGE-${Date.now()}` }) }); setWallet(updated); setMessage(`Wallet recharged by INR ${Number(amount).toFixed(2)}.`); }
+    try {
+      const attempt = await apiRequest<{ id: string; provider: string; providerOrderId: string; amount: number | string; currency: string }>('/wallet/recharge/order', { method: 'POST', headers: { 'idempotency-key': `agent-wallet:${Date.now()}:${Math.random().toString(36).slice(2)}` }, body: JSON.stringify({ amount: Number(amount) }) });
+      if (attempt.provider === 'MOCK') {
+        await apiRequest('/wallet/recharge/mock-complete', { method: 'POST', body: JSON.stringify({ attemptId: attempt.id, status: 'SUCCESS' }) });
+        await load(); setMessage(`Wallet recharge of INR ${Number(amount).toFixed(2)} was verified.`);
+      } else if (attempt.provider === 'RAZORPAY') {
+        const key = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+        if (!key) throw new Error('Razorpay public key is not configured');
+        await loadRazorpayCheckout();
+        const waitForWebhook = async () => {
+          for (let index = 0; index < 15; index += 1) {
+            const status = await apiRequest<{ status: string }>(`/wallet/recharge/attempts/${encodeURIComponent(attempt.id)}`);
+            if (status.status === 'SUCCESS') { await load(); setMessage(`Wallet recharge of INR ${Number(amount).toFixed(2)} was verified.`); return; }
+            if (status.status === 'FAILED') throw new Error('Razorpay payment failed or was rejected');
+            await new Promise((resolve) => window.setTimeout(resolve, 2000));
+          }
+          setMessage('Razorpay payment completed. Wallet credit is pending webhook verification.');
+        };
+        const Razorpay = window.Razorpay;
+        if (!Razorpay) throw new Error('Razorpay Checkout is unavailable');
+        const checkout = new Razorpay({ key, amount: Math.round(Number(attempt.amount) * 100), currency: attempt.currency, name: 'RainWood Hotels', description: 'Agent wallet recharge', order_id: attempt.providerOrderId, handler: () => { void waitForWebhook().catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not verify recharge')); }, modal: { ondismiss: () => setMessage('Razorpay checkout closed. No wallet credit was made.') } });
+        checkout.open();
+      } else throw new Error('This payment provider does not have a checkout flow configured');
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not recharge wallet'); }
     finally { setBusy(false); }
   }
