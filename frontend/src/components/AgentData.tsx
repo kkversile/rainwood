@@ -1,23 +1,80 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { apiRequest, clearAccessToken, setAccessToken } from '../lib/api';
+import { canPendingAgentVisit, type AgentKycSummary, type AgentOnboardingStatus } from '../lib/agent-onboarding';
 import { AgentPortalShell } from './AgentPortalShell';
 
-export type AgentUser = { id: string; name: string; email: string; role: string };
+export type AgentUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  onboardingStatus: AgentOnboardingStatus;
+  canAccessHotels: boolean;
+  canBook: boolean;
+  paymentTermsAssigned: boolean;
+  paymentTerms?: { mode: 'PERCENTAGE' | 'CREDIT'; advancePercent?: number | string | null } | null;
+  kycSummary: AgentKycSummary;
+  companyName?: string | null;
+};
+
 export type AgentReservation = { reference: string; guestName: string; checkIn: string; checkOut: string; createdAt?: string; status: string; paymentStatus: string; totalAmount: number | string; advanceAmount?: number | string; balanceAmount: number | string; hotel: { name: string; city: string }; lines: { roomType: { name: string }; ratePlan: { name: string }; rooms: number }[] };
 
+type AgentProfileAccess = AgentUser;
+
 export function AgentWorkspace({ title, children }: { title: string; children: (user: AgentUser) => React.ReactNode }) {
-  const router = useRouter(); const [user, setUser] = useState<AgentUser | null>(null);
-  useEffect(() => { apiRequest<{ accessToken: string; user: AgentUser }>('/auth/refresh', { method: 'POST' }).then((session) => { if (session.user.role !== 'AGENT') { router.replace('/agent/login'); return; } setAccessToken(session.accessToken); setUser(session.user); }).catch(() => router.replace('/agent/login')); }, [router]);
-  async function logout() { await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => undefined); clearAccessToken(); router.replace('/agent/login'); }
+  const router = useRouter();
+  const pathname = usePathname();
+  const [user, setUser] = useState<AgentUser | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    setUser(null);
+    apiRequest<{ accessToken: string; user: { role: string } }>('/auth/refresh', { method: 'POST' })
+      .then(async (session) => {
+        if (session.user.role !== 'AGENT') {
+          router.replace('/agent/login');
+          return;
+        }
+        setAccessToken(session.accessToken, session.user.role);
+        const profile = await apiRequest<AgentProfileAccess>('/agents/me/profile');
+        if (!mounted) return;
+        if (profile.onboardingStatus === 'DEACTIVATED') {
+          clearAccessToken();
+          router.replace('/agent/login?deactivated=1');
+          return;
+        }
+        if (profile.onboardingStatus !== 'ACTIVE' && pathname === '/agent') {
+          router.replace('/agent/onboarding');
+          return;
+        }
+        if (profile.onboardingStatus !== 'ACTIVE' && !canPendingAgentVisit(pathname)) {
+          router.replace('/agent/onboarding');
+          return;
+        }
+        setUser(profile);
+      })
+      .catch(() => {
+        if (mounted) router.replace('/agent/login');
+      });
+    return () => { mounted = false; };
+  }, [pathname, router]);
+
+  async function logout() {
+    await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => undefined);
+    clearAccessToken();
+    router.replace('/agent/login');
+  }
+
   if (!user) return <main className="page"><p className="loading">Loading agent portal...</p></main>;
   return <AgentPortalShell title={title} user={user} onLogout={() => void logout()}>{children(user)}</AgentPortalShell>;
 }
 
 export function AgentReservations() {
-  const [rows, setRows] = useState<AgentReservation[] | null>(null); const [error, setError] = useState('');
+  const [rows, setRows] = useState<AgentReservation[] | null>(null);
+  const [error, setError] = useState('');
   useEffect(() => { apiRequest<AgentReservation[]>('/reservations/mine').then(setRows).catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load bookings')); }, []);
   if (error) return <p className="error">{error}</p>;
   if (!rows) return <p className="loading">Loading bookings...</p>;

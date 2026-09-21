@@ -6,6 +6,7 @@ import { PrismaService } from '../../common/prisma.service';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { randomToken, sha256 } from '../../common/security';
+import { isAgentPendingOnboarding } from '../../common/agent-access';
 
 @Injectable()
 export class AuthService {
@@ -30,9 +31,9 @@ export class AuthService {
     const normalizedEmail = email.trim().toLowerCase();
     const user = await this.p.user.findUnique({ where: { email: normalizedEmail } });
     const locked = user?.lockedUntil && user.lockedUntil > new Date();
-    const valid = Boolean(user?.active && !locked && user && await bcrypt.compare(password, user.passwordHash));
-    if (user?.role === 'AGENT' && !user.active) throw new UnauthorizedException('Your agent registration is pending admin approval.');
-    if (!user || !valid) {
+    const pendingAgent = Boolean(user && isAgentPendingOnboarding(user));
+    const validCredentials = Boolean(user && !locked && await bcrypt.compare(password, user.passwordHash));
+    if (!user || !validCredentials) {
       if (user) {
         const failedLoginCount = user.failedLoginCount + 1;
         await this.p.user.update({
@@ -43,6 +44,8 @@ export class AuthService {
       await this.p.auditLog.create({ data: { action: 'AUTH_LOGIN_FAILED', entityType: 'User', entityId: user?.id, ipAddress: meta.ip, userAgent: meta.ua } });
       throw new UnauthorizedException('Invalid credentials');
     }
+    if (user.role === 'AGENT' && !user.active && !pendingAgent) throw new UnauthorizedException('Your agent account is deactivated. Please contact support.');
+    if (!user.active && !pendingAgent) throw new UnauthorizedException('Invalid credentials');
     const familyId = randomUUID();
     const result = await this.p.$transaction(async (tx) => {
       await tx.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, lockedUntil: null } });
@@ -66,7 +69,8 @@ export class AuthService {
   async refresh(raw: string, meta: { ip?: string; ua?: string } = {}) {
     if (!raw) throw new UnauthorizedException('Refresh token invalid');
     const token = await this.p.refreshToken.findUnique({ where: { tokenHash: sha256(raw) }, include: { user: true } });
-    if (!token || token.revokedAt || token.expiresAt <= new Date() || !token.user.active) {
+    const pendingAgent = Boolean(token?.user && isAgentPendingOnboarding(token.user));
+    if (!token || token.revokedAt || token.expiresAt <= new Date() || (!token.user.active && !pendingAgent)) {
       if (token) await this.p.refreshToken.updateMany({ where: { familyId: token.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
       await this.p.auditLog.create({ data: { actorUserId: token?.userId, action: 'AUTH_REFRESH_REUSE_DETECTED', entityType: 'RefreshToken', entityId: token?.id, ipAddress: meta.ip, userAgent: meta.ua } });
       throw new UnauthorizedException('Refresh token invalid');

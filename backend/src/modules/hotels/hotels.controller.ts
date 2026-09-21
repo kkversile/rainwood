@@ -6,12 +6,15 @@ import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
 import { CurrentUser } from '../../common/current-user.decorator';
+import { OptionalJwtAuthGuard } from '../../common/optional-jwt-auth.guard';
+import { ActiveAgentGuard } from '../../common/active-agent.guard';
 
 @Controller('hotels')
 export class HotelsController {
   constructor(private readonly service: HotelsService) {}
 
   @Get()
+  @UseGuards(OptionalJwtAuthGuard, ActiveAgentGuard)
   list() { return this.service.list(); }
 
   @Get('rate-plans')
@@ -55,6 +58,7 @@ export class HotelsController {
   deleteRatePlanAssignment(@Param('id') id: string) { return this.service.deleteRatePlanAssignment(id); }
 
   @Get(':slug')
+  @UseGuards(OptionalJwtAuthGuard, ActiveAgentGuard)
   detail(@Param('slug') slug: string) { return this.service.detail(slug); }
 
   @Get(':hotelId/reviews')

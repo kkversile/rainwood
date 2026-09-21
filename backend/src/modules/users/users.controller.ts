@@ -12,7 +12,7 @@ import { AgentRateBatchDto, AgentRatePlanUpdateDto } from './users.dto';
 import { normalizeOccupancyPrices } from '../../common/rate-pricing';
 import { parseDateOnly, parseExcelDateOnly } from '../../common/dates';
 import { AgentsService } from '../agents/agents.service';
-import { AgentPaymentPolicy } from '@prisma/client';
+import { AgentDocumentStatus, AgentPaymentPolicy } from '@prisma/client';
 import { validateAgentPaymentTerms } from '../../common/agent-payment-terms';
 import ExcelJS from 'exceljs';
 import { mapImportedRateFields } from '../../common/excel-rate-fields';
@@ -49,7 +49,7 @@ class AgentApprovalDto {
 export class UsersController {
   constructor(private p: PrismaService, @Optional() private agentsService?: AgentsService) {}
   @Get('') list() { return this.p.user.findMany({ select: { id: true, email: true, name: true, role: true, active: true, createdAt: true } }); }
-  @Get('agents') agents() { return this.p.user.findMany({ where: { role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, assignedRatePlans: { include: { ratePlan: { include: { roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } }, orderBy: { createdAt: 'asc' } }); }
+  @Get('agents') agents() { return this.p.user.findMany({ where: { role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, agentDocuments: { select: { status: true } }, assignedRatePlans: { include: { ratePlan: { include: { roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } }, orderBy: { createdAt: 'asc' } }); }
   @Get('agents/rate-import-template.xlsx')
   @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   @Header('Content-Disposition', 'attachment; filename="rainwood-agent-rate-template.xlsx"')
@@ -127,6 +127,10 @@ export class UsersController {
       ? validateAgentPaymentTerms({ agentPaymentPolicy: body.paymentPolicy, bookingPaymentPercent: body.bookingPaymentPercent }, !current.active)
       : validateAgentPaymentTerms(current);
     if (body.active && !terms.policy) throw new BadRequestException('Payment terms are required before approval');
+    if (body.active && !current.active && !current.agentPaymentPolicy && current.bookingPaymentPercent == null) {
+      const documents = await this.p.agentDocument.findMany({ where: { agentId: current.id }, select: { status: true } });
+      if (!documents.length || documents.some((document) => document.status !== AgentDocumentStatus.APPROVED)) throw new BadRequestException('Complete and verify the required KYC documents before approving this agent.');
+    }
     const updated = await this.p.$transaction(async (tx) => {
       const result = await tx.user.update({ where: { id: current.id }, data: { active: body.active, agentPaymentPolicy: terms.policy, bookingPaymentPercent: terms.percentage, tokenVersion: body.active === false ? { increment: 1 } : undefined }, select: { id: true, email: true, name: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true } });
       await tx.auditLog.create({ data: { actorUserId: actor.id, action: current.active === false && body.active ? 'AGENT_APPROVED' : 'AGENT_PAYMENT_TERMS_UPDATED', entityType: 'User', entityId: current.id, before: { active: current.active, agentPaymentPolicy: current.agentPaymentPolicy, bookingPaymentPercent: current.bookingPaymentPercent }, after: { active: result.active, agentPaymentPolicy: result.agentPaymentPolicy, bookingPaymentPercent: result.bookingPaymentPercent } } });

@@ -35,9 +35,9 @@ export function agentPaymentConfirmation(reservation: Pick<ReservationSummary, '
   return `INR ${advance.toFixed(2)} was deducted from your agent wallet. INR ${balance.toFixed(2)} remains due at check-in.`;
 }
 
-export function agentStatusLabel(active: boolean, policy: string | null | undefined) {
+export function agentStatusLabel(active: boolean, policy: string | null | undefined, kycSubmitted = false) {
   if (active) return 'Active';
-  return policy ? 'Deactivated' : 'Pending Approval';
+  return policy ? 'Deactivated' : kycSubmitted ? 'Under Review' : 'KYC Pending';
 }
 
 export function isLegacyFullPaymentAgent(policy: string | null | undefined, percent: number | string | null | undefined) {

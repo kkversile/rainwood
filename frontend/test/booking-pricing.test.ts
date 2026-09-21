@@ -19,7 +19,8 @@ test('confirmation wording follows immutable reservation payment values', () => 
 });
 
 test('agent status labels distinguish pending and deactivated', () => {
-  assert.equal(agentStatusLabel(false, null), 'Pending Approval');
+  assert.equal(agentStatusLabel(false, null), 'KYC Pending');
+  assert.equal(agentStatusLabel(false, null, true), 'Under Review');
   assert.equal(agentStatusLabel(false, 'PERCENTAGE'), 'Deactivated');
   assert.equal(agentStatusLabel(true, null), 'Active');
 });

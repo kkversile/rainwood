@@ -6,9 +6,10 @@ import { RolesGuard } from '../../common/roles.guard';
 import { RechargeWalletDto } from './wallet.dto';
 import { WalletService } from './wallet.service';
 import { PaymentsService } from '../payments/payments.service';
+import { ActiveAgentGuard } from '../../common/active-agent.guard';
 
 @Controller('wallet')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, ActiveAgentGuard, RolesGuard)
 @Roles('AGENT' as any)
 export class WalletController {
   constructor(private service: WalletService, private payments: PaymentsService) {}
