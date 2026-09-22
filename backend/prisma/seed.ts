@@ -63,7 +63,7 @@ async function main() {
     await prisma.agentWallet.upsert({ where: { agentId: agentUser.id }, update: {}, create: { agentId: agentUser.id, balance: 0 } });
   }
   const planByCode = Object.fromEntries(seededMasterPlans.map((item) => [item.code, item.id]));
-  const agentAssignments = [[agentUsers[0].id, ['A', 'B']], [agentUsers[1].id, ['C', 'D']], [agentUsers[2].id, ['B', 'E']]] as const;
+  const agentAssignments = [[agentUsers[0].id, ['A']], [agentUsers[1].id, ['C']], [agentUsers[2].id, ['B']]] as const;
   for (const [agentId, codes] of agentAssignments) {
     const selectedPlanIds = codes.map((code) => planByCode[code]);
     for (const ratePlanId of selectedPlanIds) await prisma.agentRatePlan.upsert({ where: { agentId_ratePlanId: { agentId, ratePlanId } }, create: { agentId, ratePlanId, active: true }, update: { active: true } });
@@ -75,11 +75,11 @@ async function main() {
   for (let offset = 0; offset < 120; offset += 1) {
     const date = new Date(start.getTime() + offset * 86_400_000);
     await prisma.inventoryDay.upsert({ where: { roomTypeId_date: { roomTypeId: room.id, date } }, update: { available: 8, stopSell: false }, create: { roomTypeId: room.id, date, available: 8, updatedFromAxisAt: new Date() } });
-    await prisma.rateDay.upsert({ where: { ratePlanId_date: { ratePlanId: plan.id, date } }, update: { amount: 5500, taxAmount: 660, childAmount: 1000, extraAdultAmount: 1500, occupancyPrices: { single: 5000, double: 5500, triple: 6500, quad: 7500, extrabed: 1200, extraadult: 1500, extrachild: 1000, extraadult2: 1600, extrachild2: 1100, extraadult3: 1700, extrachild3: 1200, extrainfant: 500 }, cta: false, ctd: false, minLos: 1, maxLos: 30 }, create: { ratePlanId: plan.id, date, amount: 5500, taxAmount: 660, childAmount: 1000, extraAdultAmount: 1500, occupancyPrices: { single: 5000, double: 5500, triple: 6500, quad: 7500, extrabed: 1200, extraadult: 1500, extrachild: 1000, extraadult2: 1600, extrachild2: 1100, extraadult3: 1700, extrachild3: 1200, extrainfant: 500 }, minLos: 1, maxLos: 30, updatedFromAxisAt: new Date() } });
+    await prisma.rateDay.upsert({ where: { ratePlanId_date: { ratePlanId: plan.id, date } }, update: { amount: 5500, taxAmount: 660, childAmount: 1000, extraAdultAmount: 1500, occupancyPrices: { single: 5000, double: 5500, triple: 6500, quad: 7500 }, cta: false, ctd: false, minLos: 1, maxLos: 30 }, create: { ratePlanId: plan.id, date, amount: 5500, taxAmount: 660, childAmount: 1000, extraAdultAmount: 1500, occupancyPrices: { single: 5000, double: 5500, triple: 6500, quad: 7500 }, minLos: 1, maxLos: 30, updatedFromAxisAt: new Date() } });
   }
   for (const masterPlan of seededMasterPlans) for (let offset = 0; offset < 120; offset += 1) {
     const date = new Date(start.getTime() + offset * 86_400_000);
-    const occupancyPrices = { single: masterPlan.amount - 500, double: masterPlan.amount, triple: masterPlan.amount + 1000, quad: masterPlan.amount + 2000, extrabed: 1200, extraadult: 1500, extrachild: 1000, extraadult2: 1600, extrachild2: 1100, extraadult3: 1700, extrachild3: 1200, extrainfant: 500 };
+    const occupancyPrices = { single: masterPlan.amount - 500, double: masterPlan.amount, triple: masterPlan.amount + 1000, quad: masterPlan.amount + 2000 };
     await prisma.rateDay.upsert({ where: { ratePlanId_date: { ratePlanId: masterPlan.id, date } }, update: { amount: masterPlan.amount, taxAmount: masterPlan.taxAmount, childAmount: 1000, extraAdultAmount: 1500, occupancyPrices, cta: false, ctd: false, minLos: 1, maxLos: 30 }, create: { ratePlanId: masterPlan.id, date, amount: masterPlan.amount, taxAmount: masterPlan.taxAmount, childAmount: 1000, extraAdultAmount: 1500, occupancyPrices, minLos: 1, maxLos: 30, updatedFromAxisAt: new Date() } });
   }
   await prisma.hotelImage.upsert({ where: { id: 'seed-hotel-image' }, update: { published: true }, create: { id: 'seed-hotel-image', hotelId: hotel.id, url: '/rainwood-placeholder.svg', altText: 'RainWood Aurum Kodaikanal exterior', sortOrder: 0 } });

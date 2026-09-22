@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { AgentDocumentStatus } from '@prisma/client';
+import { AgentDocumentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import bcrypt from 'bcryptjs';
 import { getAgentOnboardingStatus, hasAgentPaymentTerms, summarizeAgentDocuments } from '../../common/agent-access';
@@ -14,6 +14,39 @@ export const AGENT_DOCUMENT_TYPES = [
 @Injectable()
 export class AgentsService {
   constructor(private p: PrismaService) {}
+
+  private assignedAgent(agentId: string, db: PrismaService | Prisma.TransactionClient = this.p) {
+    return db.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, email: true, name: true, role: true, active: true, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } } });
+  }
+
+  async assignAgentHotelRatePlan(agentId: string, hotelId: string, masterId: string, actorId: string) {
+    await this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true } });
+    const master = await this.p.ratePlanMaster.findUnique({ where: { id: masterId }, select: { id: true, hotelId: true, active: true, code: true, name: true, mealPlan: true, hotel: { select: { id: true, name: true, city: true } }, assignments: { where: { active: true, roomType: { hotelId, active: true } }, select: { id: true, roomType: { select: { id: true, name: true } } } } } });
+    if (!master || master.hotelId !== hotelId) throw new BadRequestException('The selected commercial rate plan does not belong to the selected hotel.');
+    if (!master.active) throw new BadRequestException('The selected commercial rate plan is inactive.');
+    if (!master.assignments.length) throw new BadRequestException('This rate plan is not assigned to any active room types in the selected hotel.');
+    const selectedRatePlanIds = master.assignments.map((assignment) => assignment.id);
+    const current = await this.p.agentRatePlan.findMany({ where: { agentId, active: true, ratePlan: { roomType: { hotelId } } }, select: { ratePlanId: true, ratePlan: { select: { masterId: true } } } });
+    const result = await this.p.$transaction(async (tx) => {
+      await tx.agentRatePlan.updateMany({ where: { agentId, active: true, ratePlan: { roomType: { hotelId }, masterId: { not: masterId } } }, data: { active: false } });
+      for (const ratePlanId of selectedRatePlanIds) await tx.agentRatePlan.upsert({ where: { agentId_ratePlanId: { agentId, ratePlanId } }, create: { agentId, ratePlanId, active: true }, update: { active: true } });
+      await tx.auditLog.create({ data: { actorUserId: actorId, action: 'AGENT_HOTEL_RATE_PLAN_ASSIGNED', entityType: 'User', entityId: agentId, before: { hotelId, masterIds: current.map((item) => item.ratePlan.masterId) }, after: { hotelId, masterId, ratePlanIds: selectedRatePlanIds } } });
+      return this.assignedAgent(agentId, tx);
+    });
+    return result;
+  }
+
+  async removeAgentHotelRatePlan(agentId: string, masterId: string, actorId: string) {
+    await this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true } });
+    const master = await this.p.ratePlanMaster.findUnique({ where: { id: masterId }, select: { id: true, hotelId: true, code: true, name: true, hotel: { select: { id: true, name: true } } } });
+    if (!master) throw new BadRequestException('Rate plan master not found.');
+    const result = await this.p.$transaction(async (tx) => {
+      const updated = await tx.agentRatePlan.updateMany({ where: { agentId, active: true, ratePlan: { masterId } }, data: { active: false } });
+      await tx.auditLog.create({ data: { actorUserId: actorId, action: 'AGENT_HOTEL_RATE_PLAN_REMOVED', entityType: 'User', entityId: agentId, before: { hotelId: master.hotelId, masterId, activeMappings: updated.count }, after: { hotelId: master.hotelId, masterId, active: false } } });
+      return this.assignedAgent(agentId, tx);
+    });
+    return result;
+  }
 
   private publicProfile(user: any) {
     const { agentDocuments = [], paymentMilestones = [], agentPaymentPolicy, bookingPaymentPercent, profileImageFileId, active: _active, ...profile } = user;

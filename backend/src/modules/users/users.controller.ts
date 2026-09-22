@@ -38,6 +38,12 @@ class UpdateUserDto {
 class AgentRatePlanMappingDto {
   @IsOptional() @IsArray() @IsString({ each: true }) ratePlanIds?: string[];
   @IsOptional() @IsString() hotelId?: string;
+  @IsOptional() @IsString() masterId?: string;
+}
+
+class AgentHotelRatePlanDto {
+  @IsString() hotelId!: string;
+  @IsString() masterId!: string;
 }
 
 class AgentApprovalDto {
@@ -53,7 +59,7 @@ class AgentApprovalDto {
 export class UsersController {
   constructor(private p: PrismaService, @Optional() private agentsService?: AgentsService) {}
   @Get('') list() { return this.p.user.findMany({ select: { id: true, email: true, name: true, role: true, active: true, createdAt: true } }); }
-  @Get('agents') agents() { return this.p.user.findMany({ where: { role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, agentDocuments: { select: { status: true } }, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, assignedRatePlans: { include: { ratePlan: { include: { roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } }, orderBy: { createdAt: 'asc' } }); }
+  @Get('agents') agents() { return this.p.user.findMany({ where: { role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, agentDocuments: { select: { status: true } }, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } }, orderBy: { createdAt: 'asc' } }); }
   @Get('agents/rate-import-template.xlsx')
   @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   @Header('Content-Disposition', 'attachment; filename="rainwood-agent-rate-template.xlsx"')
@@ -112,7 +118,7 @@ export class UsersController {
     await this.p.auditLog.create({ data: { actorUserId: actor.id, action: 'AGENT_RATE_EXCEL_IMPORTED', entityType: 'AgentRatePlan', after: { rowsImported: rows.length, rowsUpdated } } });
     return { rowsReceived: receivedRows.size, rowsValid: receivedRows.size, rowsInvalid: 0, rowsImported: rows.length, rowsUpdated, errors: [] };
   }
-  @Get('agents/:agentId') agent(@Param('agentId') agentId: string) { return this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, agentDocuments: { include: { file: { select: { originalName: true, mimeType: true, size: true } } }, orderBy: { createdAt: 'desc' } } } }); }
+  @Get('agents/:agentId') agent(@Param('agentId') agentId: string) { return this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, agentDocuments: { include: { file: { select: { originalName: true, mimeType: true, size: true } } }, orderBy: { createdAt: 'desc' } }, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } } }); }
   @Post('') async create(@Body() d: CreateUserDto) { return this.p.user.create({ data: { email: d.email.toLowerCase(), name: d.name, role: (d.role || 'RESERVATION') as any, passwordHash: await bcrypt.hash(d.password, 12), active: true }, select: { id: true, email: true, name: true, role: true, active: true } }); }
   @Post('agents') async createAgent(@Body() d: CreateUserDto) {
     const milestones = d.paymentMilestones?.length ? validatePaymentMilestones(d.paymentMilestones) : paymentMilestonesForAgent({ agentPaymentPolicy: d.agentPaymentPolicy, bookingPaymentPercent: d.bookingPaymentPercent });
@@ -182,21 +188,39 @@ export class UsersController {
 
   @Get('agents/:agentId/documents') agentDocuments(@Param('agentId') agentId: string) { return this.agentsService!.listDocuments(agentId); }
   @Patch('agents/:agentId/documents/:id') reviewAgentDocument(@Param('agentId') agentId: string, @Param('id') id: string, @Body() body: { status?: string; reviewRemark?: string }) { return this.agentsService!.reviewDocument(agentId, id, body.status ?? '', body.reviewRemark); }
+  @Put('agents/:id/hotel-rate-plan') async assignHotelRatePlan(@Param('id') id: string, @Body() body: AgentHotelRatePlanDto, @CurrentUser() actor: any) {
+    if (!this.agentsService) throw new BadRequestException('Agent rate-plan service is unavailable.');
+    return this.agentsService.assignAgentHotelRatePlan(id, body.hotelId, body.masterId, actor.id);
+  }
+  @Delete('agents/:agentId/rate-plan-masters/:masterId') async removeHotelRatePlan(@Param('agentId') agentId: string, @Param('masterId') masterId: string, @CurrentUser() actor: any) {
+    if (!this.agentsService) throw new BadRequestException('Agent rate-plan service is unavailable.');
+    return this.agentsService.removeAgentHotelRatePlan(agentId, masterId, actor.id);
+  }
   @Put('agents/:id/rate-plans') async mapRatePlans(@Param('id') id: string, @Body() d: AgentRatePlanMappingDto, @CurrentUser() actor?: any) {
     const agent = await this.p.user.findFirstOrThrow({ where: { id, role: 'AGENT' }, select: { id: true } });
     const ratePlanIds = [...new Set(d.ratePlanIds ?? [])];
-    const validPlans = await this.p.ratePlan.findMany({ where: { id: { in: ratePlanIds }, active: true, master: { active: true } }, select: { id: true, roomType: { select: { hotelId: true } } } });
+    const validPlans = await this.p.ratePlan.findMany({ where: { id: { in: ratePlanIds }, active: true, master: { active: true } }, select: { id: true, masterId: true, roomType: { select: { hotelId: true } } } });
     if (validPlans.length !== ratePlanIds.length) throw new BadRequestException('One or more selected rate plans are invalid or inactive.');
     if (d.hotelId && validPlans.some((plan) => plan.roomType.hotelId !== d.hotelId)) throw new BadRequestException('One or more selected rate plans do not belong to the selected hotel.');
+    const hasMasterMetadata = validPlans.length > 0 && validPlans.every((plan) => Boolean(plan.masterId && plan.roomType?.hotelId));
+    const masterByHotel = new Map<string, string>();
+    if (hasMasterMetadata) for (const plan of validPlans) {
+      const previous = masterByHotel.get(plan.roomType.hotelId);
+      if (previous && previous !== plan.masterId) throw new BadRequestException('An agent can have only one commercial rate plan per hotel.');
+      masterByHotel.set(plan.roomType.hotelId, plan.masterId);
+    }
+    const normalizedRatePlanIds = hasMasterMetadata
+      ? Array.from(new Set((await this.p.ratePlan.findMany({ where: { active: true, master: { active: true }, masterId: { in: Array.from(masterByHotel.values()) }, roomType: { active: true, hotelId: d.hotelId ? d.hotelId : undefined } }, select: { id: true } })).map((plan) => plan.id)))
+      : ratePlanIds;
     const currentMappings = typeof this.p.agentRatePlan.findMany === 'function' ? await this.p.agentRatePlan.findMany({ where: { agentId: agent.id, active: true, ...(d.hotelId ? { ratePlan: { roomType: { hotelId: d.hotelId } } } : {}) }, select: { id: true, ratePlanId: true } }) : [];
     const currentIds = new Set(currentMappings.map((mapping) => mapping.ratePlanId));
-    const selected = new Set(ratePlanIds);
+    const selected = new Set(normalizedRatePlanIds);
     await this.p.$transaction(async (tx) => {
-      await Promise.all(ratePlanIds.map((ratePlanId) => tx.agentRatePlan.upsert({ where: { agentId_ratePlanId: { agentId: agent.id, ratePlanId } }, create: { agentId: agent.id, ratePlanId, active: true }, update: { active: true } })));
+      await Promise.all(normalizedRatePlanIds.map((ratePlanId) => tx.agentRatePlan.upsert({ where: { agentId_ratePlanId: { agentId: agent.id, ratePlanId } }, create: { agentId: agent.id, ratePlanId, active: true }, update: { active: true } })));
       await tx.agentRatePlan.updateMany({ where: { agentId: agent.id, ratePlanId: { notIn: [...selected] }, ...(d.hotelId ? { ratePlan: { roomType: { hotelId: d.hotelId } } } : {}) }, data: { active: false } });
-      if (tx.auditLog?.create) await tx.auditLog.create({ data: { actorUserId: actor?.id, action: 'AGENT_RATE_PLANS_UPDATED', entityType: 'User', entityId: agent.id, before: { ratePlanIds: [...currentIds] }, after: { addedRatePlanIds: ratePlanIds.filter((ratePlanId) => !currentIds.has(ratePlanId)), removedRatePlanIds: [...currentIds].filter((ratePlanId) => !selected.has(ratePlanId)), ratePlanIds } } });
+      if (tx.auditLog?.create) await tx.auditLog.create({ data: { actorUserId: actor?.id, action: 'AGENT_RATE_PLANS_UPDATED', entityType: 'User', entityId: agent.id, before: { ratePlanIds: [...currentIds] }, after: { addedRatePlanIds: normalizedRatePlanIds.filter((ratePlanId) => !currentIds.has(ratePlanId)), removedRatePlanIds: [...currentIds].filter((ratePlanId) => !selected.has(ratePlanId)), ratePlanIds: normalizedRatePlanIds } } });
     });
-    return this.p.user.findFirstOrThrow({ where: { id: agent.id }, select: { id: true, email: true, name: true, role: true, active: true, assignedRatePlans: { include: { ratePlan: { include: { roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } } });
+    return this.p.user.findFirstOrThrow({ where: { id: agent.id }, select: { id: true, email: true, name: true, role: true, active: true, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } } });
   }
 
   @Patch('agents/:agentId/rate-plans/:ratePlanId')
@@ -212,7 +236,7 @@ export class UsersController {
   async agentRates(@Param('agentId') agentId: string, @Param('ratePlanId') ratePlanId: string) {
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
-    const assignment = await this.p.agentRatePlan.findUnique({ where: { agentId_ratePlanId: { agentId, ratePlanId } }, include: { rates: { where: { date: { gte: today } }, orderBy: { date: 'asc' } }, ratePlan: { include: { roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } }, rates: { where: { date: { gte: today } }, orderBy: { date: 'asc' } } } } } });
+    const assignment = await this.p.agentRatePlan.findUnique({ where: { agentId_ratePlanId: { agentId, ratePlanId } }, include: { rates: { where: { date: { gte: today } }, orderBy: { date: 'asc' } }, ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } }, rates: { where: { date: { gte: today } }, orderBy: { date: 'asc' } } } } } });
     if (!assignment) throw new BadRequestException('Agent is not assigned to this rate plan.');
     return assignment;
   }

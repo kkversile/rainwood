@@ -11,12 +11,13 @@ type Plan = {
   name: string;
   mealPlan: string;
   active: boolean;
-  roomType: { name: string; hotel: { name: string; city: string } };
+  master: { id: string; code: string; name: string; mealPlan: string; active: boolean };
+  roomType: { name: string; hotel: { id: string; name: string; city: string } };
 };
 type Mapping = {
   active?: boolean;
   pricingMode?: "BASE" | "OVERRIDE";
-  ratePlan: { id: string };
+  ratePlan: { id: string; master: { id: string; code: string; name: string; mealPlan: string }; roomType: { name: string; hotel: { id: string; name: string; city: string } } };
 };
 type Agent = {
   id: string;
@@ -44,6 +45,7 @@ type RatePayload = {
     code: string;
     name: string;
     mealPlan: string;
+    master: { id: string; code: string; name: string; mealPlan: string; active: boolean };
     roomType: {
       id: string;
       name: string;
@@ -135,6 +137,7 @@ export default function AgentMappingsPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [agentId, setAgentId] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [selectedMasters, setSelectedMasters] = useState<Record<string, string>>({});
   const [persistedActiveRatePlanIds, setPersistedActiveRatePlanIds] = useState<
     string[]
   >([]);
@@ -163,6 +166,16 @@ export default function AgentMappingsPage() {
   const hotels = useMemo(() => Array.from(new Map(plans.map((plan) => [plan.roomType.hotel.name, plan.roomType.hotel.name])).values()).sort(), [plans]);
   const rooms = useMemo(() => Array.from(new Map(plans.filter((plan) => !hotelFilter || plan.roomType.hotel.name === hotelFilter).map((plan) => [plan.roomType.name, plan.roomType.name])).values()).sort(), [hotelFilter, plans]);
   const visiblePlans = useMemo(() => { const query = planSearch.trim().toLowerCase(); return plans.filter((plan) => (!hotelFilter || plan.roomType.hotel.name === hotelFilter) && (!roomFilter || plan.roomType.name === roomFilter) && (!mealFilter || plan.mealPlan === mealFilter) && (!query || `${plan.code} ${plan.name} ${plan.mealPlan} ${plan.roomType.name} ${plan.roomType.hotel.name}`.toLowerCase().includes(query))); }, [hotelFilter, mealFilter, planSearch, plans, roomFilter]);
+  const masterGroups = useMemo(() => {
+    const groups = new Map<string, { hotel: Plan['roomType']['hotel']; master: Plan['master']; plans: Plan[] }>();
+    for (const plan of visiblePlans) {
+      const key = `${plan.roomType.hotel.id}:${plan.master.id}`;
+      const group = groups.get(key) ?? { hotel: plan.roomType.hotel, master: plan.master, plans: [] };
+      group.plans.push(plan);
+      groups.set(key, group);
+    }
+    return [...groups.values()].sort((a, b) => `${a.hotel.name} ${a.master.code}`.localeCompare(`${b.hotel.name} ${b.master.code}`));
+  }, [visiblePlans]);
   const editorRows = useMemo<EditorRateRow[]>(() => {
     if (!editor) return [];
     const overrides = new Map(
@@ -253,8 +266,10 @@ export default function AgentMappingsPage() {
           const active = loadedAgents[0].assignedRatePlans
             .filter((item) => item.active !== false)
             .map((item) => item.ratePlan.id);
+          const masters = Object.fromEntries(loadedAgents[0].assignedRatePlans.filter((item) => item.active !== false).map((item) => [item.ratePlan.roomType.hotel.id, item.ratePlan.master.id]));
           setAgentId(loadedAgents[0].id);
           setSelected(active);
+          setSelectedMasters(masters);
           setPersistedActiveRatePlanIds(active);
         }
       })
@@ -273,16 +288,10 @@ export default function AgentMappingsPage() {
         .map((item) => item.ratePlan.id) ?? [];
     setAgentId(id);
     setSelected(active);
+    setSelectedMasters(Object.fromEntries((next?.assignedRatePlans ?? []).filter((item) => item.active !== false).map((item) => [item.ratePlan.roomType.hotel.id, item.ratePlan.master.id])));
     setPersistedActiveRatePlanIds(active);
     setEditor(null);
     setMessage("");
-  }
-  function togglePlan(id: string) {
-    setSelected((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id],
-    );
   }
   async function save() {
     if (!agentId) return;
@@ -290,10 +299,11 @@ export default function AgentMappingsPage() {
     setError("");
     setMessage("");
     try {
-      const saved = await apiRequest<Agent>(
-        `/users/agents/${agentId}/rate-plans`,
-        { method: "PUT", body: JSON.stringify({ ratePlanIds: selected }) },
-      );
+      let saved = agent;
+      for (const [hotelId, masterId] of Object.entries(selectedMasters)) {
+        saved = await apiRequest<Agent>(`/users/agents/${agentId}/hotel-rate-plan`, { method: "PUT", body: JSON.stringify({ hotelId, masterId }) });
+      }
+      if (!saved) throw new Error("Select at least one hotel rate plan.");
       const active = saved.assignedRatePlans
         .filter((item) => item.active !== false)
         .map((item) => item.ratePlan.id);
@@ -485,14 +495,15 @@ export default function AgentMappingsPage() {
                     );
                     return (
                       <div
-                        className={`mappingCard ${selected.includes(plan.id) ? "selected" : ""}`}
+                        className={`mappingCard ${selectedMasters[plan.roomType.hotel.id] === plan.master.id ? "selected" : ""}`}
                         key={plan.id}
                       >
                         <label className="mappingCardToggle">
                           <input
-                            type="checkbox"
-                            checked={selected.includes(plan.id)}
-                            onChange={() => togglePlan(plan.id)}
+                            type="radio"
+                            name={`agent-master-${plan.roomType.hotel.id}`}
+                            checked={selectedMasters[plan.roomType.hotel.id] === plan.master.id}
+                            onChange={() => setSelectedMasters((current) => ({ ...current, [plan.roomType.hotel.id]: plan.master.id }))}
                           />
                           <span className="mappingCode">{plan.code}</span>
                           <span>
