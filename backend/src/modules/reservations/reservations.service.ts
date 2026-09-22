@@ -155,8 +155,7 @@ export class ReservationsService {
     await serializable(this.p, async (tx) => {
       const reservation = await tx.reservation.findUnique({ where: { reference }, include: { payments: true, createdBy: { select: { id: true, role: true } } } });
       if (!reservation) throw new NotFoundException('Reservation not found');
-      const admin = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS'].includes(user.role);
-      if (!admin && (user.role !== 'AGENT' || reservation.createdById !== user.id)) throw new ForbiddenException('You can only pay milestones for your own reservations.');
+      if (user.role !== 'AGENT' || reservation.createdById !== user.id) throw new ForbiddenException('You can only pay milestones for your own reservations.');
       if (['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(reservation.status)) throw new BadRequestException('Reservation is not payable');
       const paid = reservation.payments.filter((payment) => payment.verified).reduce((sum, payment) => sum + Number(payment.amount), 0);
       const existingReference = idempotencyKey ? `MILESTONE:${reservation.id}:${idempotencyKey}` : undefined;
@@ -165,7 +164,7 @@ export class ReservationsService {
         if (existing) return reservation.reference;
       }
       const schedule = calculateReservationPaymentSchedule(reservation.paymentTermsSnapshot, paid);
-      const dueAmount = schedule.milestones.filter((item) => item.status === 'DUE' || item.status === 'PARTIALLY_PAID').reduce((sum, item) => sum + item.outstandingAmount, 0);
+      const dueAmount = schedule.milestones.filter((item) => item.dueNow && item.outstandingAmount > 0.005).reduce((sum, item) => sum + item.outstandingAmount, 0);
       if (dueAmount <= 0.005) throw new BadRequestException('There are no unpaid milestones due right now.');
       const wallet = reservation.createdById ? await tx.agentWallet.findUnique({ where: { agentId: reservation.createdById } }) : null;
       if (!wallet) throw new BadRequestException('Agent wallet not found.');
@@ -178,7 +177,7 @@ export class ReservationsService {
       const balance = Math.max(0, Number(reservation.totalAmount) - paidAfter);
       const paymentStatus = balance <= 0 ? 'PAID' : paidAfter > 0 ? 'PARTIALLY_PAID' : 'UNPAID';
       await tx.reservation.update({ where: { id: reservation.id }, data: { advanceAmount: paidAfter, balanceAmount: balance, paymentStatus, status: balance <= 0 && ['PENDING_PAYMENT', 'TENTATIVE', 'HELD'].includes(reservation.status) ? 'CONFIRMED' : reservation.status } });
-      await tx.auditLog.create({ data: { actorUserId: user.id, action: 'RESERVATION_MILESTONE_PAYMENT', entityType: 'Reservation', entityId: reservation.id, after: { agentId: reservation.createdById, reservationId: reservation.id, amount: dueAmount, milestones: schedule.milestones.filter((item) => item.status === 'DUE' || item.status === 'PARTIALLY_PAID').map((item) => ({ dueAt: item.dueAt, amount: item.outstandingAmount })) } } });
+      await tx.auditLog.create({ data: { actorUserId: user.id, action: 'RESERVATION_MILESTONE_PAYMENT', entityType: 'Reservation', entityId: reservation.id, after: { agentId: reservation.createdById, reservationId: reservation.id, amount: dueAmount, milestones: schedule.milestones.filter((item) => item.dueNow && item.outstandingAmount > 0.005).map((item) => ({ dueAt: item.dueAt, amount: item.outstandingAmount })) } } });
       return reservation.reference;
     });
     return this.get(reference);

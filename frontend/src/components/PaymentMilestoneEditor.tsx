@@ -1,10 +1,10 @@
 'use client';
 
 export type DueType = 'ON_BOOKING' | 'DAYS_BEFORE_CHECKIN';
-export type MilestoneDraft = { percentage: string; dueType: DueType; daysBeforeCheckIn: string };
+export type MilestoneDraft = { percentage: string; dueType: DueType | null; daysBeforeCheckIn: string };
 export type ApiMilestone = { percentage: number | string; dueType: DueType; daysBeforeCheckIn?: number | null; sortOrder?: number };
 
-export const emptyMilestone = (): MilestoneDraft => ({ percentage: '', dueType: 'DAYS_BEFORE_CHECKIN', daysBeforeCheckIn: '0' });
+export const emptyMilestone = (): MilestoneDraft => ({ percentage: '', dueType: null, daysBeforeCheckIn: '' });
 export const defaultMilestones = (): MilestoneDraft[] => [{ percentage: '100', dueType: 'ON_BOOKING', daysBeforeCheckIn: '' }];
 
 export function toDraft(items?: ApiMilestone[]) {
@@ -13,17 +13,32 @@ export function toDraft(items?: ApiMilestone[]) {
 }
 
 export function toPayload(items: MilestoneDraft[]) {
-  return items.map((item) => ({ percentage: Number(item.percentage), dueType: item.dueType, ...(item.dueType === 'DAYS_BEFORE_CHECKIN' ? { daysBeforeCheckIn: Number(item.daysBeforeCheckIn) } : {}) }));
+  return items.map((item) => {
+    if (!item.dueType) throw new Error('Select when every payment milestone is due.');
+    return { percentage: Number(item.percentage), dueType: item.dueType, ...(item.dueType === 'DAYS_BEFORE_CHECKIN' ? { daysBeforeCheckIn: Number(item.daysBeforeCheckIn) } : {}) };
+  });
 }
 
 export function totalOf(items: MilestoneDraft[]) { return items.reduce((sum, item) => sum + (Number(item.percentage) || 0), 0); }
+export function addRemainingMilestone(items: MilestoneDraft[]) {
+  const remaining = Math.max(0, 100 - totalOf(items));
+  return remaining > 0 ? [...items, { percentage: remaining.toFixed(2).replace(/\.00$/, ''), dueType: null, daysBeforeCheckIn: '' }] : items;
+}
 
 export function validMilestones(items: MilestoneDraft[]) {
-  return items.length > 0 && items.every((item) => Number(item.percentage) > 0 && (item.dueType === 'ON_BOOKING' || Number.isInteger(Number(item.daysBeforeCheckIn)) && Number(item.daysBeforeCheckIn) >= 0)) && Math.abs(totalOf(items) - 100) < 0.001;
+  return items.length > 0 && items.every((item) => {
+    const percentage = Number(item.percentage);
+    if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 100 || !item.dueType) return false;
+    if (item.dueType === 'ON_BOOKING') return true;
+    if (item.daysBeforeCheckIn.trim() === '') return false;
+    const days = Number(item.daysBeforeCheckIn);
+    return Number.isInteger(days) && days >= 0;
+  }) && Math.abs(totalOf(items) - 100) < 0.001;
 }
 
 export function milestoneLabel(item: ApiMilestone | MilestoneDraft) {
   const percentage = Number(item.percentage);
+  if (!item.dueType) return `${percentage}% · Due not selected`;
   if (item.dueType === 'ON_BOOKING') return `${percentage}% · On Booking`;
   const days = Number(item.daysBeforeCheckIn ?? 0);
   return `${percentage}% · ${days === 0 ? 'Check-in' : `${days} days`}`;
@@ -34,8 +49,8 @@ export function PaymentMilestoneEditor({ value, onChange, readOnly = false }: { 
   const update = (index: number, patch: Partial<MilestoneDraft>) => onChange(value.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   const remaining = Math.max(0, 100 - total);
   return <div className="formCard paymentMilestoneEditor" data-testid="payment-milestone-editor">
-    <div className="rangeSectionHeader"><div><span className="eyebrow">Payment terms</span><h3>Payment milestones</h3><p className="mutedText">Choose exactly when each percentage is due. On Booking is separate from check-in.</p></div><span className={`status ${Math.abs(total - 100) < 0.001 ? 'ok' : 'warn'}`}>Total {total.toFixed(2)}%</span></div>
-    <div className="tableScroll"><table><thead><tr><th>#</th><th>Percentage</th><th>Due</th><th>Days before check-in</th><th>Action</th></tr></thead><tbody>{value.map((item, index) => <tr key={index}><td>{index + 1}</td><td><input aria-label={`Milestone ${index + 1} percentage`} type="number" min="0.01" max="100" step="0.01" value={item.percentage} disabled={readOnly} onChange={(event) => update(index, { percentage: event.target.value })} /> %</td><td><select aria-label={`Milestone ${index + 1} due type`} value={item.dueType} disabled={readOnly} onChange={(event) => update(index, { dueType: event.target.value as DueType, daysBeforeCheckIn: event.target.value === 'ON_BOOKING' ? '' : item.daysBeforeCheckIn || '0' })}><option value="ON_BOOKING">On Booking</option><option value="DAYS_BEFORE_CHECKIN">Before Check-in</option></select></td><td>{item.dueType === 'DAYS_BEFORE_CHECKIN' ? <><input aria-label={`Milestone ${index + 1} days`} type="number" min="0" step="1" value={item.daysBeforeCheckIn} disabled={readOnly} onChange={(event) => update(index, { daysBeforeCheckIn: event.target.value })} />{Number(item.daysBeforeCheckIn || 0) === 0 && <small>At check-in</small>}</> : <span className="mutedText">Not applicable</span>}</td><td>{!readOnly && <button className="smallBtn secondary" type="button" disabled={value.length === 1} onClick={() => onChange(value.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>}</td></tr>)}</tbody></table></div>
-    {!readOnly && <div className="rowActions"><button className="smallBtn" type="button" onClick={() => onChange([...value, emptyMilestone()])}>+ Add Milestone</button>{remaining > 0 && <button className="smallBtn secondary" type="button" onClick={() => onChange([...value, { percentage: remaining.toFixed(2).replace(/\.00$/, ''), dueType: 'DAYS_BEFORE_CHECKIN', daysBeforeCheckIn: '' }])}>+ Add Remaining {remaining.toFixed(2)}%</button>}<span className="mutedText">{total < 100 ? `Remaining ${remaining.toFixed(2)}%` : total > 100 ? 'Reduce the total to 100%' : 'Ready to save'}</span></div>}
+    <div className="rangeSectionHeader"><div><span className="eyebrow">Payment terms</span><h3>Payment milestones</h3><p className="mutedText">Choose exactly when each percentage is due. On Booking is separate from check-in.</p></div><span className={`status ${Math.abs(total - 100) < 0.001 && validMilestones(value) ? 'ok' : 'warn'}`}>Total {total.toFixed(2)}%</span></div>
+    <div className="tableScroll"><table><thead><tr><th>#</th><th>Percentage</th><th>Due</th><th>Days before check-in</th><th>Action</th></tr></thead><tbody>{value.map((item, index) => <tr key={index}><td>{index + 1}</td><td><input aria-label={`Milestone ${index + 1} percentage`} type="number" min="0.01" max="100" step="0.01" value={item.percentage} disabled={readOnly} onChange={(event) => update(index, { percentage: event.target.value })} /> %</td><td><select aria-label={`Milestone ${index + 1} due type`} value={item.dueType ?? ''} disabled={readOnly} onChange={(event) => { const dueType = event.target.value as DueType | ''; update(index, { dueType: dueType || null, daysBeforeCheckIn: dueType === 'ON_BOOKING' ? '' : item.daysBeforeCheckIn }); }}><option value="">Select due point</option><option value="ON_BOOKING">On Booking</option><option value="DAYS_BEFORE_CHECKIN">Before Check-in</option></select></td><td>{item.dueType === 'DAYS_BEFORE_CHECKIN' ? <><input aria-label={`Milestone ${index + 1} days`} type="number" min="0" step="1" value={item.daysBeforeCheckIn} disabled={readOnly} onChange={(event) => update(index, { daysBeforeCheckIn: event.target.value })} />{item.daysBeforeCheckIn !== '' && Number(item.daysBeforeCheckIn) === 0 && <small>At check-in</small>}</> : <span className="mutedText">Not applicable</span>}</td><td>{!readOnly && <button className="smallBtn secondary" type="button" disabled={value.length === 1} onClick={() => onChange(value.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>}</td></tr>)}</tbody></table></div>
+    {!readOnly && <div className="rowActions"><button className="smallBtn" type="button" onClick={() => onChange([...value, emptyMilestone()])}>+ Add Milestone</button>{remaining > 0 && <button className="smallBtn secondary" type="button" onClick={() => onChange(addRemainingMilestone(value))}>+ Add Remaining {remaining.toFixed(2)}%</button>}<span className="mutedText">{!value.every((item) => item.dueType) ? 'Select a due point for every milestone' : total < 100 ? `Remaining ${remaining.toFixed(2)}%` : total > 100 ? 'Reduce the total to 100%' : 'Ready to save'}</span></div>}
   </div>;
 }

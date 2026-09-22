@@ -1,6 +1,6 @@
 import { ReservationsService } from './reservations.service';
 
-function reservationFixture() {
+function reservationFixture(paid = 2000) {
   return {
     id: 'reservation-1', reference: 'RW-TEST-1', createdById: 'agent-1', status: 'CONFIRMED', totalAmount: 20000, balanceAmount: 18000, advanceAmount: 2000,
     paymentTermsSnapshot: { milestones: [
@@ -9,13 +9,13 @@ function reservationFixture() {
       { percentage: 20, dueType: 'DAYS_BEFORE_CHECKIN', daysBeforeCheckIn: 10, amount: 4000, dueAt: '2026-10-01T00:00:00.000Z', sortOrder: 2 },
       { percentage: 40, dueType: 'DAYS_BEFORE_CHECKIN', daysBeforeCheckIn: 0, amount: 8000, dueAt: '2026-11-30T00:00:00.000Z', sortOrder: 3 },
     ] },
-    payments: [{ amount: 2000, verified: true, reference: 'WALLET:RW-TEST-1' }],
+    payments: [{ amount: paid, verified: true, reference: 'WALLET:RW-TEST-1' }],
     createdBy: { id: 'agent-1', role: 'AGENT' },
   };
 }
 
-function setup(balance = 10000) {
-  const reservation = reservationFixture();
+function setup(balance = 10000, paid = 2000) {
+  const reservation = reservationFixture(paid);
   const tx: any = {
     reservation: { findUnique: jest.fn().mockResolvedValue(reservation), update: jest.fn().mockImplementation(async (_args: any) => { reservation.advanceAmount = 8000; reservation.balanceAmount = 12000; reservation.payments.push({ amount: 6000, verified: true, reference: 'MILESTONE:reservation-1:retry-1' }); return reservation; }) },
     agentWallet: { findUnique: jest.fn().mockResolvedValue({ id: 'wallet-1', balance }), updateMany: jest.fn().mockResolvedValue({ count: balance >= 6000 ? 1 : 0 }), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'wallet-1', balance: balance - 6000 }) },
@@ -49,6 +49,20 @@ describe('reservation due milestone payments', () => {
   it('rejects an agent attempting to pay another agent reservation', async () => {
     const { service, tx } = setup();
     await expect(service.payDueMilestones('RW-TEST-1', 'retry-3', { id: 'agent-2', role: 'AGENT' })).rejects.toThrow('own reservations');
+    expect(tx.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('excludes a future partially-paid milestone from the due amount', async () => {
+    const { service, tx } = setup(5000, 9000);
+    await expect(service.payDueMilestones('RW-TEST-1', 'future-partial', { id: 'agent-1', role: 'AGENT' })).rejects.toThrow('no unpaid milestones due right now');
+    expect(tx.agentWallet.updateMany).not.toHaveBeenCalled();
+    expect(tx.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('does not allow staff to debit an agent wallet through the self-payment endpoint', async () => {
+    const { service, tx } = setup();
+    await expect(service.payDueMilestones('RW-TEST-1', 'staff-payment', { id: 'admin-1', role: 'ADMIN' })).rejects.toThrow('own reservations');
+    expect(tx.agentWallet.updateMany).not.toHaveBeenCalled();
     expect(tx.payment.create).not.toHaveBeenCalled();
   });
 });

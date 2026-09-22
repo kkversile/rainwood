@@ -54,7 +54,7 @@ export class ReservationsController {
 
   @Post(':reference/pay-due-milestones')
   @UseGuards(JwtAuthGuard, ActiveAgentGuard, RolesGuard)
-  @Roles('AGENT' as any, 'SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS')
+  @Roles('AGENT' as any)
   payDueMilestones(@Param('reference') reference: string, @Body() body: PayDueMilestonesDto, @CurrentUser() user: any) {
     return this.s.payDueMilestones(reference, body.idempotencyKey, { id: user.id, role: user.role });
   }

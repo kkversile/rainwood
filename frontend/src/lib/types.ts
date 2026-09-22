@@ -47,7 +47,7 @@ export type ReservationSummary = {
   advanceAmount: number | string;
   balanceAmount: number | string;
   paymentTermsSnapshot?: { policy?: string; percentage?: number | string | null; milestones?: { percentage: number | string; dueType: string; daysBeforeCheckIn?: number | null; amount?: number; dueAt?: string; dueNow?: boolean }[] } | null;
-  paymentSchedule?: { milestones: { percentage: number | string; dueType: string; daysBeforeCheckIn?: number | null; amount: number | string; dueAt: string; paidAmount: number | string; outstandingAmount: number | string; status: 'PAID' | 'PARTIALLY_PAID' | 'DUE' | 'UPCOMING' }[]; paidAmount: number | string; outstandingAmount: number | string } | null;
+  paymentSchedule?: { milestones: { percentage: number | string; dueType: string; daysBeforeCheckIn?: number | null; amount: number | string; dueAt: string; paidAmount: number | string; outstandingAmount: number | string; dueNow: boolean; status: 'PAID' | 'PARTIALLY_PAID' | 'DUE' | 'UPCOMING' }[]; paidAmount: number | string; outstandingAmount: number | string } | null;
   hotel: { name: string; slug: string; city: string };
   lines: { roomType: string; ratePlan: string; rooms: number; adults: number; children: number }[];
 };
