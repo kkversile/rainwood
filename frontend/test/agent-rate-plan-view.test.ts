@@ -8,7 +8,7 @@ const plans = [
 ];
 
 test('assigned rate plan filters match admin-style search fields', () => {
-  assert.deepEqual(filterAssignedRatePlans(plans, { search: 'aurum', hotel: '', room: '', mealPlan: '' }).map((plan) => plan.id), ['one']);
-  assert.deepEqual(filterAssignedRatePlans(plans, { search: '', hotel: 'RainWood Lakeshore', room: '', mealPlan: 'EP' }).map((plan) => plan.id), ['two']);
-  assert.deepEqual(filterAssignedRatePlans(plans, { search: 'pvr', hotel: '', room: 'Premium Valley Room', mealPlan: 'EP' }), []);
+  assert.deepEqual(filterAssignedRatePlans(plans, { search: 'aurum', hotel: '', room: '', ratePlan: '', mealPlan: '' }).map((plan) => plan.id), ['one']);
+  assert.deepEqual(filterAssignedRatePlans(plans, { search: '', hotel: 'RainWood Lakeshore', room: '', ratePlan: 'two', mealPlan: 'EP' }).map((plan) => plan.id), ['two']);
+  assert.deepEqual(filterAssignedRatePlans(plans, { search: 'pvr', hotel: '', room: 'Premium Valley Room', ratePlan: '', mealPlan: 'EP' }), []);
 });

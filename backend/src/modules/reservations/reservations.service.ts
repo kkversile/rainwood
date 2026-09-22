@@ -125,9 +125,15 @@ export class ReservationsService {
     return this.p.reservation.findMany({ where: { createdById: userId }, orderBy: { createdAt: 'desc' }, take: 100, select: { reference: true, guestName: true, checkIn: true, checkOut: true, createdAt: true, source: true, status: true, paymentStatus: true, totalAmount: true, advanceAmount: true, balanceAmount: true, hotel: { select: { name: true, city: true } }, lines: { select: { roomType: { select: { name: true } }, ratePlan: { select: { name: true } }, rooms: true } } } });
   }
 
-  async listRatePlansForUser(userId: string) {
+  async listRatePlansForUser(userId: string, from?: string, to?: string) {
     const today = new Date(); today.setUTCHours(0, 0, 0, 0);
-    const assignments = await this.p.agentRatePlan.findMany({ where: { agentId: userId, active: true, ratePlan: { active: true, master: { active: true } } }, orderBy: { ratePlan: { name: 'asc' } }, include: { rates: { where: { date: { gte: today } }, orderBy: { date: 'asc' }, take: 31 }, ratePlan: { include: { roomType: { include: { hotel: { select: { name: true, city: true } } } }, rates: { where: { date: { gte: today } }, orderBy: { date: 'asc' }, take: 31 } } } } });
+    const start = from ? parseDateOnly(from, 'from') : today;
+    const end = to ? parseDateOnly(to, 'to') : undefined;
+    if (end && end < start) throw new BadRequestException('to must be on or after from');
+    if (end && end.getTime() - start.getTime() > 370 * 86_400_000) throw new BadRequestException('Rate plan date ranges cannot exceed 371 days');
+    const dateFilter = { date: { gte: start, ...(end ? { lte: end } : {}) } };
+    const take = end ? 371 : 31;
+    const assignments = await this.p.agentRatePlan.findMany({ where: { agentId: userId, active: true, ratePlan: { active: true, master: { active: true } } }, orderBy: { ratePlan: { name: 'asc' } }, include: { rates: { where: dateFilter, orderBy: { date: 'asc' }, take }, ratePlan: { include: { roomType: { include: { hotel: { select: { name: true, city: true } } } }, rates: { where: dateFilter, orderBy: { date: 'asc' }, take } } } } });
     return assignments.map((assignment) => ({ id: assignment.ratePlan.id, code: assignment.ratePlan.code, name: assignment.ratePlan.name, mealPlan: assignment.ratePlan.mealPlan, description: assignment.ratePlan.description, hotel: assignment.ratePlan.roomType.hotel, room: { id: assignment.ratePlan.roomType.id, name: assignment.ratePlan.roomType.name, code: assignment.ratePlan.roomType.code }, rates: assignment.ratePlan.rates.map((rate) => ({ ...this.rateResolver.byDate({ assignedAgents: [assignment] }, userId).get(rate), date: rate.date })) }));
   }
 

@@ -11,6 +11,7 @@ export type AgentRatePlanFilters = {
   search: string;
   hotel: string;
   room: string;
+  ratePlan: string;
   mealPlan: string;
 };
 
@@ -21,6 +22,7 @@ export function filterAssignedRatePlans<T extends AssignedRatePlanView>(plans: T
     return (!query || searchable.includes(query))
       && (!filters.hotel || plan.hotel.name === filters.hotel)
       && (!filters.room || plan.room.name === filters.room)
+      && (!filters.ratePlan || plan.id === filters.ratePlan)
       && (!filters.mealPlan || plan.mealPlan === filters.mealPlan);
   });
 }

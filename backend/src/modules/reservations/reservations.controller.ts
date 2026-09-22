@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ReservationsService } from './reservations.service';
-import { CancellationDto, CreateReservationDto, ManualReservationDto, ModificationDto, ReservationListQueryDto } from './reservations.dto';
+import { CancellationDto, CreateReservationDto, ManualReservationDto, ModificationDto, RatePlanListQueryDto, ReservationListQueryDto } from './reservations.dto';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -41,7 +41,7 @@ export class ReservationsController {
   @Get('mine/rate-plans')
   @UseGuards(JwtAuthGuard, ActiveAgentGuard, RolesGuard)
   @Roles('AGENT' as any)
-  mineRatePlans(@CurrentUser() user: any) { return this.s.listRatePlansForUser(user.id); }
+  mineRatePlans(@CurrentUser() user: any, @Query() query: RatePlanListQueryDto) { return this.s.listRatePlansForUser(user.id, query.from, query.to); }
 
   @Get(':reference')
   @UseGuards(OptionalJwtAuthGuard, ActiveAgentGuard)

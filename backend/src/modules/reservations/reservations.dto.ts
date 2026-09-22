@@ -135,3 +135,13 @@ export class ReservationListQueryDto {
   @IsDateString()
   to?: string;
 }
+
+export class RatePlanListQueryDto {
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+}
