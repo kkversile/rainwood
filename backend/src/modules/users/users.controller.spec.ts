@@ -17,7 +17,7 @@ describe('agent rate-plan mappings', () => {
           .mockResolvedValueOnce({ id: 'agent-1', assignedRatePlans: [] }),
       },
       ratePlan: { findMany: jest.fn().mockResolvedValue([{ id: 'plan-1' }]) },
-      agentRatePlan: { deleteMany: jest.fn() },
+      agentRatePlan: { deleteMany: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn(async (work: any) => work(tx)),
     };
     const controller = new UsersController(prisma);
@@ -52,6 +52,19 @@ describe('agent rate-plan mappings', () => {
     };
     const controller = new UsersController(prisma);
     await expect(controller.mapRatePlans('agent-1', { ratePlanIds: ['inactive-plan'] })).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('preserves an existing OVERRIDE mapping when the Agents assignment modal saves it unchanged', async () => {
+    const tx = { agentRatePlan: { upsert: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 0 }) }, auditLog: { create: jest.fn() } };
+    const prisma: any = {
+      user: { findFirstOrThrow: jest.fn().mockResolvedValueOnce({ id: 'agent-1' }).mockResolvedValueOnce({ id: 'agent-1', assignedRatePlans: [] }) },
+      ratePlan: { findMany: jest.fn().mockResolvedValue([{ id: 'plan-1' }]) },
+      agentRatePlan: { findMany: jest.fn().mockResolvedValue([{ id: 'mapping-1', ratePlanId: 'plan-1', active: true, pricingMode: 'OVERRIDE' }]) },
+      $transaction: jest.fn(async (work: any) => work(tx)),
+    };
+    await new UsersController(prisma).mapRatePlans('agent-1', { ratePlanIds: ['plan-1'] });
+    expect(tx.agentRatePlan.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: { active: true } }));
+    expect(tx.agentRatePlan.upsert.mock.calls[0][0].update).not.toHaveProperty('pricingMode');
   });
 
   it('clears stale agent-rate overrides when an imported row has blank override cells', async () => {

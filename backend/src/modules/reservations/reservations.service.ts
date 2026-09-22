@@ -10,7 +10,7 @@ import { sha256 } from '../../common/security';
 import { serializable } from '../../common/transactions';
 import { assertReservationTransition } from './reservation-state';
 import { RateResolverService } from '../availability/rate-resolver';
-import { calculateAgentBookingPaymentTerms } from '../../common/agent-payment-terms';
+import { calculateAgentBookingPaymentTerms, calculateReservationPaymentSchedule } from '../../common/agent-payment-terms';
 
 @Injectable()
 export class ReservationsService {
@@ -30,10 +30,11 @@ export class ReservationsService {
       const hotelId = hold.hotelId;
       const reservationReference = this.reference();
       const bookingTotal = hold.lines.reduce((sum, line) => sum + Number(line.quotedTotal), 0);
+      const bookingCreatedAt = new Date();
       const walletBooking = user?.role === 'AGENT';
-      const agent = walletBooking ? await tx.user.findFirst({ where: { id: user.id, role: 'AGENT', active: true }, select: { id: true, agentPaymentPolicy: true, bookingPaymentPercent: true } }) : null;
+      const agent = walletBooking ? await tx.user.findFirst({ where: { id: user.id, role: 'AGENT', active: true }, select: { id: true, agentPaymentPolicy: true, bookingPaymentPercent: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } } } }) : null;
       if (walletBooking && !agent) throw new ForbiddenException('The agent account is not available for booking');
-      const paymentTerms = walletBooking ? calculateAgentBookingPaymentTerms(bookingTotal, agent!) : null;
+      const paymentTerms = walletBooking ? calculateAgentBookingPaymentTerms(bookingTotal, agent!, hold.lines[0].checkIn, bookingCreatedAt) : null;
       const lineSnapshots = hold.lines.map((line) => ({
         breakdown: Array.isArray(line.quotedBreakdown) ? line.quotedBreakdown as any[] : [],
         agentRatePlanId: Array.isArray(line.quotedBreakdown) ? (line.quotedBreakdown as any[]).find((night) => night.agentRatePlanId)?.agentRatePlanId ?? null : null,
@@ -68,7 +69,7 @@ export class ReservationsService {
           balanceAmount: walletBooking ? paymentTerms!.balanceAtBooking : bookingTotal,
           priceSnapshot: hold.lines.map((line, index) => ({ roomTypeId: line.roomTypeId, ratePlanId: line.ratePlanId, agentRatePlanId: lineSnapshots[index].agentRatePlanId, priceSource: lineSnapshots[index].breakdown.some((night) => night.priceSource === 'AGENT_OVERRIDE') ? 'AGENT_OVERRIDE' : 'BASE', total: Number(line.quotedTotal), tax: Number(line.quotedTax), breakdown: line.quotedBreakdown })),
           policySnapshot: { policySource: 'hold', capturedAt: new Date().toISOString(), freeCancellationHours: 48, firstNightPenalty: true },
-          paymentTermsSnapshot: paymentTerms ? { agentId: agent!.id, policy: paymentTerms.policy, percentage: paymentTerms.percentage, bookingTotal, requiredAtBooking: paymentTerms.requiredAtBooking, balanceAtBooking: paymentTerms.balanceAtBooking, balanceDueRule: 'AT_CHECK_IN', capturedAt: new Date().toISOString() } : undefined,
+          paymentTermsSnapshot: paymentTerms ? { agentId: agent!.id, policy: paymentTerms.policy, percentage: paymentTerms.percentage, bookingTotal, requiredAtBooking: paymentTerms.requiredAtBooking, balanceAtBooking: paymentTerms.balanceAtBooking, milestones: paymentTerms.milestones, capturedAt: bookingCreatedAt.toISOString() } : undefined,
           specialRequest: body.specialRequest,
           billingInstruction: body.billingInstruction,
           internalRemark: body.internalRemark,
@@ -122,7 +123,8 @@ export class ReservationsService {
   }
 
   async listForUser(userId: string) {
-    return this.p.reservation.findMany({ where: { createdById: userId }, orderBy: { createdAt: 'desc' }, take: 100, select: { reference: true, guestName: true, checkIn: true, checkOut: true, createdAt: true, source: true, status: true, paymentStatus: true, totalAmount: true, advanceAmount: true, balanceAmount: true, hotel: { select: { name: true, city: true } }, lines: { select: { roomType: { select: { name: true } }, ratePlan: { select: { name: true } }, rooms: true } } } });
+    const rows = await this.p.reservation.findMany({ where: { createdById: userId }, orderBy: { createdAt: 'desc' }, take: 100, include: { payments: { select: { amount: true, verified: true } }, hotel: { select: { name: true, city: true } }, lines: { select: { roomType: { select: { name: true } }, ratePlan: { select: { name: true } }, rooms: true } } } });
+    return rows.map(({ payments, ...row }) => ({ ...row, paymentSchedule: this.paymentSchedule(row.paymentTermsSnapshot, payments.filter((payment) => payment.verified).reduce((sum, payment) => sum + Number(payment.amount), 0)) }));
   }
 
   async listRatePlansForUser(userId: string, from?: string, to?: string) {
@@ -140,8 +142,46 @@ export class ReservationsService {
   async get(reference: string, full = false) {
     const reservation = await this.p.reservation.findUnique({ where: { reference }, include: { hotel: true, lines: { include: { roomType: true, ratePlan: true, nights: true } }, payments: true, paymentAttempts: true, syncLogs: true, vouchers: { include: { file: true } }, cancellations: true, modifications: true } });
     if (!reservation) throw new NotFoundException('Reservation not found');
-    if (full) return reservation;
-    return { id: reservation.id, reference: reservation.reference, status: reservation.status, paymentStatus: reservation.paymentStatus, syncStatus: reservation.syncStatus, guestName: reservation.guestName, checkIn: reservation.checkIn, checkOut: reservation.checkOut, currency: reservation.currency, totalAmount: reservation.totalAmount, advanceAmount: reservation.advanceAmount, balanceAmount: reservation.balanceAmount, hotel: { name: reservation.hotel.name, slug: reservation.hotel.slug, city: reservation.hotel.city }, lines: reservation.lines.map((line) => ({ roomType: line.roomType.name, ratePlan: line.ratePlan.name, rooms: line.rooms, adults: line.adults, children: line.children, checkIn: line.checkIn, checkOut: line.checkOut })) };
+    const paymentSchedule = this.paymentSchedule(reservation.paymentTermsSnapshot, reservation.payments.filter((payment) => payment.verified).reduce((sum, payment) => sum + Number(payment.amount), 0));
+    if (full) return { ...reservation, paymentSchedule };
+    return { id: reservation.id, reference: reservation.reference, status: reservation.status, paymentStatus: reservation.paymentStatus, syncStatus: reservation.syncStatus, guestName: reservation.guestName, checkIn: reservation.checkIn, checkOut: reservation.checkOut, currency: reservation.currency, totalAmount: reservation.totalAmount, advanceAmount: reservation.advanceAmount, balanceAmount: reservation.balanceAmount, hotel: { name: reservation.hotel.name, slug: reservation.hotel.slug, city: reservation.hotel.city }, lines: reservation.lines.map((line) => ({ roomType: line.roomType.name, ratePlan: line.ratePlan.name, rooms: line.rooms, adults: line.adults, children: line.children, checkIn: line.checkIn, checkOut: line.checkOut })), paymentSchedule };
+  }
+
+  private paymentSchedule(snapshot: unknown, verifiedPaid: number) {
+    return calculateReservationPaymentSchedule(snapshot, verifiedPaid);
+  }
+
+  async payDueMilestones(reference: string, idempotencyKey: string | undefined, user: { id: string; role: string }) {
+    await serializable(this.p, async (tx) => {
+      const reservation = await tx.reservation.findUnique({ where: { reference }, include: { payments: true, createdBy: { select: { id: true, role: true } } } });
+      if (!reservation) throw new NotFoundException('Reservation not found');
+      const admin = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS'].includes(user.role);
+      if (!admin && (user.role !== 'AGENT' || reservation.createdById !== user.id)) throw new ForbiddenException('You can only pay milestones for your own reservations.');
+      if (['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(reservation.status)) throw new BadRequestException('Reservation is not payable');
+      const paid = reservation.payments.filter((payment) => payment.verified).reduce((sum, payment) => sum + Number(payment.amount), 0);
+      const existingReference = idempotencyKey ? `MILESTONE:${reservation.id}:${idempotencyKey}` : undefined;
+      if (existingReference) {
+        const existing = reservation.payments.find((payment) => payment.reference === existingReference && payment.verified);
+        if (existing) return reservation.reference;
+      }
+      const schedule = calculateReservationPaymentSchedule(reservation.paymentTermsSnapshot, paid);
+      const dueAmount = schedule.milestones.filter((item) => item.status === 'DUE' || item.status === 'PARTIALLY_PAID').reduce((sum, item) => sum + item.outstandingAmount, 0);
+      if (dueAmount <= 0.005) throw new BadRequestException('There are no unpaid milestones due right now.');
+      const wallet = reservation.createdById ? await tx.agentWallet.findUnique({ where: { agentId: reservation.createdById } }) : null;
+      if (!wallet) throw new BadRequestException('Agent wallet not found.');
+      const walletUpdate = await tx.agentWallet.updateMany({ where: { id: wallet.id, balance: { gte: dueAmount } }, data: { balance: { decrement: dueAmount } } });
+      if (walletUpdate.count !== 1) throw new BadRequestException(`Insufficient wallet balance. Required INR ${dueAmount.toFixed(2)}.`);
+      const updatedWallet = await tx.agentWallet.findUniqueOrThrow({ where: { id: wallet.id } });
+      const payment = await tx.payment.create({ data: { reservationId: reservation.id, amount: dueAmount, mode: 'WALLET', provider: 'MANUAL', verified: true, verifiedById: user.id, paidAt: new Date(), reference: existingReference ?? `MILESTONE:${reservation.id}:${Date.now()}` } });
+      await tx.walletTransaction.create({ data: { walletId: wallet.id, type: 'BOOKING_DEBIT', amount: -dueAmount, balanceAfter: updatedWallet.balance, reference: reservation.reference, description: `Due milestone payment for ${reservation.reference}` } });
+      const paidAfter = paid + dueAmount;
+      const balance = Math.max(0, Number(reservation.totalAmount) - paidAfter);
+      const paymentStatus = balance <= 0 ? 'PAID' : paidAfter > 0 ? 'PARTIALLY_PAID' : 'UNPAID';
+      await tx.reservation.update({ where: { id: reservation.id }, data: { advanceAmount: paidAfter, balanceAmount: balance, paymentStatus, status: balance <= 0 && ['PENDING_PAYMENT', 'TENTATIVE', 'HELD'].includes(reservation.status) ? 'CONFIRMED' : reservation.status } });
+      await tx.auditLog.create({ data: { actorUserId: user.id, action: 'RESERVATION_MILESTONE_PAYMENT', entityType: 'Reservation', entityId: reservation.id, after: { agentId: reservation.createdById, reservationId: reservation.id, amount: dueAmount, milestones: schedule.milestones.filter((item) => item.status === 'DUE' || item.status === 'PARTIALLY_PAID').map((item) => ({ dueAt: item.dueAt, amount: item.outstandingAmount })) } } });
+      return reservation.reference;
+    });
+    return this.get(reference);
   }
 
   async cancel(reference: string, body: CancellationDto, user: { id: string }) {

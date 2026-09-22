@@ -170,6 +170,11 @@ enum AgentPaymentPolicy {
   CREDIT
 }
 
+enum PaymentMilestoneDueType {
+  ON_BOOKING
+  DAYS_BEFORE_CHECKIN
+}
+
 enum SupplementaryChargeScope {
   AGENTS
   ALL
@@ -209,6 +214,7 @@ model User {
   approvedCancellations  CancellationRequest[]     @relation("CancellationApprover")
   createdModifications   ReservationModification[] @relation("ModificationCreator")
   assignedRatePlans      AgentRatePlan[]
+  paymentMilestones      AgentPaymentMilestone[]
   agentHolds             InventoryHold[]           @relation("AgentHolds")
   wallet                 AgentWallet?
   createdAt              DateTime                  @default(now())
@@ -617,6 +623,21 @@ model AgentWallet {
   rechargeAttempts WalletRechargeAttempt[]
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
+}
+
+model AgentPaymentMilestone {
+  id                String                   @id @default(cuid())
+  agentId           String
+  agent             User                     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  percentage        Decimal                  @db.Decimal(5, 2)
+  dueType           PaymentMilestoneDueType
+  daysBeforeCheckIn Int?
+  sortOrder         Int                      @default(0)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  @@index([agentId, sortOrder])
+  @@index([agentId, dueType, daysBeforeCheckIn])
 }
 
 model AgentDocument {

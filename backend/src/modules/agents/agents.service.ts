@@ -3,6 +3,7 @@ import { AgentDocumentStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import bcrypt from 'bcryptjs';
 import { getAgentOnboardingStatus, hasAgentPaymentTerms, summarizeAgentDocuments } from '../../common/agent-access';
+import { paymentMilestonesForAgent } from '../../common/agent-payment-terms';
 
 export const AGENT_DOCUMENT_TYPES = [
   'Company PAN Card', 'GST Document', 'MSME Certificate', 'Trade License',
@@ -15,7 +16,8 @@ export class AgentsService {
   constructor(private p: PrismaService) {}
 
   private publicProfile(user: any) {
-    const { agentDocuments = [], agentPaymentPolicy, bookingPaymentPercent, profileImageFileId, active: _active, ...profile } = user;
+    const { agentDocuments = [], paymentMilestones = [], agentPaymentPolicy, bookingPaymentPercent, profileImageFileId, active: _active, ...profile } = user;
+    const milestones = paymentMilestones.length ? paymentMilestones : (agentPaymentPolicy ? paymentMilestonesForAgent({ agentPaymentPolicy, bookingPaymentPercent }) : []);
     const kycSummary = summarizeAgentDocuments(agentDocuments.map((document: { status: string }) => document.status));
     return {
       ...profile,
@@ -23,14 +25,14 @@ export class AgentsService {
       onboardingStatus: getAgentOnboardingStatus(user, kycSummary),
       canAccessHotels: Boolean(user.active),
       canBook: Boolean(user.active),
-      paymentTermsAssigned: hasAgentPaymentTerms({ agentPaymentPolicy, bookingPaymentPercent }),
-      paymentTerms: user.active && hasAgentPaymentTerms({ agentPaymentPolicy, bookingPaymentPercent }) ? { mode: agentPaymentPolicy === 'CREDIT' ? 'CREDIT' : 'PERCENTAGE', advancePercent: bookingPaymentPercent } : null,
+      paymentTermsAssigned: milestones.length > 0 || hasAgentPaymentTerms({ agentPaymentPolicy, bookingPaymentPercent }),
+      paymentTerms: user.active && (milestones.length > 0 || hasAgentPaymentTerms({ agentPaymentPolicy, bookingPaymentPercent })) ? { mode: 'MILESTONES', milestones: milestones.map((item: any) => ({ percentage: Number(item.percentage), dueType: item.dueType, daysBeforeCheckIn: item.daysBeforeCheckIn })) } : null,
       kycSummary,
     };
   }
 
   async getProfile(agentId: string) {
-    const user = await this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, profileImageFileId: true, agentDocuments: { select: { status: true } } } });
+    const user = await this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, profileImageFileId: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, agentDocuments: { select: { status: true } } } });
     return this.publicProfile(user);
   }
 
@@ -38,7 +40,7 @@ export class AgentsService {
     const allowed = ['name', 'companyName', 'contactPerson', 'mobile', 'gstin', 'place', 'addressLine1', 'addressLine2', 'state', 'pinCode', 'additionalInformation'] as const;
     const data = Object.fromEntries(allowed.map((key) => [key, typeof body[key] === 'string' ? (body[key] as string).trim() || null : undefined]).filter(([, value]) => value !== undefined));
     if (typeof data.name === 'string' && data.name.length < 2) throw new BadRequestException('Name must be at least 2 characters');
-    return this.p.user.update({ where: { id: agentId, role: 'AGENT' }, data, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, profileImageFileId: true, agentDocuments: { select: { status: true } } } }).then((user) => this.publicProfile(user));
+    return this.p.user.update({ where: { id: agentId, role: 'AGENT' }, data, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, profileImageFileId: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, agentDocuments: { select: { status: true } } } }).then((user) => this.publicProfile(user));
   }
 
   async setProfileImage(agentId: string, fileId: string) {

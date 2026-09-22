@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsDateString, IsIn, IsNumber, IsObject, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { PaymentMilestoneDueType } from '@prisma/client';
 
 export class AgentRateDayDto {
   @IsDateString() date!: string;
@@ -20,4 +21,17 @@ export class AgentRateBatchDto {
 export class AgentRatePlanUpdateDto {
   @IsOptional() @IsBoolean() active?: boolean;
   @IsOptional() @IsIn(['BASE', 'OVERRIDE']) pricingMode?: string;
+}
+
+export class PaymentMilestoneDto {
+  @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) percentage!: number;
+  @IsEnum(PaymentMilestoneDueType) dueType!: PaymentMilestoneDueType;
+  @IsOptional() @IsInt() @Min(0) daysBeforeCheckIn?: number | null;
+}
+
+export class AgentPaymentMilestonesDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PaymentMilestoneDto)
+  milestones!: PaymentMilestoneDto[];
 }

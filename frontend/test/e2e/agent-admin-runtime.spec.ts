@@ -10,7 +10,7 @@ function localEnv(name: string) {
   return line?.slice(name.length + 1) ?? '';
 }
 
-test('admin agent review shows legacy 100% terms and only usable KYC actions', async ({ page }) => {
+test('admin agent review shows normalized payment milestones and only usable KYC actions', async ({ page }) => {
   await page.goto(`${frontendUrl}/login?next=${encodeURIComponent('/rainwood/admin/agents')}`);
   await page.getByLabel('Email').fill(localEnv('NEXT_PUBLIC_DEMO_ADMIN_EMAIL'));
   await page.getByLabel('Password').fill(localEnv('NEXT_PUBLIC_DEMO_ADMIN_PASSWORD'));
@@ -19,17 +19,16 @@ test('admin agent review shows legacy 100% terms and only usable KYC actions', a
 
   const seededAgent = page.locator('tbody tr').filter({ hasText: 'agent@rainwood.demo' }).first();
   await seededAgent.getByRole('button', { name: 'Open Details' }).click();
-  const legacyOption = page.locator('label').filter({ hasText: '100% Full Payment (Existing)' });
-  await expect(legacyOption).toBeVisible();
-  await expect(legacyOption.locator('input')).toBeChecked();
+  await expect(page.getByText('Payment Milestones', { exact: true })).toBeVisible();
+  await expect(page.getByText('100% · On Booking', { exact: true })).toBeVisible();
 });
 
-test('pending/new agent payment choices exclude legacy 100%', async ({ page }) => {
+test('new agent setup uses payment milestones and does not expose legacy policy choices', async ({ page }) => {
   await page.goto(`${frontendUrl}/login?next=${encodeURIComponent('/rainwood/admin/agents')}`);
   await page.getByLabel('Email').fill(localEnv('NEXT_PUBLIC_DEMO_ADMIN_EMAIL'));
   await page.getByLabel('Password').fill(localEnv('NEXT_PUBLIC_DEMO_ADMIN_PASSWORD'));
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.getByRole('button', { name: '+ Add Agent' }).click();
-  await expect(page.getByLabel('Payment Terms')).toBeVisible();
+  await expect(page.getByText('Payment Milestones', { exact: true })).toBeVisible();
   await expect(page.getByText('100% Full Payment (Existing)', { exact: false })).toHaveCount(0);
 });

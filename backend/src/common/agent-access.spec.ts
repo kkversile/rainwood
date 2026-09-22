@@ -8,6 +8,7 @@ describe('agent onboarding access states', () => {
     expect(getAgentOnboardingStatus(pending, summarizeAgentDocuments([]))).toBe('KYC_PENDING');
     expect(getAgentOnboardingStatus(pending, summarizeAgentDocuments([AgentDocumentStatus.PENDING]))).toBe('UNDER_REVIEW');
     expect(getAgentOnboardingStatus({ ...pending, active: true, agentPaymentPolicy: 'PERCENTAGE', bookingPaymentPercent: 25 })).toBe('ACTIVE');
+    expect(getAgentOnboardingStatus({ ...pending, active: true, paymentMilestones: [{ percentage: 100 }] })).toBe('ACTIVE');
     const deactivated = { ...pending, agentPaymentPolicy: 'CREDIT' };
     expect(isAgentDeactivated(deactivated)).toBe(true);
     expect(getAgentOnboardingStatus(deactivated)).toBe('DEACTIVATED');

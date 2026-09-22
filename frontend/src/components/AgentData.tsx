@@ -15,7 +15,7 @@ export type AgentUser = {
   canAccessHotels: boolean;
   canBook: boolean;
   paymentTermsAssigned: boolean;
-  paymentTerms?: { mode: 'PERCENTAGE' | 'CREDIT'; advancePercent?: number | string | null } | null;
+  paymentTerms?: { mode: 'MILESTONES'; milestones: { percentage: number | string; dueType: 'ON_BOOKING' | 'DAYS_BEFORE_CHECKIN'; daysBeforeCheckIn?: number | null }[] } | null;
   kycSummary: AgentKycSummary;
   companyName?: string | null;
 };

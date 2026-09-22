@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { agentPaymentConfirmation, agentStatusLabel, aggregatePriceBreakdown, hasUsableDocumentFile, showLegacyFullPaymentOption } from '../src/lib/booking-pricing';
+import { agentPaymentConfirmation, agentStatusLabel, aggregatePriceBreakdown, dueNowForAgentBooking, hasUsableDocumentFile, showLegacyFullPaymentOption } from '../src/lib/booking-pricing';
 
 test('aggregates named supplementary charges without merging them into room charges', () => {
   const summary = aggregatePriceBreakdown({ total: 39600, taxTotal: 3600, priceBreakdown: [
@@ -36,4 +36,15 @@ test('KYC view/download is available only when a file id exists', () => {
   assert.equal(hasUsableDocumentFile('file-123'), true);
   assert.equal(hasUsableDocumentFile('  '), false);
   assert.equal(hasUsableDocumentFile(null), false);
+});
+
+test('agent due-now display follows milestone thresholds without changing the API payload', () => {
+  const milestones = [
+    { percentage: 10, dueType: 'ON_BOOKING' as const },
+    { percentage: 30, dueType: 'DAYS_BEFORE_CHECKIN' as const, daysBeforeCheckIn: 20 },
+    { percentage: 20, dueType: 'DAYS_BEFORE_CHECKIN' as const, daysBeforeCheckIn: 10 },
+    { percentage: 40, dueType: 'DAYS_BEFORE_CHECKIN' as const, daysBeforeCheckIn: 0 },
+  ];
+  assert.equal(dueNowForAgentBooking(20000, '2026-11-30', milestones, new Date('2026-10-31T12:00:00Z')), 2000);
+  assert.equal(dueNowForAgentBooking(20000, '2026-11-30', milestones, new Date('2026-11-15T12:00:00Z')), 8000);
 });

@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ReservationsService } from './reservations.service';
-import { CancellationDto, CreateReservationDto, ManualReservationDto, ModificationDto, RatePlanListQueryDto, ReservationListQueryDto } from './reservations.dto';
+import { CancellationDto, CreateReservationDto, ManualReservationDto, ModificationDto, PayDueMilestonesDto, RatePlanListQueryDto, ReservationListQueryDto } from './reservations.dto';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -51,6 +51,13 @@ export class ReservationsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER')
   detail(@Param('reference') reference: string) { return this.s.get(reference, true); }
+
+  @Post(':reference/pay-due-milestones')
+  @UseGuards(JwtAuthGuard, ActiveAgentGuard, RolesGuard)
+  @Roles('AGENT' as any, 'SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS')
+  payDueMilestones(@Param('reference') reference: string, @Body() body: PayDueMilestonesDto, @CurrentUser() user: any) {
+    return this.s.payDueMilestones(reference, body.idempotencyKey, { id: user.id, role: user.role });
+  }
 
   @Post(':reference/cancel')
   @UseGuards(JwtAuthGuard, RolesGuard)

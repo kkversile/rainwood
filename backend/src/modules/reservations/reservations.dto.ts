@@ -145,3 +145,9 @@ export class RatePlanListQueryDto {
   @IsDateString()
   to?: string;
 }
+
+export class PayDueMilestonesDto {
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
+}

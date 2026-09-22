@@ -7,6 +7,7 @@ export type AgentAccessRecord = {
   active?: boolean | null;
   agentPaymentPolicy?: string | null;
   bookingPaymentPercent?: unknown;
+  paymentMilestones?: unknown[] | null;
 };
 
 export type KycSummary = {
@@ -17,7 +18,7 @@ export type KycSummary = {
 };
 
 export function hasAgentPaymentTerms(user?: AgentAccessRecord | null) {
-  return user?.agentPaymentPolicy != null || user?.bookingPaymentPercent != null;
+  return Boolean(user?.paymentMilestones?.length) || user?.agentPaymentPolicy != null || user?.bookingPaymentPercent != null;
 }
 
 export function isAgentPendingOnboarding(user?: AgentAccessRecord | null) {
