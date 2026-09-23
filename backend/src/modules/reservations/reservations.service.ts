@@ -67,7 +67,7 @@ export class ReservationsService {
           taxAmount: hold.lines.reduce((sum, line) => sum + Number(line.quotedTax), 0),
           advanceAmount: walletBooking ? paymentTerms!.requiredAtBooking : 0,
           balanceAmount: walletBooking ? paymentTerms!.balanceAtBooking : bookingTotal,
-          priceSnapshot: hold.lines.map((line, index) => ({ roomTypeId: line.roomTypeId, ratePlanId: line.ratePlanId, agentRatePlanId: lineSnapshots[index].agentRatePlanId, priceSource: lineSnapshots[index].breakdown.some((night) => night.priceSource === 'AGENT_OVERRIDE') ? 'AGENT_OVERRIDE' : 'BASE', total: Number(line.quotedTotal), tax: Number(line.quotedTax), breakdown: line.quotedBreakdown })),
+          priceSnapshot: hold.lines.map((line, index) => ({ roomTypeId: line.roomTypeId, ratePlanId: line.ratePlanId, agentRatePlanId: lineSnapshots[index].agentRatePlanId, priceSource: 'RATE_PLAN', total: Number(line.quotedTotal), tax: Number(line.quotedTax), breakdown: line.quotedBreakdown })),
           policySnapshot: { policySource: 'hold', capturedAt: new Date().toISOString(), freeCancellationHours: 48, firstNightPenalty: true },
           paymentTermsSnapshot: paymentTerms ? { agentId: agent!.id, policy: paymentTerms.policy, percentage: paymentTerms.percentage, bookingTotal, requiredAtBooking: paymentTerms.requiredAtBooking, balanceAtBooking: paymentTerms.balanceAtBooking, milestones: paymentTerms.milestones, capturedAt: bookingCreatedAt.toISOString() } : undefined,
           specialRequest: body.specialRequest,
@@ -135,7 +135,7 @@ export class ReservationsService {
     if (end && end.getTime() - start.getTime() > 370 * 86_400_000) throw new BadRequestException('Rate plan date ranges cannot exceed 371 days');
     const dateFilter = { date: { gte: start, ...(end ? { lte: end } : {}) } };
     const take = end ? 371 : 31;
-    const assignments = await this.p.agentRatePlan.findMany({ where: { agentId: userId, active: true, ratePlan: { active: true, master: { active: true } } }, orderBy: { ratePlan: { name: 'asc' } }, include: { rates: { where: dateFilter, orderBy: { date: 'asc' }, take }, ratePlan: { include: { roomType: { include: { hotel: { select: { name: true, city: true } } } }, rates: { where: dateFilter, orderBy: { date: 'asc' }, take } } } } });
+    const assignments = await this.p.agentRatePlan.findMany({ where: { agentId: userId, active: true, ratePlan: { active: true, master: { active: true } } }, orderBy: { ratePlan: { name: 'asc' } }, include: { ratePlan: { include: { roomType: { include: { hotel: { select: { name: true, city: true } } } }, rates: { where: dateFilter, orderBy: { date: 'asc' }, take } } } } });
     return assignments.map((assignment) => ({ id: assignment.ratePlan.id, code: assignment.ratePlan.code, name: assignment.ratePlan.name, mealPlan: assignment.ratePlan.mealPlan, description: assignment.ratePlan.description, hotel: assignment.ratePlan.roomType.hotel, room: { id: assignment.ratePlan.roomType.id, name: assignment.ratePlan.roomType.name, code: assignment.ratePlan.roomType.code }, rates: assignment.ratePlan.rates.map((rate) => ({ ...this.rateResolver.byDate({ assignedAgents: [assignment] }, userId).get(rate), date: rate.date })) }));
   }
 

@@ -31,7 +31,7 @@ export class AvailabilityService {
           where: { active: true },
           include: {
             inventory: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } },
-            ratePlans: { where: { active: true, master: { active: true }, ...(agentId ? { assignedAgents: { some: { agentId, active: true } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, ...(agentId ? { assignedAgents: { where: { agentId, active: true }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } } } } } : {}) } },
+            ratePlans: { where: { active: true, master: { active: true }, ...(agentId ? { assignedAgents: { some: { agentId, active: true } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, ...(agentId ? { assignedAgents: { where: { agentId, active: true } } } : {}) } },
           },
         },
       },
@@ -51,7 +51,7 @@ export class AvailabilityService {
       include: {
         hotel: { include: { supplementaryCharges: { where: { active: true, scope: supplementaryScopeFilter(options.agentId), startDate: { lte: to }, endDate: { gte: from } } } } },
         inventory: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } },
-          ratePlans: { where: { id: input.ratePlanId, active: true, master: { active: true }, ...(options.agentId ? { assignedAgents: { some: { agentId: options.agentId, active: true } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, ...(options.agentId ? { assignedAgents: { where: { agentId: options.agentId, active: true }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } } } } } : {}) } },
+          ratePlans: { where: { id: input.ratePlanId, active: true, master: { active: true }, ...(options.agentId ? { assignedAgents: { some: { agentId: options.agentId, active: true } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, ...(options.agentId ? { assignedAgents: { where: { agentId: options.agentId, active: true } } } : {}) } },
       },
     });
     const plan = room?.ratePlans[0];
@@ -114,7 +114,7 @@ export class AvailabilityService {
       const applicableCharges = supplementaryCharges.filter((charge) => toDateOnly(charge.startDate) <= toDateOnly(night) && toDateOnly(charge.endDate) >= toDateOnly(night));
       const supplementaryChargeLines = applicableCharges.map((charge) => ({ id: charge.id, name: charge.name, amountPerRoomNight: Number(charge.amountPerRoomNight), rooms: input.rooms, amount: Math.round(Number(charge.amountPerRoomNight) * input.rooms * 100) / 100 }));
       const supplementaryAmount = supplementaryChargeLines.reduce((sum, charge) => sum + charge.amount, 0);
-      return { date: toDateOnly(night), rooms: roomBreakdown, occupancy: occupancyKeys, baseAmount: base, taxAmount: tax, extrasAmount: extras, supplementaryCharges: supplementaryChargeLines, supplementaryAmount, totalAmount: base + tax + extras + supplementaryAmount, priceSource: rate?.priceSource ?? 'BASE', agentRatePlanId: rate?.agentRatePlanId ?? null };
+      return { date: toDateOnly(night), rooms: roomBreakdown, occupancy: occupancyKeys, baseAmount: base, taxAmount: tax, extrasAmount: extras, supplementaryCharges: supplementaryChargeLines, supplementaryAmount, totalAmount: base + tax + extras + supplementaryAmount, priceSource: rate?.priceSource ?? 'RATE_PLAN', agentRatePlanId: rate?.agentRatePlanId ?? null };
     });
     const total = breakdown.reduce((sum, item) => sum + item.totalAmount, 0);
     const taxTotal = breakdown.reduce((sum, item) => sum + item.taxAmount, 0);
@@ -141,7 +141,7 @@ export class AvailabilityService {
         return Math.max(0, day.available - day.held - day.sold);
       })) : 0,
       priceBreakdown: breakdown,
-      priceSource: breakdown.some((item) => item.priceSource === 'AGENT_OVERRIDE') ? 'AGENT_OVERRIDE' : 'BASE',
+      priceSource: 'RATE_PLAN',
       agentRatePlanId: resolved.assignment?.id ?? null,
       restrictions: { cta: Boolean(arrivalRate?.cta), ctd: Boolean(departureRate?.ctd), minLos: arrivalRate?.minLos ?? null, maxLos: arrivalRate?.maxLos ?? null },
     };

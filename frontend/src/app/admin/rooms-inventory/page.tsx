@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { BedDouble, Building2, CheckCircle2, ChevronDown, Clock3, Link2, PackagePlus, Plus, Users, X } from 'lucide-react';
 import { AdminLayout } from '../../../components/Shell';
-import { apiFileBlob, apiRequest } from '../../../lib/api';
+import { apiRequest } from '../../../lib/api';
 
 type HotelSummary = { id: string; name: string; code: string; city: string; state?: string | null };
 type RatePlanMaster = { id: string; code: string; name: string; mealPlan: string; active: boolean; assignments: { roomTypeId: string }[] };
@@ -34,7 +34,6 @@ export default function RoomsInventoryPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [importBusy, setImportBusy] = useState(false);
 
   async function loadHotels() {
     setLoadingHotels(true);
@@ -64,8 +63,6 @@ export default function RoomsInventoryPage() {
   }, [message]);
 
   function updateRoom<K extends keyof RoomForm>(key: K, value: RoomForm[K]) { setRoom((current) => ({ ...current, [key]: value })); }
-  async function downloadRateTemplate() { if (!hotelId) return; try { const blob = await apiFileBlob(`/hotels/${hotelId}/rates/import-template.xlsx`); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'rainwood-base-rate-template.xlsx'; link.click(); URL.revokeObjectURL(url); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not download rate template'); } }
-  async function importBaseRates(event: React.ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; if (!file || !hotelId) return; setImportBusy(true); setError(''); setMessage(''); try { const form = new FormData(); form.append('file', file); const result = await apiRequest<{ rowsImported: number; errors: { row: number; field: string; message: string }[] }>(`/hotels/${hotelId}/rates/import`, { method: 'POST', body: form }); if (result.errors.length) setError(result.errors.map((item) => `Row ${item.row} — ${item.field} — ${item.message}`).join('\n')); else { setMessage(`Imported ${result.rowsImported} base rate row(s).`); await loadCatalog(hotelId); } } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import base rates'); } finally { setImportBusy(false); event.target.value = ''; } }
 
   async function submit(event: FormEvent) {
     event.preventDefault();

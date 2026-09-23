@@ -44,13 +44,19 @@ test('agent table keeps long emails readable without a horizontal scrollbar', ()
   assert.match(globalsCss, /compactPaymentEditor\{width:100%;max-width:320px;padding:0;border:0/);
 });
 
+test('payment terms display one milestone per line in the agent table', () => {
+  assert.match(agentsPage, /agentPaymentMilestones/);
+  assert.match(globalsCss, /agentPaymentMilestones\{flex-direction:column/);
+});
+
 test('rate plan assignments use the selected hotel count and business wording', () => {
   assert.match(agentsPage, /Save assignment/);
   assert.match(agentsPage, /hotel-rate-plan/);
   assert.match(agentsPage, /selectedMasterId/);
+  assert.match(agentsPage, /Multiple rate plans are currently assigned to this hotel/);
+  assert.match(agentsPage, /aria-label=\{'Edit rate plans for ' \+ agent\.name\}/);
   assert.doesNotMatch(agentsPage, /selectedHotelPlanIds/);
-  assert.match(agentsPage, /Contract Rate/);
-  assert.match(agentsPage, /Hotel Rate/);
+  assert.doesNotMatch(agentsPage, /Contract Rate|Hotel Rate|pricingMode|AGENT_OVERRIDE/);
 });
 
 test('admin reservation details render the saved payment schedule without a pay action', () => {

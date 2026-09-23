@@ -1,13 +1,21 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
-import { normalizeOccupancyPrices } from '../../common/rate-pricing';
+import { normalizeOccupancyPrices, SUPPORTED_OCCUPANCY_KEYS } from '../../common/rate-pricing';
 import { parseDateOnly, parseExcelDateOnly } from '../../common/dates';
 import { AmenityDto, CopyRatePlanDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
 import { FilesService } from '../files/files.service';
 import ExcelJS from 'exceljs';
 import { canonicalMealPlan, canonicalRatePlanCode } from './rate-plan.utils';
 import { mapImportedRateFields } from '../../common/excel-rate-fields';
+
+function existingSupportedOccupancyPrices(value: unknown): Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(SUPPORTED_OCCUPANCY_KEYS.flatMap((key) => {
+    const amount = Number((value as Record<string, unknown>)[key]);
+    return Number.isFinite(amount) && amount >= 0 ? [[key, amount]] : [];
+  }));
+}
 
 @Injectable()
 export class HotelsService {
@@ -164,81 +172,137 @@ export class HotelsService {
     return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 
-  async baseRateTemplate(hotelId?: string) {
-    const hotel = hotelId ? await this.prisma.hotel.findUnique({ where: { id: hotelId }, include: { rooms: { include: { ratePlans: true } } } }) : null;
+  private async rateImportContext(hotelId: string, masterId: string, requireActive = false) {
+    const [hotel, master] = await Promise.all([
+      this.prisma.hotel.findUnique({
+        where: { id: hotelId },
+        include: {
+          rooms: {
+            where: { active: true },
+            orderBy: { name: 'asc' },
+            include: {
+              ratePlans: { where: { masterId, active: true }, include: { master: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.ratePlanMaster.findUnique({ where: { id: masterId } }),
+    ]);
+    if (!hotel) throw new NotFoundException('Hotel not found');
+    if (!master) throw new NotFoundException('Rate plan not found');
+    if (master.hotelId !== hotelId) throw new BadRequestException('Selected rate plan does not belong to this hotel.');
+    if (requireActive && !master.active) throw new BadRequestException('Selected rate plan is inactive.');
+    return { hotel, master };
+  }
+
+  async baseRateTemplate(hotelId: string, masterId: string) {
+    const { hotel, master } = await this.rateImportContext(hotelId, masterId);
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Base Rates');
-    const columns = ['Hotel', 'Room Code', 'Rate Plan Code', 'Date', 'Base Amount (INR)', 'Tax (INR)', 'Single (INR)', 'Double (INR)', 'Triple (INR)', 'Quad (INR)', 'Extra Adult (INR)', 'Extra Child (INR)', 'CTA', 'CTD', 'Min LOS', 'Max LOS'];
+    workbook.creator = 'RainWood Hotels';
+    const columns = ['Room Code', 'Room', 'Date', 'Base Amount (INR)', 'Tax (INR)', 'Single (INR)', 'Double (INR)', 'Triple (INR)', 'Quad (INR)', 'Extra Adult Charge (INR)', 'Child Charge (INR)', 'CTA', 'CTD', 'Min LOS', 'Max LOS'];
+    const sampleRoom = hotel.rooms.find((room) => room.ratePlans.some((plan) => plan.masterId === masterId && plan.active));
+    const instructions = workbook.addWorksheet('Instructions');
+    instructions.addRow(['SAMPLE DATA - DO NOT IMPORT THIS SHEET']);
+    instructions.addRow(['Copy the example format into Rate Plan Rates, then replace it with your real pricing.']);
+    instructions.addRow(['Hotel', hotel.name]);
+    instructions.addRow(['Rate Plan', master.name]);
+    instructions.addRow(['Rate Plan Code', master.code]);
+    instructions.addRow(['Meal Plan', master.mealPlan]);
+    instructions.addRow([]);
+    instructions.addRow(columns);
+    instructions.addRow([sampleRoom?.code ?? 'ROOM', sampleRoom?.name ?? 'Room name', '2030-01-01', 5000, 600, 5000, 5500, 6500, 7500, 1200, 600, 'No', 'No', 1, 7]);
+    instructions.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    instructions.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'B45309' } };
+    instructions.getRow(8).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    instructions.getRow(8).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '0F4569' } };
+    instructions.getRow(8).alignment = { vertical: 'middle', wrapText: true };
+    instructions.columns.forEach((column, index) => { column.width = index === 1 ? 28 : index === 0 ? 22 : index === 2 ? 14 : 18; });
+    const sheet = workbook.addWorksheet('Rate Plan Rates');
+    sheet.addRow(['Hotel', hotel.name]);
+    sheet.addRow(['Rate Plan', master.name]);
+    sheet.addRow(['Rate Plan Code', master.code]);
+    sheet.addRow(['Meal Plan', master.mealPlan]);
+    sheet.addRow([]);
     const header = sheet.addRow(columns);
     header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '0F4569' } };
     header.alignment = { vertical: 'middle', wrapText: true };
-    sheet.addRow([hotel?.name ?? 'Hotel name or code', hotel?.rooms[0]?.code ?? 'DLX', hotel?.rooms[0]?.ratePlans[0]?.code ?? 'BAR', new Date().toISOString().slice(0, 10), 0, 0, '', '', '', '', '', '', 'No', 'No', 1, '']);
-    sheet.views = [{ state: 'frozen', ySplit: 1 }];
-    sheet.autoFilter = { from: 'A1', to: `P${sheet.rowCount}` };
-    sheet.columns.forEach((column, index) => { column.width = index === 0 ? 28 : index === 1 || index === 2 ? 20 : 16; });
-    for (const row of sheet.getRows(2, sheet.rowCount - 1) ?? []) row.eachCell((cell, columnNumber) => { if (typeof cell.value === 'number' && columnNumber >= 5 && columnNumber <= 12) cell.numFmt = '#,##0.00'; });
+    for (const room of hotel.rooms) {
+      if (!room.ratePlans.some((plan) => plan.masterId === masterId && plan.active)) continue;
+      sheet.addRow([room.code, room.name, '', '', '', '', '', '', '', '', '', '', '', '', '']);
+    }
+    sheet.views = [{ state: 'frozen', ySplit: 6 }];
+    sheet.autoFilter = { from: 'A6', to: `O${sheet.rowCount}` };
+    sheet.columns.forEach((column, index) => { column.width = index === 1 ? 28 : index === 0 ? 18 : index === 2 ? 14 : 18; });
     return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 
-  async importBaseRates(hotelId: string, file: Express.Multer.File, actorUserId: string) {
+  async importBaseRates(hotelId: string, masterId: string, file: Express.Multer.File, actorUserId: string) {
     if (!file?.buffer || !/\.(xlsx|xlsm)$/i.test(file.originalname ?? '')) throw new BadRequestException('Upload an .xlsx workbook');
-    const hotel = await this.prisma.hotel.findUnique({ where: { id: hotelId }, include: { rooms: { include: { ratePlans: { include: { master: true } } } } } });
-    if (!hotel) throw new NotFoundException('Hotel not found');
+    const { hotel, master } = await this.rateImportContext(hotelId, masterId, true);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(file.buffer as any);
-    const sheet = workbook.worksheets[0];
-    if (!sheet) throw new BadRequestException('Workbook must contain a worksheet');
-    const headers = new Map<string, number>();
-    const headerRow = sheet.getRow(1);
-    headerRow.eachCell((cell, index) => { const key = String(cell.value ?? '').trim().toLowerCase(); if (key) headers.set(key, index); });
-    const required = ['room code', 'rate plan code', 'date', 'base amount (inr)'];
-    const missing = required.filter((key) => !headers.has(key));
-    if (missing.length) throw new BadRequestException(`Missing required columns: ${missing.join(', ')}`);
-    const cellValue = (row: ExcelJS.Row, key: string) => { const index = headers.get(key); return index ? row.getCell(index).value : undefined; };
-    const cellText = (row: ExcelJS.Row, key: string) => { const value = cellValue(row, key); return value && typeof value === 'object' && 'result' in value ? String(value.result ?? '') : String(value ?? '').trim(); };
-    const numeric = (row: ExcelJS.Row, key: string, requiredValue = false) => { const raw = cellText(row, key); if (!raw && !requiredValue) return undefined; const value = Number(raw); return Number.isFinite(value) && value >= 0 ? value : null; };
-    const boolean = (row: ExcelJS.Row, key: string) => { const raw = cellText(row, key).toLowerCase(); if (!raw) return undefined; if (['yes', 'true', '1'].includes(raw)) return true; if (['no', 'false', '0'].includes(raw)) return false; return null; };
+    const sheet = workbook.getWorksheet('Rate Plan Rates');
+    if (!sheet) throw new BadRequestException('Workbook must contain a "Rate Plan Rates" worksheet.');
+    const normalizeHeader = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const headerNames = new Map<string, number>();
+    let headerRowNumber = 0;
+    for (let rowNumber = 1; rowNumber <= Math.min(sheet.rowCount, 20); rowNumber += 1) {
+      const candidate = new Map<string, number>();
+      sheet.getRow(rowNumber).eachCell((cell, index) => { const key = normalizeHeader(cell.value); if (key) candidate.set(key, index); });
+      if (candidate.has('room code') && candidate.has('date') && candidate.has('base amount (inr)')) { headerNames.clear(); candidate.forEach((index, key) => headerNames.set(key, index)); headerRowNumber = rowNumber; break; }
+    }
+    if (!headerRowNumber) throw new BadRequestException('Missing required columns: room code, date, base amount (inr)');
+    const headerIndex = (...keys: string[]) => keys.map((key) => headerNames.get(key)).find((index): index is number => index !== undefined);
+    const cellValue = (row: ExcelJS.Row, ...keys: string[]) => { const index = headerIndex(...keys); return index === undefined ? undefined : row.getCell(index).value; };
+    const cellText = (row: ExcelJS.Row, ...keys: string[]) => { const value = cellValue(row, ...keys); return value && typeof value === 'object' && 'result' in value ? String(value.result ?? '').trim() : String(value ?? '').trim(); };
+    const numeric = (row: ExcelJS.Row, keys: string[], requiredValue = false) => { const raw = cellText(row, ...keys); if (!raw && !requiredValue) return undefined; const value = Number(raw); return Number.isFinite(value) && value >= 0 ? value : null; };
+    const boolean = (row: ExcelJS.Row, keys: string[]) => { const raw = cellText(row, ...keys).toLowerCase(); if (!raw) return undefined; if (['yes', 'true', '1'].includes(raw)) return true; if (['no', 'false', '0'].includes(raw)) return false; return null; };
+    const assignedRooms = hotel.rooms.filter((room) => room.ratePlans.some((plan) => plan.masterId === masterId && plan.active));
     const roomMap = new Map(hotel.rooms.map((room) => [room.code.toLowerCase(), room]));
     const errors: { row: number; field: string; message: string }[] = [];
-    const rows: { rowNumber: number; planId: string; date: Date; data: Prisma.RateDayUpdateInput; create: Prisma.RateDayCreateInput; key: string }[] = [];
+    const rows: { rowNumber: number; planId: string; date: Date; occupancyPrices: Record<string, number> | null; data: Prisma.RateDayUpdateInput; create: Prisma.RateDayCreateInput }[] = [];
     const receivedRows = new Set<number>();
     const seen = new Set<string>();
-    for (let rowNumber = 2; rowNumber <= sheet.rowCount; rowNumber += 1) {
-      const row = sheet.getRow(rowNumber); if (!row.actualCellCount) continue;
+    const pricingColumns = ['date', 'base amount (inr)', 'tax (inr)', 'single (inr)', 'double (inr)', 'triple (inr)', 'quad (inr)', 'extra adult charge (inr)', 'child charge (inr)', 'cta', 'ctd', 'min los', 'max los'];
+    for (let rowNumber = headerRowNumber + 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
+      const row = sheet.getRow(rowNumber);
+      if (!row.actualCellCount || !pricingColumns.some((key) => String(cellValue(row, key) ?? '').trim() !== '')) continue;
       receivedRows.add(rowNumber);
-      const roomCode = cellText(row, 'room code'); const planCode = cellText(row, 'rate plan code'); const dateText = cellText(row, 'date');
-      const workbookHotel = cellText(row, 'hotel');
-      if (workbookHotel && ![hotel.id, hotel.code, hotel.name].some((value) => value.toLowerCase() === workbookHotel.toLowerCase())) errors.push({ row: rowNumber, field: 'Hotel', message: `Row belongs to another hotel: "${workbookHotel}"` });
-      const room = roomMap.get(roomCode.toLowerCase()); const plan = room?.ratePlans.find((candidate) => candidate.code.toLowerCase() === planCode.toLowerCase());
-      if (!room) errors.push({ row: rowNumber, field: 'Room Code', message: `Unknown room code "${roomCode}"` });
-      if (room && !plan) errors.push({ row: rowNumber, field: 'Rate Plan Code', message: `Unknown rate plan code "${planCode}" for room "${roomCode}"` });
-      if (plan && (!plan.active || !plan.master.active)) errors.push({ row: rowNumber, field: 'Rate Plan Code', message: 'Rate plan or master is inactive' });
+      const roomCode = cellText(row, 'room code');
+      const workbookPlanCode = cellText(row, 'rate plan code');
+      if (workbookPlanCode && workbookPlanCode.toLowerCase() !== master.code.toLowerCase()) errors.push({ row: rowNumber, field: 'Rate Plan Code', message: `Workbook rate plan code must match selected rate plan ${master.code}.` });
+      const room = roomMap.get(roomCode.toLowerCase());
+      const plan = room?.ratePlans.find((candidate) => candidate.masterId === masterId && candidate.active);
+      if (!room) errors.push({ row: rowNumber, field: 'Room Code', message: roomCode ? `Unknown or unassigned room code "${roomCode}"` : 'Room Code is required' });
+      if (room && !plan) errors.push({ row: rowNumber, field: 'Room Code', message: `This rate plan is not assigned to room ${roomCode}.` });
       let date: Date | undefined;
       try { date = parseExcelDateOnly(cellValue(row, 'date'), 'date'); } catch { errors.push({ row: rowNumber, field: 'Date', message: 'Invalid date' }); }
-      const amount = numeric(row, 'base amount (inr)', true); if (amount === null) errors.push({ row: rowNumber, field: 'Base Amount', message: 'Must be a non-negative number' });
-      const tax = numeric(row, 'tax (inr)'); if (tax === null) errors.push({ row: rowNumber, field: 'Tax', message: 'Must be a non-negative number' });
+      const amount = numeric(row, ['base amount (inr)'], true); if (amount === null) errors.push({ row: rowNumber, field: 'Base Amount', message: 'Must be a non-negative number' });
+      const tax = numeric(row, ['tax (inr)']); if (tax === null) errors.push({ row: rowNumber, field: 'Tax', message: 'Must be a non-negative number' });
       const occupancy: Record<string, number> = {};
-      for (const key of ['single (inr)', 'double (inr)', 'triple (inr)', 'quad (inr)'] as const) { const value = numeric(row, key); if (value === null) errors.push({ row: rowNumber, field: key, message: 'Must be a non-negative number' }); else if (value !== undefined) occupancy[key.replace(' (inr)', '')] = value; }
-      const extraAdult = numeric(row, 'extra adult (inr)'); if (extraAdult === null) errors.push({ row: rowNumber, field: 'Extra Adult', message: 'Must be a non-negative number' });
-      const child = numeric(row, 'extra child (inr)'); if (child === null) errors.push({ row: rowNumber, field: 'Extra Child', message: 'Must be a non-negative number' });
+      for (const [key, aliases] of Object.entries({ single: ['single (inr)'], double: ['double (inr)'], triple: ['triple (inr)'], quad: ['quad (inr)'] })) { const value = numeric(row, aliases); if (value === null) errors.push({ row: rowNumber, field: key, message: 'Must be a non-negative number' }); else if (value !== undefined) occupancy[key] = value; }
+      const extraAdult = numeric(row, ['extra adult charge (inr)', 'extra adult (inr)']); if (extraAdult === null) errors.push({ row: rowNumber, field: 'Extra Adult Charge', message: 'Must be a non-negative number' });
+      const child = numeric(row, ['child charge (inr)', 'extra child (inr)']); if (child === null) errors.push({ row: rowNumber, field: 'Child Charge', message: 'Must be a non-negative number' });
       const mappedGuestFields = mapImportedRateFields({ ...occupancy, extraAdultAmount: extraAdult ?? undefined, childAmount: child ?? undefined });
-      const cta = boolean(row, 'cta'); const ctd = boolean(row, 'ctd');
+      const cta = boolean(row, ['cta']); const ctd = boolean(row, ['ctd']);
       if (cta === null) errors.push({ row: rowNumber, field: 'CTA', message: 'Use Yes or No' }); if (ctd === null) errors.push({ row: rowNumber, field: 'CTD', message: 'Use Yes or No' });
-      const minLos = numeric(row, 'min los'); const maxLos = numeric(row, 'max los'); const minLosValue = minLos === null ? undefined : minLos; const maxLosValue = maxLos === null ? undefined : maxLos;
+      const minLos = numeric(row, ['min los']); const maxLos = numeric(row, ['max los']); const minLosValue = minLos === null ? undefined : minLos; const maxLosValue = maxLos === null ? undefined : maxLos;
       if (minLosValue !== undefined && (!Number.isInteger(minLosValue) || minLosValue < 1)) errors.push({ row: rowNumber, field: 'Min LOS', message: 'Must be a positive integer' });
       if (maxLosValue !== undefined && (!Number.isInteger(maxLosValue) || maxLosValue < 1)) errors.push({ row: rowNumber, field: 'Max LOS', message: 'Must be a positive integer' });
       if (minLosValue !== undefined && maxLosValue !== undefined && maxLosValue < minLosValue) errors.push({ row: rowNumber, field: 'Max LOS', message: 'Cannot be below Min LOS' });
-      if (!plan || !date || amount === null) continue;
-      const key = `${plan.id}:${date.toISOString().slice(0, 10)}`; if (seen.has(key)) { errors.push({ row: rowNumber, field: 'Date', message: 'Duplicate rate row for this rate plan and date' }); continue; } seen.add(key);
-      const data = { amount: amount as number, ...(tax !== undefined && tax !== null ? { taxAmount: tax } : {}), ...(mappedGuestFields.childAmount !== undefined ? { childAmount: mappedGuestFields.childAmount } : {}), ...(mappedGuestFields.extraAdultAmount !== undefined ? { extraAdultAmount: mappedGuestFields.extraAdultAmount } : {}), ...(mappedGuestFields.occupancyPrices ? { occupancyPrices: mappedGuestFields.occupancyPrices as Prisma.InputJsonValue } : {}), ...(cta !== undefined && cta !== null ? { cta } : {}), ...(ctd !== undefined && ctd !== null ? { ctd } : {}), ...(minLosValue !== undefined ? { minLos: minLosValue } : {}), ...(maxLosValue !== undefined ? { maxLos: maxLosValue } : {}), updatedFromAxisAt: null };
-      rows.push({ rowNumber, planId: plan.id, date, data, create: { ratePlan: { connect: { id: plan.id } }, date, amount: amount as number, taxAmount: tax ?? 0, childAmount: child ?? 0, extraAdultAmount: extraAdult ?? 0, occupancyPrices: mappedGuestFields.occupancyPrices ? mappedGuestFields.occupancyPrices as Prisma.InputJsonValue : undefined, cta: cta ?? false, ctd: ctd ?? false, minLos: minLosValue ?? 1, maxLos: maxLosValue ?? undefined, updatedFromAxisAt: null }, key });
+      if (!plan || !date || amount === null || amount === undefined) continue;
+      const key = `${plan.id}:${date.toISOString().slice(0, 10)}`;
+      if (seen.has(key)) { errors.push({ row: rowNumber, field: 'Date', message: 'Duplicate rate row for this room and date' }); continue; }
+      seen.add(key);
+      const data: Prisma.RateDayUpdateInput = { amount, ...(tax !== undefined && tax !== null ? { taxAmount: tax } : {}), ...(mappedGuestFields.childAmount !== undefined ? { childAmount: mappedGuestFields.childAmount } : {}), ...(mappedGuestFields.extraAdultAmount !== undefined ? { extraAdultAmount: mappedGuestFields.extraAdultAmount } : {}), ...(cta !== undefined && cta !== null ? { cta } : {}), ...(ctd !== undefined && ctd !== null ? { ctd } : {}), ...(minLosValue !== undefined ? { minLos: minLosValue } : {}), ...(maxLosValue !== undefined ? { maxLos: maxLosValue } : {}), updatedFromAxisAt: null };
+      rows.push({ rowNumber, planId: plan.id, date, occupancyPrices: mappedGuestFields.occupancyPrices, data, create: { ratePlan: { connect: { id: plan.id } }, date, amount, taxAmount: tax ?? 0, childAmount: child ?? 0, extraAdultAmount: extraAdult ?? 0, occupancyPrices: mappedGuestFields.occupancyPrices ? mappedGuestFields.occupancyPrices as Prisma.InputJsonValue : undefined, cta: cta ?? false, ctd: ctd ?? false, minLos: minLosValue ?? 1, maxLos: maxLosValue ?? undefined, updatedFromAxisAt: null } });
     }
     const invalidRows = new Set(errors.map((error) => error.row));
     if (errors.length) return { rowsReceived: receivedRows.size, rowsValid: receivedRows.size - invalidRows.size, rowsInvalid: invalidRows.size, rowsImported: 0, rowsUpdated: 0, errors };
     let rowsUpdated = 0;
-    await this.prisma.$transaction(async (tx) => { for (const item of rows) { const existing = await tx.rateDay.findUnique({ where: { ratePlanId_date: { ratePlanId: item.planId, date: item.date } }, select: { id: true } }); if (existing) rowsUpdated += 1; await tx.rateDay.upsert({ where: { ratePlanId_date: { ratePlanId: item.planId, date: item.date } }, update: item.data, create: item.create }); } });
-    await this.prisma.auditLog.create({ data: { actorUserId, action: 'BASE_RATE_EXCEL_IMPORTED', entityType: 'Hotel', entityId: hotelId, after: { rowsImported: rows.length, rowsUpdated } } });
+    await this.prisma.$transaction(async (tx) => { for (const item of rows) { const existing = await tx.rateDay.findUnique({ where: { ratePlanId_date: { ratePlanId: item.planId, date: item.date } }, select: { id: true, occupancyPrices: true } }); if (existing) rowsUpdated += 1; const updateOccupancy = item.occupancyPrices === null ? (existing ? existingSupportedOccupancyPrices(existing.occupancyPrices) : undefined) : { ...existingSupportedOccupancyPrices(existing?.occupancyPrices), ...item.occupancyPrices }; await tx.rateDay.upsert({ where: { ratePlanId_date: { ratePlanId: item.planId, date: item.date } }, update: { ...item.data, ...(updateOccupancy !== undefined ? { occupancyPrices: updateOccupancy as Prisma.InputJsonValue } : {}) }, create: item.create }); } });
+    await this.prisma.auditLog.create({ data: { actorUserId, action: 'RATE_PLAN_RATES_EXCEL_IMPORTED', entityType: 'RatePlanMaster', entityId: masterId, after: { hotelId, masterId, masterCode: master.code, rowsImported: rows.length, rowsUpdated } } });
     return { rowsReceived: receivedRows.size, rowsValid: receivedRows.size, rowsInvalid: 0, rowsImported: rows.length, rowsUpdated, errors: [] };
   }
 
@@ -449,7 +513,14 @@ export class HotelsService {
     if (!room) throw new NotFoundException('Room type not found');
     if (master.hotelId !== room.hotelId) throw new BadRequestException('A rate plan can only be assigned to a room type in the same hotel.');
     try {
-      return await this.prisma.ratePlan.create({ data: this.assignmentData(master, room.id, body.active ?? true, body.axisRatePlanId), include: { roomType: true, master: true } });
+      return await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.ratePlan.findUnique({ where: { roomTypeId_masterId: { roomTypeId: room.id, masterId } } });
+        const assignment = existing
+          ? await tx.ratePlan.update({ where: { id: existing.id }, data: { active: body.active ?? true, axisRatePlanId: body.axisRatePlanId === undefined ? undefined : body.axisRatePlanId.trim() || null } })
+          : await tx.ratePlan.create({ data: this.assignmentData(master, room.id, body.active ?? true, body.axisRatePlanId) });
+        if (assignment.active) await this.propagateAgentAccess(tx, masterId, room.hotelId, assignment.id);
+        return tx.ratePlan.findUniqueOrThrow({ where: { id: assignment.id }, include: { roomType: true, master: true } });
+      });
     } catch (error) {
       if (this.isUniqueConflict(error)) throw new ConflictException('This rate plan is already assigned to the selected room, or its AxisRooms ID is already in use.');
       throw error;
@@ -457,13 +528,22 @@ export class HotelsService {
   }
 
   async updateRatePlanAssignment(id: string, body: RatePlanAssignmentUpdateDto) {
-    await this.prisma.ratePlan.findUniqueOrThrow({ where: { id } });
+    const existing = await this.prisma.ratePlan.findUniqueOrThrow({ where: { id }, select: { id: true, masterId: true, roomType: { select: { hotelId: true } } } });
     try {
-      return await this.prisma.ratePlan.update({ where: { id }, data: { active: body.active, axisRatePlanId: body.axisRatePlanId === undefined ? undefined : body.axisRatePlanId.trim() || null }, include: { master: true, roomType: true } });
+      return await this.prisma.$transaction(async (tx) => {
+        const assignment = await tx.ratePlan.update({ where: { id }, data: { active: body.active, axisRatePlanId: body.axisRatePlanId === undefined ? undefined : body.axisRatePlanId.trim() || null } });
+        if (assignment.active) await this.propagateAgentAccess(tx, existing.masterId, existing.roomType.hotelId, id);
+        return tx.ratePlan.findUniqueOrThrow({ where: { id }, include: { master: true, roomType: true } });
+      });
     } catch (error) {
       if (this.isUniqueConflict(error)) throw new ConflictException('This AxisRooms rate-plan ID is already mapped for the room type.');
       throw error;
     }
+  }
+
+  private async propagateAgentAccess(tx: Prisma.TransactionClient, masterId: string, hotelId: string, ratePlanId: string) {
+    const agents = await tx.agentRatePlan.findMany({ where: { active: true, ratePlan: { masterId, roomType: { hotelId } } }, select: { agentId: true }, distinct: ['agentId'] });
+    for (const agent of agents) await tx.agentRatePlan.upsert({ where: { agentId_ratePlanId: { agentId: agent.agentId, ratePlanId } }, create: { agentId: agent.agentId, ratePlanId, active: true }, update: { active: true } });
   }
 
   async deleteRatePlanAssignment(id: string) {
