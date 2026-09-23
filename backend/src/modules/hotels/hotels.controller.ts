@@ -193,18 +193,18 @@ export class HotelsController {
   @Header('Content-Disposition', 'attachment; filename="rainwood-pricebook.xlsx"')
   async pricebook(@Param('hotelId') hotelId: string) { return new StreamableFile(await this.service.pricebookExport(hotelId)); }
 
-  @Get(':hotelId/rates/import-template.xlsx')
+  @Get(':hotelId/rate-plan-masters/:masterId/rates/import-template.xlsx')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-  @Header('Content-Disposition', 'attachment; filename="rainwood-base-rate-template.xlsx"')
-  async baseRateTemplate(@Param('hotelId') hotelId: string) { return new StreamableFile(await this.service.baseRateTemplate(hotelId)); }
+  @Header('Content-Disposition', 'attachment; filename="rainwood-rate-plan-rate-template.xlsx"')
+  async ratePlanRateTemplate(@Param('hotelId') hotelId: string, @Param('masterId') masterId: string) { return new StreamableFile(await this.service.baseRateTemplate(hotelId, masterId)); }
 
-  @Post(':hotelId/rates/import')
+  @Post(':hotelId/rate-plan-masters/:masterId/rates/import')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
-  importBaseRates(@Param('hotelId') hotelId: string, @UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) { return this.service.importBaseRates(hotelId, file, user.id); }
+  importRatePlanRates(@Param('hotelId') hotelId: string, @Param('masterId') masterId: string, @UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) { return this.service.importBaseRates(hotelId, masterId, file, user.id); }
 
   @Post(':hotelId/amenities')
   @UseGuards(JwtAuthGuard, RolesGuard)

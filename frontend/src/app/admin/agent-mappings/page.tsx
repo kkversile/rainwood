@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AdminLayout } from "../../../components/Shell";
 import { RainwoodDatePicker } from "../../../components/RainwoodDatePicker";
-import { apiFileBlob, apiRequest } from "../../../lib/api";
+import { apiRequest } from "../../../lib/api";
 
 type Plan = {
   id: string;
@@ -148,7 +148,6 @@ export default function AgentMappingsPage() {
   const [editor, setEditor] = useState<RatePayload | null>(null);
   const [editorForm, setEditorForm] = useState(blankEditor);
   const [editorBusy, setEditorBusy] = useState(false);
-  const [importBusy, setImportBusy] = useState(false);
   const [agentSearch, setAgentSearch] = useState("");
   const [hotelFilter, setHotelFilter] = useState("");
   const [roomFilter, setRoomFilter] = useState("");
@@ -435,13 +434,6 @@ export default function AgentMappingsPage() {
       setEditorBusy(false);
     }
   }
-  async function downloadTemplate() {
-    try { const blob = await apiFileBlob('/users/agents/rate-import-template.xlsx'); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'rainwood-agent-rate-template.xlsx'; link.click(); URL.revokeObjectURL(url); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not download template'); }
-  }
-  async function importRates(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]; if (!file) return; setImportBusy(true); setError(''); setMessage('');
-    try { const form = new FormData(); form.append('file', file); const result = await apiRequest<{ rowsReceived: number; rowsValid: number; rowsInvalid: number; rowsImported: number; rowsUpdated: number; errors: { row: number; field: string; message: string }[] }>('/users/agents/rates/import', { method: 'POST', body: form }); if (result.errors.length) setError(`Received ${result.rowsReceived} row(s): ${result.rowsInvalid} invalid. No rows were saved.\n${result.errors.map((item) => `Row ${item.row} — ${item.field} — ${item.message}`).join('\n')}`); else { setMessage(`Received ${result.rowsReceived}; imported ${result.rowsImported}; updated ${result.rowsUpdated}.`); if (editor) await openEditor(editor.ratePlan.id); } } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not import agent rates'); } finally { setImportBusy(false); event.target.value = ''; }
-  }
 
   return (
     <AdminLayout title="Agent Access & Contract Rates">
@@ -453,7 +445,6 @@ export default function AgentMappingsPage() {
             <p>
               Give agents access to hotel rate plans and maintain negotiated contract rates where needed.
             </p>
-            <div className="rowActions"><button className="smallBtn" type="button" onClick={() => void downloadTemplate()}>Download Agent Rate Template</button><label className="smallBtn">{importBusy ? 'Importing...' : 'Import Agent Rates'}<input type="file" accept=".xlsx,.xlsm" hidden onChange={(event) => void importRates(event)} disabled={importBusy} /></label></div>
           </div>
         </div>
         {error && (
