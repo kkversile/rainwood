@@ -723,8 +723,9 @@
 .masterPanel>section.panel:last-of-type> .tableScroll .agentRatePlanSummary .status{display:block;max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.3}
 .masterPanel>section.panel:last-of-type> .tableScroll .agentRatePlanSummary .smallBtn{flex:0 0 auto;margin-top:1px}
 .masterPanel>section.panel:last-of-type> .tableScroll th:nth-child(1),.masterPanel>section.panel:last-of-type> .tableScroll td:nth-child(1){width:15%!important}.masterPanel>section.panel:last-of-type> .tableScroll th:nth-child(2),.masterPanel>section.panel:last-of-type> .tableScroll td:nth-child(2){width:17%!important}.masterPanel>section.panel:last-of-type> .tableScroll th:nth-child(3),.masterPanel>section.panel:last-of-type> .tableScroll td:nth-child(3){width:20%!important}.masterPanel>section.panel:last-of-type> .tableScroll th:nth-child(4),.masterPanel>section.panel:last-of-type> .tableScroll td:nth-child(4){width:28%!important}
-.agentRateModal>.rangeSectionHeader{position:sticky;top:0;z-index:3;margin:-14px -18px 10px;padding:14px 18px 8px;background:#fff}
-.agentRateModal>.rangeSectionHeader>button.smallBtn{position:fixed;top:112px;right:max(16px,calc((100vw - 1280px) / 2 + 16px));z-index:101;margin:0}
+.agentRateModal>.rangeSectionHeader{position:sticky;top:0;z-index:3;margin:-14px -18px 10px;padding:14px 180px 8px 18px;background:#fff}
+.agentRateModal>.rangeSectionHeader{position:sticky;isolation:isolate}
+.agentRateModal>.rangeSectionHeader>div:first-child{min-width:0;max-width:calc(100% - 280px)}
+.agentRateModalHeaderSave{position:absolute;top:50%;right:260px;margin:0;transform:translateY(-50%)}
 .agentRateModal>.rowActions{display:none}
-.agentRateModalFloatingSave{position:fixed;top:112px;right:max(104px,calc((100vw - 1280px) / 2 + 104px));z-index:101;margin:0;white-space:nowrap}
-@media(max-width:560px){.agentRateModal>.rangeSectionHeader{margin:-12px -12px 10px;padding:12px}.agentRateModal>.rangeSectionHeader>button.smallBtn,.agentRateModalFloatingSave{top:72px}.agentRateModal>.rangeSectionHeader>button.smallBtn{right:8px}.agentRateModalFloatingSave{right:96px}}
+@media(max-width:560px){.agentRateModal>.rangeSectionHeader{margin:-12px -12px 10px;padding:12px 12px 56px}.agentRateModal>.rangeSectionHeader>button.smallBtn{position:absolute;right:12px;bottom:12px}.agentRateModalHeaderSave{top:auto;right:96px;bottom:12px;transform:none}}

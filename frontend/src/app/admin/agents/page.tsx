@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AdminLayout } from '../../../components/Shell';
 import { apiFileBlob, apiRequest } from '../../../lib/api';
 import { hasUsableDocumentFile } from '../../../lib/booking-pricing';
@@ -92,6 +93,14 @@ function agentEmail(email: string) {
   const at = email.indexOf('@');
   if (at <= 0) return <span className="agentEmail">{email}</span>;
   return <span className="agentEmail"><span>{email.slice(0, at)}</span><span className="agentEmailDomain">@{email.slice(at + 1)}</span></span>;
+}
+function AgentRateAssignmentSave({ busy, disabled, onSave }: { busy: boolean; disabled: boolean; onSave: () => void }) {
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setTarget(document.querySelector<HTMLElement>('.agentRateModal .rangeSectionHeader'));
+  }, []);
+  if (!target) return null;
+  return createPortal(<button className="agentRateModalHeaderSave smallBtn" type="button" disabled={busy || disabled} onClick={onSave}>{busy ? 'Saving...' : 'Save assignment'}</button>, target);
 }
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -377,6 +386,6 @@ export default function AgentsPage() {
       </tbody></table></div></section>
     </section>
     {assignmentAgent && <div className="agentRateModalBackdrop"><section className="panel agentRateEditor agentRateModal" role="dialog" aria-modal="true" aria-label="Rate plan assignments"><div className="rangeSectionHeader"><div><span>Rate-plan access</span><h2>Rate Plan Assignments - {assignmentAgent.companyName || assignmentAgent.name}</h2></div><button className="smallBtn" type="button" onClick={() => setAssignmentAgent(null)}>Cancel</button></div><label>Hotel<select value={hotelFilter} onChange={(event) => setHotelFilter(event.target.value)}><option value="">Select a hotel</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name} - {hotel.city}</option>)}</select></label>{hotelFilter ? <><label>Search commercial plans<input value={planSearch} onChange={(event) => setPlanSearch(event.target.value)} placeholder="BAR, CP Breakfast or Deluxe Room" /></label><p className="mutedText">Choose exactly one commercial rate plan for this hotel. All of its active room plans will be available to the agent.</p>{hotelConflicts && <p className="error">This agent currently has more than one commercial plan for this hotel. Select one plan and save to resolve the conflict.</p>}<div className="mappingGrid">{masterGroups.map((group) => <label className={`mappingCard ${selectedMasterId === group.master.id ? 'selected' : ''}`} key={group.master.id}><input type="radio" name={`agent-hotel-master-${hotelFilter}`} value={group.master.id} checked={selectedMasterId === group.master.id} onChange={() => setSelectedMasterId(group.master.id)} /><b>{group.master.code} - {group.master.name}</b><small>{group.master.mealPlan} · Available for: {Array.from(new Set(group.plans.map((plan) => plan.roomType.name))).sort().join(', ')}</small></label>)}{!masterGroups.length && <p className="empty">No active commercial rate plans found for this hotel.</p>}</div></> : <p className="empty">Select a hotel to see its active commercial rate plans.</p>}<h3>Current assignments</h3><div className="currentAssignmentList">{assignedMasterGroups.map((group) => <div key={`${group.hotel.id}:${group.master.id}`}><b>{group.hotel.name} - {group.master.code} - {group.master.name}</b><p className="mutedText">Rooms: {group.items.length} · {Array.from(new Set(group.items.map((item) => item.ratePlan.roomType.name))).sort().join(', ')}</p><button className="smallBtn secondary" type="button" disabled={busy} onClick={() => void removeAssignment(group.master.id, group.hotel.name)}>Delete assignment</button></div>)}{!assignedMasterGroups.length && <p className="empty">No hotel rate-plan assignments.</p>}</div><div className="rowActions"><button className="btn" type="button" disabled={busy || !hotelFilter || !selectedMasterId || hotelConflicts} onClick={() => void saveAssignments()}>{busy ? 'Saving...' : 'Save assignment'}</button></div></section></div>}
-    {assignmentAgent && <button className="agentRateModalFloatingSave smallBtn" type="button" disabled={busy || !hotelFilter || !selectedMasterId || hotelConflicts} onClick={() => void saveAssignments()}>{busy ? 'Saving...' : 'Save assignment'}</button>}
+    {assignmentAgent && <AgentRateAssignmentSave busy={busy} disabled={!hotelFilter || !selectedMasterId || Boolean(hotelConflicts)} onSave={() => void saveAssignments()} />}
   </AdminLayout>;
 }
