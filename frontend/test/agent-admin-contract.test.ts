@@ -44,6 +44,11 @@ test('agent table keeps long emails readable without a horizontal scrollbar', ()
   assert.match(globalsCss, /compactPaymentEditor\{width:100%;max-width:320px;padding:0;border:0/);
 });
 
+test('payment terms display one milestone per line in the agent table', () => {
+  assert.match(agentsPage, /agentPaymentMilestones/);
+  assert.match(globalsCss, /agentPaymentMilestones\{flex-direction:column/);
+});
+
 test('rate plan assignments use the selected hotel count and business wording', () => {
   assert.match(agentsPage, /Save assignment/);
   assert.match(agentsPage, /hotel-rate-plan/);
