@@ -53,9 +53,10 @@ test('rate plan assignments use the selected hotel count and business wording', 
   assert.match(agentsPage, /Save assignment/);
   assert.match(agentsPage, /hotel-rate-plan/);
   assert.match(agentsPage, /selectedMasterId/);
+  assert.match(agentsPage, /Multiple rate plans are currently assigned to this hotel/);
+  assert.match(agentsPage, /aria-label=\{'Edit rate plans for ' \+ agent\.name\}/);
   assert.doesNotMatch(agentsPage, /selectedHotelPlanIds/);
-  assert.match(agentsPage, /Contract Rate/);
-  assert.match(agentsPage, /Hotel Rate/);
+  assert.doesNotMatch(agentsPage, /Contract Rate|Hotel Rate|pricingMode|AGENT_OVERRIDE/);
 });
 
 test('admin reservation details render the saved payment schedule without a pay action', () => {

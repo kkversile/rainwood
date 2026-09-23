@@ -20,19 +20,20 @@ describe('availability restrictions and pricing', () => {
     expect(option.available).toBe(false);
   });
 
-  it('uses an active agent override while retaining base availability', () => {
+  it('uses the RateDay price for an active agent assignment', () => {
     const calculate = (service as any).calculate.bind(service);
-    const agentPlan = { ...plan, assignedAgents: [{ id: 'agent-rate-1', agentId: 'agent-1', active: true, pricingMode: 'OVERRIDE', rates: [{ date: new Date('2099-01-10T00:00:00Z'), amount: 800, taxAmount: null }, { date: new Date('2099-01-11T00:00:00Z'), amount: 900, taxAmount: null }] }] };
+    const agentPlan = { ...plan, assignedAgents: [{ id: 'agent-rate-1', agentId: 'agent-1', active: true }] };
     const option = calculate(room, agentPlan, { rooms: 1, adults: 2, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2, 'agent-1');
     expect(option.available).toBe(true);
-    expect(option.total).toBe(1900);
-    expect(option.priceSource).toBe('AGENT_OVERRIDE');
-    expect(option.priceBreakdown.every((night: any) => night.priceSource === 'AGENT_OVERRIDE')).toBe(true);
+    expect(option.total).toBe(2200);
+    expect(option.priceSource).toBe('RATE_PLAN');
+    expect(option.agentRatePlanId).toBe('agent-rate-1');
+    expect(option.priceBreakdown.every((night: any) => night.priceSource === 'RATE_PLAN')).toBe(true);
   });
 
-  it('keeps a plan unavailable when only an agent override exists without base rates', () => {
+  it('keeps a plan unavailable when RateDay rows are missing', () => {
     const calculate = (service as any).calculate.bind(service);
-    const option = calculate(room, { ...plan, rates: [], assignedAgents: [{ id: 'agent-rate-1', agentId: 'agent-1', active: true, rates: [{ date: new Date('2099-01-10T00:00:00Z'), amount: 800 }, { date: new Date('2099-01-11T00:00:00Z'), amount: 900 }] }] }, { rooms: 1, adults: 2, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2, 'agent-1');
+    const option = calculate(room, { ...plan, rates: [], assignedAgents: [{ id: 'agent-rate-1', agentId: 'agent-1', active: true }] }, { rooms: 1, adults: 2, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2, 'agent-1');
     expect(option.available).toBe(false);
   });
 

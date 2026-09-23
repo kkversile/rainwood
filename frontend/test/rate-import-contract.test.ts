@@ -21,7 +21,9 @@ test('rate plans page launches master-scoped imports', () => {
 });
 
 test('agent access page has no agent Excel import actions', () => {
-  assert.doesNotMatch(agentMappingsPage, /Import Agent Rates|Download Agent Rate Template|agents\/rates\/import|rate-import-template/);
+  assert.match(agentMappingsPage, /redirect\('\/admin\/agents'\)/);
+  assert.doesNotMatch(shell, /Agent Access & Contract Rates/);
+  assert.doesNotMatch(agentMappingsPage, /Import Agent Rates|Download Agent Rate Template|agents\/rates\/import|rate-import-template|Use Contract Rate|Manage Contract Rates/);
 });
 
 test('admin navigation calls the feature Rate Import', () => {

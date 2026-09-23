@@ -1,13 +1,21 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
-import { normalizeOccupancyPrices } from '../../common/rate-pricing';
+import { normalizeOccupancyPrices, SUPPORTED_OCCUPANCY_KEYS } from '../../common/rate-pricing';
 import { parseDateOnly, parseExcelDateOnly } from '../../common/dates';
 import { AmenityDto, CopyRatePlanDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
 import { FilesService } from '../files/files.service';
 import ExcelJS from 'exceljs';
 import { canonicalMealPlan, canonicalRatePlanCode } from './rate-plan.utils';
 import { mapImportedRateFields } from '../../common/excel-rate-fields';
+
+function existingSupportedOccupancyPrices(value: unknown): Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(SUPPORTED_OCCUPANCY_KEYS.flatMap((key) => {
+    const amount = Number((value as Record<string, unknown>)[key]);
+    return Number.isFinite(amount) && amount >= 0 ? [[key, amount]] : [];
+  }));
+}
 
 @Injectable()
 export class HotelsService {
@@ -234,8 +242,8 @@ export class HotelsService {
     const { hotel, master } = await this.rateImportContext(hotelId, masterId, true);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(file.buffer as any);
-    const sheet = workbook.getWorksheet('Rate Plan Rates') ?? workbook.worksheets[0];
-    if (!sheet) throw new BadRequestException('Workbook must contain a worksheet');
+    const sheet = workbook.getWorksheet('Rate Plan Rates');
+    if (!sheet) throw new BadRequestException('Workbook must contain a "Rate Plan Rates" worksheet.');
     const normalizeHeader = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
     const headerNames = new Map<string, number>();
     let headerRowNumber = 0;
@@ -253,7 +261,7 @@ export class HotelsService {
     const assignedRooms = hotel.rooms.filter((room) => room.ratePlans.some((plan) => plan.masterId === masterId && plan.active));
     const roomMap = new Map(hotel.rooms.map((room) => [room.code.toLowerCase(), room]));
     const errors: { row: number; field: string; message: string }[] = [];
-    const rows: { rowNumber: number; planId: string; date: Date; data: Prisma.RateDayUpdateInput; create: Prisma.RateDayCreateInput }[] = [];
+    const rows: { rowNumber: number; planId: string; date: Date; occupancyPrices: Record<string, number> | null; data: Prisma.RateDayUpdateInput; create: Prisma.RateDayCreateInput }[] = [];
     const receivedRows = new Set<number>();
     const seen = new Set<string>();
     const pricingColumns = ['date', 'base amount (inr)', 'tax (inr)', 'single (inr)', 'double (inr)', 'triple (inr)', 'quad (inr)', 'extra adult charge (inr)', 'child charge (inr)', 'cta', 'ctd', 'min los', 'max los'];
@@ -287,13 +295,13 @@ export class HotelsService {
       const key = `${plan.id}:${date.toISOString().slice(0, 10)}`;
       if (seen.has(key)) { errors.push({ row: rowNumber, field: 'Date', message: 'Duplicate rate row for this room and date' }); continue; }
       seen.add(key);
-      const data: Prisma.RateDayUpdateInput = { amount, ...(tax !== undefined && tax !== null ? { taxAmount: tax } : {}), ...(mappedGuestFields.childAmount !== undefined ? { childAmount: mappedGuestFields.childAmount } : {}), ...(mappedGuestFields.extraAdultAmount !== undefined ? { extraAdultAmount: mappedGuestFields.extraAdultAmount } : {}), ...(mappedGuestFields.occupancyPrices ? { occupancyPrices: mappedGuestFields.occupancyPrices as Prisma.InputJsonValue } : {}), ...(cta !== undefined && cta !== null ? { cta } : {}), ...(ctd !== undefined && ctd !== null ? { ctd } : {}), ...(minLosValue !== undefined ? { minLos: minLosValue } : {}), ...(maxLosValue !== undefined ? { maxLos: maxLosValue } : {}), updatedFromAxisAt: null };
-      rows.push({ rowNumber, planId: plan.id, date, data, create: { ratePlan: { connect: { id: plan.id } }, date, amount, taxAmount: tax ?? 0, childAmount: child ?? 0, extraAdultAmount: extraAdult ?? 0, occupancyPrices: mappedGuestFields.occupancyPrices ? mappedGuestFields.occupancyPrices as Prisma.InputJsonValue : undefined, cta: cta ?? false, ctd: ctd ?? false, minLos: minLosValue ?? 1, maxLos: maxLosValue ?? undefined, updatedFromAxisAt: null } });
+      const data: Prisma.RateDayUpdateInput = { amount, ...(tax !== undefined && tax !== null ? { taxAmount: tax } : {}), ...(mappedGuestFields.childAmount !== undefined ? { childAmount: mappedGuestFields.childAmount } : {}), ...(mappedGuestFields.extraAdultAmount !== undefined ? { extraAdultAmount: mappedGuestFields.extraAdultAmount } : {}), ...(cta !== undefined && cta !== null ? { cta } : {}), ...(ctd !== undefined && ctd !== null ? { ctd } : {}), ...(minLosValue !== undefined ? { minLos: minLosValue } : {}), ...(maxLosValue !== undefined ? { maxLos: maxLosValue } : {}), updatedFromAxisAt: null };
+      rows.push({ rowNumber, planId: plan.id, date, occupancyPrices: mappedGuestFields.occupancyPrices, data, create: { ratePlan: { connect: { id: plan.id } }, date, amount, taxAmount: tax ?? 0, childAmount: child ?? 0, extraAdultAmount: extraAdult ?? 0, occupancyPrices: mappedGuestFields.occupancyPrices ? mappedGuestFields.occupancyPrices as Prisma.InputJsonValue : undefined, cta: cta ?? false, ctd: ctd ?? false, minLos: minLosValue ?? 1, maxLos: maxLosValue ?? undefined, updatedFromAxisAt: null } });
     }
     const invalidRows = new Set(errors.map((error) => error.row));
     if (errors.length) return { rowsReceived: receivedRows.size, rowsValid: receivedRows.size - invalidRows.size, rowsInvalid: invalidRows.size, rowsImported: 0, rowsUpdated: 0, errors };
     let rowsUpdated = 0;
-    await this.prisma.$transaction(async (tx) => { for (const item of rows) { const existing = await tx.rateDay.findUnique({ where: { ratePlanId_date: { ratePlanId: item.planId, date: item.date } }, select: { id: true } }); if (existing) rowsUpdated += 1; await tx.rateDay.upsert({ where: { ratePlanId_date: { ratePlanId: item.planId, date: item.date } }, update: item.data, create: item.create }); } });
+    await this.prisma.$transaction(async (tx) => { for (const item of rows) { const existing = await tx.rateDay.findUnique({ where: { ratePlanId_date: { ratePlanId: item.planId, date: item.date } }, select: { id: true, occupancyPrices: true } }); if (existing) rowsUpdated += 1; const updateOccupancy = item.occupancyPrices === null ? (existing ? existingSupportedOccupancyPrices(existing.occupancyPrices) : undefined) : { ...existingSupportedOccupancyPrices(existing?.occupancyPrices), ...item.occupancyPrices }; await tx.rateDay.upsert({ where: { ratePlanId_date: { ratePlanId: item.planId, date: item.date } }, update: { ...item.data, ...(updateOccupancy !== undefined ? { occupancyPrices: updateOccupancy as Prisma.InputJsonValue } : {}) }, create: item.create }); } });
     await this.prisma.auditLog.create({ data: { actorUserId, action: 'RATE_PLAN_RATES_EXCEL_IMPORTED', entityType: 'RatePlanMaster', entityId: masterId, after: { hotelId, masterId, masterCode: master.code, rowsImported: rows.length, rowsUpdated } } });
     return { rowsReceived: receivedRows.size, rowsValid: receivedRows.size, rowsInvalid: 0, rowsImported: rows.length, rowsUpdated, errors: [] };
   }
@@ -505,7 +513,14 @@ export class HotelsService {
     if (!room) throw new NotFoundException('Room type not found');
     if (master.hotelId !== room.hotelId) throw new BadRequestException('A rate plan can only be assigned to a room type in the same hotel.');
     try {
-      return await this.prisma.ratePlan.create({ data: this.assignmentData(master, room.id, body.active ?? true, body.axisRatePlanId), include: { roomType: true, master: true } });
+      return await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.ratePlan.findUnique({ where: { roomTypeId_masterId: { roomTypeId: room.id, masterId } } });
+        const assignment = existing
+          ? await tx.ratePlan.update({ where: { id: existing.id }, data: { active: body.active ?? true, axisRatePlanId: body.axisRatePlanId === undefined ? undefined : body.axisRatePlanId.trim() || null } })
+          : await tx.ratePlan.create({ data: this.assignmentData(master, room.id, body.active ?? true, body.axisRatePlanId) });
+        if (assignment.active) await this.propagateAgentAccess(tx, masterId, room.hotelId, assignment.id);
+        return tx.ratePlan.findUniqueOrThrow({ where: { id: assignment.id }, include: { roomType: true, master: true } });
+      });
     } catch (error) {
       if (this.isUniqueConflict(error)) throw new ConflictException('This rate plan is already assigned to the selected room, or its AxisRooms ID is already in use.');
       throw error;
@@ -513,13 +528,22 @@ export class HotelsService {
   }
 
   async updateRatePlanAssignment(id: string, body: RatePlanAssignmentUpdateDto) {
-    await this.prisma.ratePlan.findUniqueOrThrow({ where: { id } });
+    const existing = await this.prisma.ratePlan.findUniqueOrThrow({ where: { id }, select: { id: true, masterId: true, roomType: { select: { hotelId: true } } } });
     try {
-      return await this.prisma.ratePlan.update({ where: { id }, data: { active: body.active, axisRatePlanId: body.axisRatePlanId === undefined ? undefined : body.axisRatePlanId.trim() || null }, include: { master: true, roomType: true } });
+      return await this.prisma.$transaction(async (tx) => {
+        const assignment = await tx.ratePlan.update({ where: { id }, data: { active: body.active, axisRatePlanId: body.axisRatePlanId === undefined ? undefined : body.axisRatePlanId.trim() || null } });
+        if (assignment.active) await this.propagateAgentAccess(tx, existing.masterId, existing.roomType.hotelId, id);
+        return tx.ratePlan.findUniqueOrThrow({ where: { id }, include: { master: true, roomType: true } });
+      });
     } catch (error) {
       if (this.isUniqueConflict(error)) throw new ConflictException('This AxisRooms rate-plan ID is already mapped for the room type.');
       throw error;
     }
+  }
+
+  private async propagateAgentAccess(tx: Prisma.TransactionClient, masterId: string, hotelId: string, ratePlanId: string) {
+    const agents = await tx.agentRatePlan.findMany({ where: { active: true, ratePlan: { masterId, roomType: { hotelId } } }, select: { agentId: true }, distinct: ['agentId'] });
+    for (const agent of agents) await tx.agentRatePlan.upsert({ where: { agentId_ratePlanId: { agentId: agent.agentId, ratePlanId } }, create: { agentId: agent.agentId, ratePlanId, active: true }, update: { active: true } });
   }
 
   async deleteRatePlanAssignment(id: string) {

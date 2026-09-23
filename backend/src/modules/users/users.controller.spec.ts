@@ -1,8 +1,8 @@
 import { UsersController } from './users.controller';
-import { BadRequestException, GoneException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 
 describe('agent rate-plan mappings', () => {
-  it('deactivates removed mappings instead of deleting negotiated-rate history', async () => {
+  it('deactivates removed mappings instead of deleting access history', async () => {
     const tx = {
       agentRatePlan: {
         upsert: jest.fn().mockResolvedValue({}),
@@ -32,18 +32,6 @@ describe('agent rate-plan mappings', () => {
     expect(prisma.agentRatePlan.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('returns both base and agent rate-day rows for the editor contract', async () => {
-    const assignment = { id: 'assignment-1', active: true, pricingMode: 'OVERRIDE', rates: [{ id: 'override-1', date: new Date('2099-01-10T00:00:00Z'), amount: 4000 }], ratePlan: { id: 'plan-1', rates: [{ id: 'base-1', date: new Date('2099-01-10T00:00:00Z'), amount: 5000 }], roomType: { id: 'room-1', name: 'PVR', code: 'PVR', hotel: { id: 'hotel-1', name: 'Hotel', city: 'City' } } } };
-    const prisma: any = { agentRatePlan: { findUnique: jest.fn().mockResolvedValue(assignment) } };
-    const controller = new UsersController(prisma);
-
-    const result = await controller.agentRates('agent-1', 'plan-1');
-
-    expect(result.rates).toHaveLength(1);
-    expect(result.ratePlan.rates).toHaveLength(1);
-    expect(prisma.agentRatePlan.findUnique).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ rates: expect.any(Object), ratePlan: expect.any(Object) }) }));
-  });
-
   it('returns a client validation exception for invalid rate-plan mappings', async () => {
     const prisma: any = {
       user: { findFirstOrThrow: jest.fn().mockResolvedValue({ id: 'agent-1' }) },
@@ -53,12 +41,12 @@ describe('agent rate-plan mappings', () => {
     await expect(controller.mapRatePlans('agent-1', { ratePlanIds: ['inactive-plan'] })).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('preserves an existing OVERRIDE mapping when the Agents assignment modal saves it unchanged', async () => {
+  it('keeps assignment updates access-only when the Agents modal saves them', async () => {
     const tx = { agentRatePlan: { upsert: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({ count: 0 }) }, auditLog: { create: jest.fn() } };
     const prisma: any = {
       user: { findFirstOrThrow: jest.fn().mockResolvedValueOnce({ id: 'agent-1' }).mockResolvedValueOnce({ id: 'agent-1', assignedRatePlans: [] }) },
       ratePlan: { findMany: jest.fn().mockResolvedValue([{ id: 'plan-1' }]) },
-      agentRatePlan: { findMany: jest.fn().mockResolvedValue([{ id: 'mapping-1', ratePlanId: 'plan-1', active: true, pricingMode: 'OVERRIDE' }]) },
+      agentRatePlan: { findMany: jest.fn().mockResolvedValue([{ id: 'mapping-1', ratePlanId: 'plan-1', active: true }]) },
       $transaction: jest.fn(async (work: any) => work(tx)),
     };
     await new UsersController(prisma).mapRatePlans('agent-1', { ratePlanIds: ['plan-1'] });
@@ -66,8 +54,4 @@ describe('agent rate-plan mappings', () => {
     expect(tx.agentRatePlan.upsert.mock.calls[0][0].update).not.toHaveProperty('pricingMode');
   });
 
-  it('rejects the retired agent rate Excel import endpoint without touching overrides', async () => {
-    const controller = new UsersController({} as any);
-    await expect(controller.importAgentRates({} as any, { id: 'admin-1' })).rejects.toBeInstanceOf(GoneException);
-  });
 });

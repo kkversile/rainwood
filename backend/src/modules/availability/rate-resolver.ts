@@ -6,7 +6,7 @@ export type RateValue = {
   childAmount: number;
   extraAdultAmount: number;
   occupancyPrices: Record<string, number>;
-  priceSource: 'BASE' | 'AGENT_OVERRIDE';
+  priceSource: 'RATE_PLAN';
   agentRatePlanId?: string;
 };
 
@@ -23,31 +23,23 @@ function occupancyMap(value: unknown) {
 
 @Injectable()
 export class RateResolverService {
-  resolve(base: any, override?: any, agentRatePlanId?: string): RateValue {
-    const baseOccupancy = occupancyMap(base?.occupancyPrices);
-    const overrideOccupancy = occupancyMap(override?.occupancyPrices);
-    const hasOverrideValue = Boolean(override) && [override?.amount, override?.taxAmount, override?.childAmount, override?.extraAdultAmount].some((value) => value !== null && value !== undefined) || Object.keys(overrideOccupancy).length > 0;
+  resolve(base: any, agentRatePlanId?: string): RateValue {
     return {
-      amount: numberOr(override?.amount, numberOr(base?.amount, 0)),
-      taxAmount: numberOr(override?.taxAmount, numberOr(base?.taxAmount, 0)),
-      childAmount: numberOr(override?.childAmount, numberOr(base?.childAmount, 0)),
-      extraAdultAmount: numberOr(override?.extraAdultAmount, numberOr(base?.extraAdultAmount, 0)),
-      occupancyPrices: { ...baseOccupancy, ...overrideOccupancy },
-      priceSource: hasOverrideValue ? 'AGENT_OVERRIDE' : 'BASE',
-      ...(hasOverrideValue && agentRatePlanId ? { agentRatePlanId } : {}),
+      amount: numberOr(base?.amount, 0),
+      taxAmount: numberOr(base?.taxAmount, 0),
+      childAmount: numberOr(base?.childAmount, 0),
+      extraAdultAmount: numberOr(base?.extraAdultAmount, 0),
+      occupancyPrices: occupancyMap(base?.occupancyPrices),
+      priceSource: 'RATE_PLAN',
+      ...(agentRatePlanId ? { agentRatePlanId } : {}),
     };
   }
 
   byDate(plan: any, agentId?: string) {
     const assignment = agentId ? plan?.assignedAgents?.find((item: any) => item.agentId === agentId && item.active !== false) : undefined;
-    const overrides = new Map<string, any>(assignment?.pricingMode === 'OVERRIDE' ? (assignment?.rates ?? []).map((rate: any) => [this.dateKey(rate.date), rate]) : []);
     return {
       assignment,
-      get: (base: any) => this.resolve(base, base ? overrides.get(this.dateKey(base.date)) : undefined, assignment?.id),
+      get: (base: any) => this.resolve(base, assignment?.id),
     };
-  }
-
-  dateKey(value: Date | string) {
-    return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
   }
 }

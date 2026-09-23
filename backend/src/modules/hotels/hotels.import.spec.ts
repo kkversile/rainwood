@@ -4,9 +4,9 @@ import { HotelsService } from './hotels.service';
 
 const master = { id: 'master-1', hotelId: 'hotel-1', code: 'BAR', name: 'Best Available', mealPlan: 'EP', active: true };
 
-async function fileFromRows(rows: unknown[][], context = false) {
+async function fileFromRows(rows: unknown[][], context = false, sheetName = 'Rate Plan Rates') {
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('Rate Plan Rates');
+  const sheet = workbook.addWorksheet(sheetName);
   if (context) {
     sheet.addRow(['Hotel', 'RainWood Ooty']);
     sheet.addRow(['Rate Plan', master.name]);
@@ -15,6 +15,10 @@ async function fileFromRows(rows: unknown[][], context = false) {
     sheet.addRow([]);
   }
   rows.forEach((row) => sheet.addRow(row));
+  return { originalname: 'rate-plan-rates.xlsx', buffer: Buffer.from(await workbook.xlsx.writeBuffer()) } as any;
+}
+
+async function workbookFile(workbook: ExcelJS.Workbook) {
   return { originalname: 'rate-plan-rates.xlsx', buffer: Buffer.from(await workbook.xlsx.writeBuffer()) } as any;
 }
 
@@ -32,7 +36,7 @@ function serviceWithRooms(roomPlans: unknown[][], transaction?: any) {
 describe('base-rate Excel import', () => {
   it('maps Extra Adult and Extra Child columns to scalar RateDay fields', async () => {
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Base Rates');
+    const sheet = workbook.addWorksheet('Rate Plan Rates');
     sheet.addRow(['Room Code', 'Rate Plan Code', 'Date', 'Base Amount (INR)', 'Tax (INR)', 'Single (INR)', 'Double (INR)', 'Triple (INR)', 'Quad (INR)', 'Extra Adult (INR)', 'Extra Child (INR)', 'CTA', 'CTD', 'Min LOS', 'Max LOS']);
     sheet.addRow(['DLX', 'BAR', '2026-10-01', 3500, 420, 3000, 3500, 4000, 4500, 800, 500, 'No', 'No', 1, 7]);
     const tx: any = { rateDay: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn() } };
@@ -83,6 +87,16 @@ describe('base-rate Excel import', () => {
     await expect(service.importBaseRates('hotel-1', 'master-1', await fileFromRows([]), 'admin-1')).rejects.toThrow('Selected rate plan is inactive.');
   });
 
+  it('requires the exact Rate Plan Rates worksheet and never parses Instructions', async () => {
+    const { service, tx } = serviceWithRooms([[{ id: 'plan-1', masterId: 'master-1', code: 'BAR', active: true }]]);
+    const workbook = new ExcelJS.Workbook();
+    const instructions = workbook.addWorksheet('Instructions');
+    instructions.addRow(['Room Code', 'Date', 'Base Amount (INR)']);
+    instructions.addRow(['DLX', '2026-10-01', 3500]);
+    await expect(service.importBaseRates('hotel-1', 'master-1', await workbookFile(workbook), 'admin-1')).rejects.toThrow('Workbook must contain a "Rate Plan Rates" worksheet.');
+    expect(tx.rateDay.upsert).not.toHaveBeenCalled();
+  });
+
   it('resolves a room only through the selected master and rejects a mismatched workbook plan code atomically', async () => {
     const { service, tx } = serviceWithRooms([[{ id: 'plan-1', masterId: 'master-1', code: 'BAR', active: true }]]);
     const file = await fileFromRows([
@@ -110,8 +124,8 @@ describe('base-rate Excel import', () => {
     expect(tx.rateDay.upsert).not.toHaveBeenCalled();
   });
 
-  it('updates existing RateDay rows, creates new rows, and never accesses AgentRateDay', async () => {
-    const tx: any = { rateDay: { findUnique: jest.fn().mockResolvedValueOnce({ id: 'existing-rate' }).mockResolvedValueOnce(null), upsert: jest.fn() }, agentRateDay: { findUnique: jest.fn(), upsert: jest.fn() } };
+  it('updates existing RateDay rows and creates new rows without changing access mappings', async () => {
+    const tx: any = { rateDay: { findUnique: jest.fn().mockResolvedValueOnce({ id: 'existing-rate', occupancyPrices: { single: 3000, double: 3500, triple: 4000, quad: 4500 } }).mockResolvedValueOnce(null), upsert: jest.fn() } };
     const { service, prisma } = serviceWithRooms([[{ id: 'plan-1', masterId: 'master-1', code: 'BAR', active: true }]], tx);
     const file = await fileFromRows([
       ['Room Code', 'Date', 'Base Amount (INR)', 'Extra Adult Charge (INR)', 'Child Charge (INR)', 'Single (INR)', 'Double (INR)', 'Triple (INR)', 'Quad (INR)'],
@@ -122,7 +136,50 @@ describe('base-rate Excel import', () => {
     expect(result).toEqual(expect.objectContaining({ rowsImported: 2, rowsUpdated: 1, rowsInvalid: 0 }));
     expect(tx.rateDay.upsert).toHaveBeenCalledTimes(2);
     expect(tx.rateDay.upsert.mock.calls[0][0].update).toEqual(expect.objectContaining({ extraAdultAmount: 800, childAmount: 500, occupancyPrices: { single: 3000, double: 3500, triple: 4000, quad: 4500 } }));
-    expect(tx.agentRateDay.findUnique).not.toHaveBeenCalled();
     expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'RATE_PLAN_RATES_EXCEL_IMPORTED', entityId: 'master-1' }) }));
+  });
+
+  it('merges partial occupancy updates and preserves blank occupancy cells', async () => {
+    const tx: any = { rateDay: { findUnique: jest.fn().mockResolvedValue({ id: 'existing-rate', occupancyPrices: { single: 4000, double: 4500, triple: 5200, quad: 6000, extrabed: 9999 } }), upsert: jest.fn() } };
+    const { service } = serviceWithRooms([[{ id: 'plan-1', masterId: 'master-1', code: 'BAR', active: true }]], tx);
+    const file = await fileFromRows([
+      ['Room Code', 'Date', 'Base Amount (INR)', 'Single (INR)', 'Double (INR)', 'Triple (INR)', 'Quad (INR)'],
+      ['DLX', '2026-10-01', 3500, 4200, '', '', ''],
+    ]);
+    await service.importBaseRates('hotel-1', 'master-1', file, 'admin-1');
+    expect(tx.rateDay.upsert.mock.calls[0][0].update.occupancyPrices).toEqual({ single: 4200, double: 4500, triple: 5200, quad: 6000 });
+  });
+
+  it('creates a new RateDay with only the supplied occupancy values', async () => {
+    const tx: any = { rateDay: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn() } };
+    const { service } = serviceWithRooms([[{ id: 'plan-1', masterId: 'master-1', code: 'BAR', active: true }]], tx);
+    const file = await fileFromRows([
+      ['Room Code', 'Date', 'Base Amount (INR)', 'Single (INR)', 'Double (INR)', 'Triple (INR)', 'Quad (INR)'],
+      ['DLX', '2026-10-01', 3500, '', 4100, '', ''],
+    ]);
+    await service.importBaseRates('hotel-1', 'master-1', file, 'admin-1');
+    expect(tx.rateDay.upsert.mock.calls[0][0].create.occupancyPrices).toEqual({ double: 4100 });
+  });
+
+  it('preserves existing occupancy values when all occupancy cells are blank', async () => {
+    const tx: any = { rateDay: { findUnique: jest.fn().mockResolvedValue({ id: 'existing-rate', occupancyPrices: { single: 4000, double: 4500 } }), upsert: jest.fn() } };
+    const { service } = serviceWithRooms([[{ id: 'plan-1', masterId: 'master-1', code: 'BAR', active: true }]], tx);
+    const file = await fileFromRows([
+      ['Room Code', 'Date', 'Base Amount (INR)', 'Single (INR)', 'Double (INR)', 'Triple (INR)', 'Quad (INR)'],
+      ['DLX', '2026-10-01', 3500, '', '', '', ''],
+    ]);
+    await service.importBaseRates('hotel-1', 'master-1', file, 'admin-1');
+    expect(tx.rateDay.upsert.mock.calls[0][0].update.occupancyPrices).toEqual({ single: 4000, double: 4500 });
+  });
+
+  it('adds a supplied occupancy value without erasing existing values', async () => {
+    const tx: any = { rateDay: { findUnique: jest.fn().mockResolvedValue({ id: 'existing-rate', occupancyPrices: { single: 4000, double: 4500 } }), upsert: jest.fn() } };
+    const { service } = serviceWithRooms([[{ id: 'plan-1', masterId: 'master-1', code: 'BAR', active: true }]], tx);
+    const file = await fileFromRows([
+      ['Room Code', 'Date', 'Base Amount (INR)', 'Single (INR)', 'Double (INR)', 'Triple (INR)', 'Quad (INR)'],
+      ['DLX', '2026-10-01', 3500, '', '', 5200, ''],
+    ]);
+    await service.importBaseRates('hotel-1', 'master-1', file, 'admin-1');
+    expect(tx.rateDay.upsert.mock.calls[0][0].update.occupancyPrices).toEqual({ single: 4000, double: 4500, triple: 5200 });
   });
 });

@@ -1,5 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, GoneException, Header, Optional, Param, Patch, Post, Put, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { BadRequestException, Body, Controller, Delete, Get, Optional, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { IsArray, IsBoolean, IsEmail, IsEnum, IsNumber, IsOptional, IsString, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PrismaService } from '../../common/prisma.service';
@@ -8,10 +7,7 @@ import { CurrentUser } from '../../common/current-user.decorator';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
 import bcrypt from 'bcryptjs';
-import { Prisma } from '@prisma/client';
-import { AgentPaymentMilestonesDto, AgentRateBatchDto, AgentRatePlanUpdateDto, PaymentMilestoneDto } from './users.dto';
-import { normalizeOccupancyPrices } from '../../common/rate-pricing';
-import { parseDateOnly } from '../../common/dates';
+import { AgentPaymentMilestonesDto, PaymentMilestoneDto } from './users.dto';
 import { AgentsService } from '../agents/agents.service';
 import { AgentDocumentStatus, AgentPaymentPolicy } from '@prisma/client';
 import { legacyPaymentMilestones, paymentMilestonesForAgent, validateAgentPaymentTerms, validatePaymentMilestones } from '../../common/agent-payment-terms';
@@ -58,17 +54,6 @@ export class UsersController {
   constructor(private p: PrismaService, @Optional() private agentsService?: AgentsService) {}
   @Get('') list() { return this.p.user.findMany({ select: { id: true, email: true, name: true, role: true, active: true, createdAt: true } }); }
   @Get('agents') agents() { return this.p.user.findMany({ where: { role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, agentDocuments: { select: { status: true } }, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } }, orderBy: { createdAt: 'asc' } }); }
-  @Get('agents/rate-import-template.xlsx')
-  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-  @Header('Content-Disposition', 'attachment; filename="rainwood-agent-rate-template.xlsx"')
-  async agentRateTemplate() {
-    throw new GoneException('Agent rate Excel import is no longer supported. Import rates into the Hotel Rate Plan.');
-  }
-  @Post('agents/rates/import')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
-  async importAgentRates(@UploadedFile() file: Express.Multer.File, @CurrentUser() actor: any) {
-    throw new GoneException('Agent rate Excel import is no longer supported. Import rates into the Hotel Rate Plan.');
-  }
   @Get('agents/:agentId') agent(@Param('agentId') agentId: string) { return this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, agentDocuments: { include: { file: { select: { originalName: true, mimeType: true, size: true } } }, orderBy: { createdAt: 'desc' } }, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } } }); }
   @Post('') async create(@Body() d: CreateUserDto) { return this.p.user.create({ data: { email: d.email.toLowerCase(), name: d.name, role: (d.role || 'RESERVATION') as any, passwordHash: await bcrypt.hash(d.password, 12), active: true }, select: { id: true, email: true, name: true, role: true, active: true } }); }
   @Post('agents') async createAgent(@Body() d: CreateUserDto) {
@@ -174,54 +159,4 @@ export class UsersController {
     return this.p.user.findFirstOrThrow({ where: { id: agent.id }, select: { id: true, email: true, name: true, role: true, active: true, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } } });
   }
 
-  @Patch('agents/:agentId/rate-plans/:ratePlanId')
-  async updateAgentRatePlan(@Param('agentId') agentId: string, @Param('ratePlanId') ratePlanId: string, @Body() body: AgentRatePlanUpdateDto) {
-    const mapping = await this.p.agentRatePlan.findUnique({ where: { agentId_ratePlanId: { agentId, ratePlanId } }, include: { agent: { select: { role: true } }, ratePlan: { select: { active: true, master: { select: { active: true } } } } } });
-    if (!mapping || mapping.agent.role !== 'AGENT') throw new BadRequestException('Agent rate-plan mapping not found.');
-    if (!mapping.ratePlan.active || !mapping.ratePlan.master.active) throw new BadRequestException('The room rate plan is inactive.');
-    if (body.pricingMode === 'OVERRIDE' && body.active === false) throw new BadRequestException('An inactive mapping cannot use agent contract pricing.');
-    return this.p.agentRatePlan.update({ where: { id: mapping.id }, data: { active: body.active, pricingMode: body.pricingMode } });
-  }
-
-  @Get('agents/:agentId/rate-plans/:ratePlanId/rates')
-  async agentRates(@Param('agentId') agentId: string, @Param('ratePlanId') ratePlanId: string) {
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    const assignment = await this.p.agentRatePlan.findUnique({ where: { agentId_ratePlanId: { agentId, ratePlanId } }, include: { rates: { where: { date: { gte: today } }, orderBy: { date: 'asc' } }, ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } }, rates: { where: { date: { gte: today } }, orderBy: { date: 'asc' } } } } } });
-    if (!assignment) throw new BadRequestException('Agent is not assigned to this rate plan.');
-    return assignment;
-  }
-
-  @Put('agents/:agentId/rate-plans/:ratePlanId/rates')
-  async saveAgentRates(@Param('agentId') agentId: string, @Param('ratePlanId') ratePlanId: string, @Body() body: AgentRateBatchDto) {
-    const assignment = await this.p.agentRatePlan.findUnique({ where: { agentId_ratePlanId: { agentId, ratePlanId } }, include: { ratePlan: { select: { active: true, master: { select: { active: true } } } } } });
-    if (!assignment) throw new BadRequestException('Agent is not assigned to this rate plan.');
-    if (!assignment.active || !assignment.ratePlan.active || !assignment.ratePlan.master.active) throw new BadRequestException('Only active agent, room rate-plan and master assignments can be priced.');
-    await this.p.$transaction(async (tx) => {
-      for (const day of body.days) {
-        const date = parseDateOnly(day.date, 'agent rate date');
-        const occupancyPrices = normalizeOccupancyPrices(day.occupancyPrices);
-        const hasValue = [day.amount, day.taxAmount, day.childAmount, day.extraAdultAmount].some((value) => value !== undefined && value !== null) || (day.occupancyPrices !== undefined && day.occupancyPrices !== null && Object.keys(day.occupancyPrices).length > 0);
-        if (!hasValue) {
-          await tx.agentRateDay.deleteMany({ where: { agentRatePlanId: assignment.id, date } });
-          continue;
-        }
-        await tx.agentRateDay.upsert({
-          where: { agentRatePlanId_date: { agentRatePlanId: assignment.id, date } },
-          create: { agentRatePlanId: assignment.id, date, amount: day.amount ?? null, taxAmount: day.taxAmount ?? null, childAmount: day.childAmount ?? null, extraAdultAmount: day.extraAdultAmount ?? null, occupancyPrices: occupancyPrices ?? undefined },
-          update: { amount: day.amount === undefined ? undefined : day.amount, taxAmount: day.taxAmount === undefined ? undefined : day.taxAmount, childAmount: day.childAmount === undefined ? undefined : day.childAmount, extraAdultAmount: day.extraAdultAmount === undefined ? undefined : day.extraAdultAmount, occupancyPrices: occupancyPrices === undefined ? undefined : occupancyPrices === null ? Prisma.DbNull : occupancyPrices },
-        });
-      }
-    });
-    return this.agentRates(agentId, ratePlanId);
-  }
-
-  @Delete('agents/:agentId/rate-plans/:ratePlanId/rates/:date')
-  async clearAgentRate(@Param('agentId') agentId: string, @Param('ratePlanId') ratePlanId: string, @Param('date') dateText: string) {
-    const assignment = await this.p.agentRatePlan.findUnique({ where: { agentId_ratePlanId: { agentId, ratePlanId } }, select: { id: true } });
-    if (!assignment) throw new BadRequestException('Agent is not assigned to this rate plan.');
-    const date = parseDateOnly(dateText, 'agent rate date');
-    await this.p.agentRateDay.deleteMany({ where: { agentRatePlanId: assignment.id, date } });
-    return { cleared: true, date: dateText.slice(0, 10) };
-  }
 }

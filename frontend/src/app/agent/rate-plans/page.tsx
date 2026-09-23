@@ -13,7 +13,6 @@ type RateRow = {
   extraAdultAmount: number | string | null;
   childAmount: number | string | null;
   occupancyPrices?: Record<string, number> | null;
-  priceSource?: 'BASE' | 'AGENT_OVERRIDE';
 };
 
 type AssignedPlan = AssignedRatePlanView & { description?: string | null; rates: RateRow[] };
@@ -78,7 +77,7 @@ function Plans() {
 
   return <section className="agentRatePlansPage">
     <header className="agentRatePlansHeader">
-      <div><span>Agent portal</span><h2>My Rate Plans</h2><p>Search assigned hotels, contracted nett rates and effective dates.</p></div>
+      <div><span>Agent portal</span><h2>My Rate Plans</h2><p>Search assigned hotels, published rates and effective dates.</p></div>
       <div className="agentRatePlansSummary"><strong>{visiblePlans.length} of {plans.length} assigned</strong><small>{selectedDays ? `${selectedDays} dates selected` : 'All available dates'}</small></div>
     </header>
     <div className="agentRatePlansFilters" aria-label="Rate plan filters">
@@ -92,7 +91,7 @@ function Plans() {
       {hasFilters && <button className="agentRatePlanClear" type="button" onClick={() => setFilters(emptyFilters)}>Clear filters</button>}
     </div>
     {error && <p className="error agentRatePlanFilterError" role="alert">{error}</p>}
-    {!plans.length ? <div className="panel agentRatePlanEmpty"><h3>No rate plans assigned</h3><p>Your Admin team has not assigned any hotel rate plans to this account yet.</p></div> : !visiblePlans.length ? <div className="panel agentRatePlanEmpty"><h3>No matching rate plans</h3><p>Try another hotel, rate plan, room type, meal plan or date range.</p><button className="btn secondary" type="button" onClick={() => setFilters(emptyFilters)}>Clear filters</button></div> : <section className="agentPlanGrid">{visiblePlans.map((plan) => <article className="panel agentPlanCard" key={plan.id}><div className="agentPlanHeader"><div><span className="status ok">Assigned</span><h2>{plan.name}</h2><p>{plan.hotel.name} · {plan.hotel.city} · {plan.room.name} ({plan.room.code})</p></div><b className="mappingCode">{plan.code}</b></div><p>{plan.description || `${plan.mealPlan} meal plan`}</p><div className="agentRatePlanCardMeta"><h3>Contracted nett rates</h3><span>{plan.rates.length}{selectedDays ? ` of ${selectedDays}` : ''} date{plan.rates.length === 1 ? '' : 's'} returned</span></div>{!plan.rates.length ? <p className="mutedText">No rates published for the selected dates.</p> : <div className="tableScroll agentRatePlanRatesTable"><table><thead><tr><th>Date</th><th>Contracted nett rate</th><th>Tax</th><th>Double occupancy</th><th>Extra adult</th><th>Child</th><th>Source</th></tr></thead><tbody>{plan.rates.map((rate) => <tr key={rate.date}><td>{rate.date.slice(0, 10)}</td><td>{money(rate.amount)}</td><td>{money(rate.taxAmount)}</td><td>{money(rate.occupancyPrices?.double)}</td><td>{money(rate.extraAdultAmount)}</td><td>{money(rate.childAmount)}</td><td>{rate.priceSource === 'AGENT_OVERRIDE' ? 'Contracted' : 'Hotel base'}</td></tr>)}</tbody></table></div>}</article>)}</section>}
+    {!plans.length ? <div className="panel agentRatePlanEmpty"><h3>No rate plans assigned</h3><p>Your Admin team has not assigned any hotel rate plans to this account yet.</p></div> : !visiblePlans.length ? <div className="panel agentRatePlanEmpty"><h3>No matching rate plans</h3><p>Try another hotel, rate plan, room type, meal plan or date range.</p><button className="btn secondary" type="button" onClick={() => setFilters(emptyFilters)}>Clear filters</button></div> : <section className="agentPlanGrid">{visiblePlans.map((plan) => <article className="panel agentPlanCard" key={plan.id}><div className="agentPlanHeader"><div><span className="status ok">Assigned</span><h2>{plan.name}</h2><p>{plan.hotel.name} · {plan.hotel.city} · {plan.room.name} ({plan.room.code})</p></div><b className="mappingCode">{plan.code}</b></div><p>{plan.description || `${plan.mealPlan} meal plan`}</p><div className="agentRatePlanCardMeta"><h3>Published rates</h3><span>{plan.rates.length}{selectedDays ? ` of ${selectedDays}` : ''} date{plan.rates.length === 1 ? '' : 's'} returned</span></div>{!plan.rates.length ? <p className="mutedText">No rates published for the selected dates.</p> : <div className="tableScroll agentRatePlanRatesTable"><table><thead><tr><th>Date</th><th>Rate</th><th>Tax</th><th>Double occupancy</th><th>Extra adult</th><th>Child</th></tr></thead><tbody>{plan.rates.map((rate) => <tr key={rate.date}><td>{rate.date.slice(0, 10)}</td><td>{money(rate.amount)}</td><td>{money(rate.taxAmount)}</td><td>{money(rate.occupancyPrices?.double)}</td><td>{money(rate.extraAdultAmount)}</td><td>{money(rate.childAmount)}</td></tr>)}</tbody></table></div>}</article>)}</section>}
   </section>;
 }
 

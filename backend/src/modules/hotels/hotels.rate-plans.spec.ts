@@ -27,6 +27,7 @@ describe('hotel-level rate plans', () => {
         update: jest.fn().mockResolvedValue({ id: 'assignment-1', active: false }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      agentRatePlan: { findMany: jest.fn().mockResolvedValue([]), upsert: jest.fn().mockResolvedValue({}) },
       rateDay: { upsert: jest.fn(), findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'day-1' }), update: jest.fn().mockResolvedValue({ id: 'day-1' }) },
       $transaction: jest.fn(async (work: any) => typeof work === 'function' ? work(prisma) : Promise.all(work)),
     };
@@ -50,13 +51,32 @@ describe('hotel-level rate plans', () => {
   });
 
   it('assigns a master to a room in the same hotel', async () => {
+    prisma.ratePlan.findUnique.mockResolvedValueOnce(null);
     await service.assignRatePlanMaster(master.id, { roomTypeId: room.id });
-    expect(prisma.ratePlan.create).toHaveBeenCalledWith({ data: expect.objectContaining({ masterId: master.id, roomTypeId: room.id }), include: { roomType: true, master: true } });
+    expect(prisma.ratePlan.create).toHaveBeenCalledWith({ data: expect.objectContaining({ masterId: master.id, roomTypeId: room.id }) });
   });
 
-  it('rejects duplicate room assignments', async () => {
-    prisma.ratePlan.create.mockRejectedValueOnce({ code: 'P2002' });
-    await expect(service.assignRatePlanMaster(master.id, { roomTypeId: room.id })).rejects.toBeInstanceOf(ConflictException);
+  it('reactivates an existing room assignment without creating a duplicate', async () => {
+    prisma.ratePlan.findUnique.mockResolvedValueOnce({ id: 'assignment-1', active: false, masterId: master.id, roomTypeId: room.id });
+    prisma.ratePlan.update.mockResolvedValueOnce({ id: 'assignment-1', active: true });
+    prisma.agentRatePlan.findMany.mockResolvedValueOnce([{ agentId: 'agent-abc' }]);
+    await service.assignRatePlanMaster(master.id, { roomTypeId: room.id });
+    expect(prisma.ratePlan.create).not.toHaveBeenCalled();
+    expect(prisma.agentRatePlan.upsert).toHaveBeenCalledWith({
+      where: { agentId_ratePlanId: { agentId: 'agent-abc', ratePlanId: 'assignment-1' } },
+      create: { agentId: 'agent-abc', ratePlanId: 'assignment-1', active: true },
+      update: { active: true },
+    });
+  });
+
+  it('propagates a new room assignment to every agent already using the same master and hotel', async () => {
+    prisma.ratePlan.findUnique.mockResolvedValueOnce(null);
+    prisma.ratePlan.create.mockResolvedValueOnce({ id: 'suite-assignment', active: true });
+    prisma.agentRatePlan.findMany.mockResolvedValueOnce([{ agentId: 'agent-abc' }, { agentId: 'agent-xyz' }]);
+    await service.assignRatePlanMaster(master.id, { roomTypeId: 'room-1' });
+    expect(prisma.agentRatePlan.findMany).toHaveBeenCalledWith({ where: { active: true, ratePlan: { masterId: 'master-1', roomType: { hotelId: 'hotel-1' } } }, select: { agentId: true }, distinct: ['agentId'] });
+    expect(prisma.agentRatePlan.upsert).toHaveBeenCalledTimes(2);
+    expect(prisma.agentRatePlan.upsert.mock.calls.map((call: any[]) => call[0].create.agentId)).toEqual(['agent-abc', 'agent-xyz']);
   });
 
   it('rejects cross-hotel assignments', async () => {
@@ -72,9 +92,19 @@ describe('hotel-level rate plans', () => {
   });
 
   it('deactivates an assignment without deleting booking references', async () => {
+    prisma.ratePlan.findUniqueOrThrow.mockResolvedValueOnce({ id: 'assignment-1', masterId: master.id, roomType: { hotelId: 'hotel-1' } });
     await service.updateRatePlanAssignment('assignment-1', { active: false });
     expect(prisma.ratePlan.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'assignment-1' }, data: expect.objectContaining({ active: false }) }));
     expect(prisma.ratePlan.delete).toBeUndefined();
+  });
+
+  it('propagates access when an inactive room assignment is reactivated', async () => {
+    prisma.ratePlan.findUniqueOrThrow.mockResolvedValueOnce({ id: 'assignment-1', masterId: master.id, roomType: { hotelId: 'hotel-1' } });
+    prisma.ratePlan.update.mockResolvedValueOnce({ id: 'assignment-1', active: true });
+    prisma.agentRatePlan.findMany.mockResolvedValueOnce([{ agentId: 'agent-abc' }]);
+    await service.updateRatePlanAssignment('assignment-1', { active: true });
+    expect(prisma.agentRatePlan.upsert).toHaveBeenCalledTimes(1);
+    expect(prisma.ratePlan.create).not.toHaveBeenCalled();
   });
 
   it('writes RateDay against the room assignment id', async () => {
