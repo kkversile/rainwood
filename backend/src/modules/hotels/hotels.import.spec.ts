@@ -60,11 +60,14 @@ describe('base-rate Excel import', () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(await service.baseRateTemplate('hotel-1', 'master-1') as any);
     const sheet = workbook.getWorksheet('Rate Plan Rates')!;
+    const instructions = workbook.getWorksheet('Instructions')!;
     expect(sheet.getCell('B1').value).toBe('RainWood Ooty');
     expect(sheet.getCell('B3').value).toBe('BAR');
     expect(sheet.getRow(6).values).toEqual(expect.arrayContaining(['Room Code', 'Room', 'Date', 'Base Amount (INR)']));
     expect(sheet.getRow(7).getCell(1).value).toBe('DLX');
     expect(sheet.rowCount).toBe(7);
+    expect(instructions.getCell('A1').value).toBe('SAMPLE DATA - DO NOT IMPORT THIS SHEET');
+    expect(instructions.getRow(9).getCell(4).value).toBe(5000);
   });
 
   it('rejects a master selected from another hotel before creating a workbook or rate', async () => {
