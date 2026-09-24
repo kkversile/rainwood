@@ -1,10 +1,11 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Building2, Check, ChevronDown, Circle, MoreVertical, Pencil, Plus, Power, Search, Tag, Trash2, X } from 'lucide-react';
 import { AdminLayout } from '../../../components/Shell';
 import { useDialog } from '../../../components/ReactDialog';
+import { RatePlanRateImportForm } from '../../../components/RatePlanRateImportForm';
 import { apiRequest } from '../../../lib/api';
 import { filterRatePlanRows, flattenRatePlanRows, formatConfiguredDays, formatStartingRate, RatePlanSortKey, RatePlanTableRow, RatePlanViewMaster, sortRatePlanRows } from '../../../lib/rate-plan-view';
 
@@ -45,6 +46,10 @@ export default function RatePlansPage() {
   const [masterForm, setMasterForm] = useState<MasterForm>(blankMaster);
   const [assignmentModal, setAssignmentModal] = useState<{ master: Master; assignment?: Assignment } | null>(null);
   const [assignmentForm, setAssignmentForm] = useState<AssignmentForm>({ roomTypeId: '', axisRatePlanId: '', active: true });
+  const [rateImportModal, setRateImportModal] = useState<{ hotelId: string; masterId: string; masterName: string } | null>(null);
+  const [rateImportBusy, setRateImportBusy] = useState(false);
+  const rateImportDialogRef = useRef<HTMLElement | null>(null);
+  const rateImportTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -83,6 +88,16 @@ export default function RatePlansPage() {
     const timer = window.setTimeout(() => setMessage(''), 1000);
     return () => window.clearTimeout(timer);
   }, [message]);
+
+  useEffect(() => {
+    if (!rateImportModal) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !rateImportBusy) closeRateImportModal();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.setTimeout(() => rateImportDialogRef.current?.focus(), 0);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [rateImportModal, rateImportBusy]);
 
   const selectedHotel = hotels.find((hotel) => hotel.id === hotelId);
   const rooms = selectedHotel?.rooms ?? [];
@@ -216,6 +231,22 @@ export default function RatePlansPage() {
     }
   }
 
+  function openRateImportModal(event: React.MouseEvent<HTMLButtonElement>, row: RatePlanTableRow) {
+    rateImportTriggerRef.current = event.currentTarget;
+    setRateImportBusy(false);
+    setRateImportModal({ hotelId, masterId: row.master.id, masterName: row.master.name });
+  }
+
+  function closeRateImportModal() {
+    if (rateImportBusy) return;
+    setRateImportModal(null);
+    window.setTimeout(() => rateImportTriggerRef.current?.focus(), 0);
+  }
+
+  async function handleRateImportSuccess() {
+    await loadMasters(hotelId);
+  }
+
   const tableHeader = (label: string, key: RatePlanSortKey) => <button type="button" className="tableSortButton" onClick={() => setSorting(key)} aria-label={`Sort by ${label}`} aria-sort={sortKey === key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>{label}<span className="sortMark">{sortLabel(key)}</span></button>;
 
   return <AdminLayout title="Rate Plans"><section className="ratePlansPage">
@@ -234,7 +265,7 @@ export default function RatePlansPage() {
           <td><span className={`ratePlanStatus ${row.effectiveActive ? 'active' : 'inactive'}`} title={!row.master.active && row.assignment ? 'The shared hotel plan is inactive.' : undefined}><i />{row.effectiveActive ? 'Active' : 'Inactive'}</span></td>
           <td><span title={row.assignment ? formatConfiguredDays(row.assignment._count.rates) : undefined}>{formatStartingRate(row.startingRate)}</span></td>
           <td>{row.confirmedBookingCount}</td>
-          <td><div className="ratePlanActions">{visibleRows.findIndex((item) => item.master.id === row.master.id) === visibleRows.findIndex((item) => item.master.id === row.master.id && item.id === row.id) && <button className="ratePlanEditButton" type="button" disabled={busy || !row.master.active} title="Import daily rates for this hotel rate plan" onClick={() => router.push(`/admin/base-rate-import?hotelId=${hotelId}&masterId=${row.master.id}`)}>Import rates</button>}{row.assignment && <button className="ratePlanEditButton" type="button" disabled={busy} title="Manage daily rates for this room assignment" onClick={() => router.push(`/admin/hotels/${hotelId}/catalog?roomTypeId=${row.assignment!.roomTypeId}&ratePlanId=${row.assignment!.id}`)}>Manage rates</button>}<button className="ratePlanEditButton" type="button" disabled={busy} title="Edit shared plan details" onClick={() => startEdit(row.master)}><Pencil size={14} /> Edit</button><button className="ratePlanDeactivateButton" type="button" disabled={busy || assignmentActionDisabled} title={row.assignment ? `${row.effectiveActive ? 'Deactivate' : 'Activate'} for ${room?.name ?? 'this room'}` : `${row.effectiveActive ? 'Deactivate' : 'Activate'} shared rate plan`} onClick={() => void toggleRow(row)}><Power size={14} /> {row.effectiveActive ? 'Deactivate' : 'Activate'}</button><div className="ratePlanMore"><button type="button" disabled={busy} aria-label={`More actions for ${row.master.name}${room ? ` on ${room.name}` : ''}`} aria-expanded={openMenuId === row.id} onClick={() => setOpenMenuId((current) => current === row.id ? '' : row.id)}><MoreVertical size={19} /></button>{openMenuId === row.id && <div className="ratePlanMoreMenu" role="menu">{row.assignment && <><button type="button" role="menuitem" onClick={() => { setOpenMenuId(''); startEditAssignment(row.master, row.assignment!); }}>Edit room assignment</button><button type="button" role="menuitem" onClick={() => setOpenMenuId('')}>{row.assignment.axisRatePlanId ? 'AxisRooms mapped' : 'AxisRooms not mapped'}</button></>}{!row.assignment && <button type="button" role="menuitem" onClick={() => void removeRow(row)}>Delete</button>}{row.assignment && <button type="button" role="menuitem" onClick={() => void removeRow(row)}>Remove assignment</button>}</div>}</div></div></td>
+          <td><div className="ratePlanActions">{visibleRows.findIndex((item) => item.master.id === row.master.id) === visibleRows.findIndex((item) => item.master.id === row.master.id && item.id === row.id) && <button className="ratePlanEditButton" type="button" disabled={busy || !row.master.active} title="Import daily rates for this hotel rate plan" onClick={(event) => openRateImportModal(event, row)}>Import rates</button>}{row.assignment && <button className="ratePlanEditButton" type="button" disabled={busy} title="Manage daily rates for this room assignment" onClick={() => router.push(`/admin/hotels/${hotelId}/catalog?roomTypeId=${row.assignment!.roomTypeId}&ratePlanId=${row.assignment!.id}`)}>Manage rates</button>}<button className="ratePlanEditButton" type="button" disabled={busy} title="Edit shared plan details" onClick={() => startEdit(row.master)}><Pencil size={14} /> Edit</button><button className="ratePlanDeactivateButton" type="button" disabled={busy || assignmentActionDisabled} title={row.assignment ? `${row.effectiveActive ? 'Deactivate' : 'Activate'} for ${room?.name ?? 'this room'}` : `${row.effectiveActive ? 'Deactivate' : 'Activate'} shared rate plan`} onClick={() => void toggleRow(row)}><Power size={14} /> {row.effectiveActive ? 'Deactivate' : 'Activate'}</button><div className="ratePlanMore"><button type="button" disabled={busy} aria-label={`More actions for ${row.master.name}${room ? ` on ${room.name}` : ''}`} aria-expanded={openMenuId === row.id} onClick={() => setOpenMenuId((current) => current === row.id ? '' : row.id)}><MoreVertical size={19} /></button>{openMenuId === row.id && <div className="ratePlanMoreMenu" role="menu">{row.assignment && <><button type="button" role="menuitem" onClick={() => { setOpenMenuId(''); startEditAssignment(row.master, row.assignment!); }}>Edit room assignment</button><button type="button" role="menuitem" onClick={() => setOpenMenuId('')}>{row.assignment.axisRatePlanId ? 'AxisRooms mapped' : 'AxisRooms not mapped'}</button></>}{!row.assignment && <button type="button" role="menuitem" onClick={() => void removeRow(row)}>Delete</button>}{row.assignment && <button type="button" role="menuitem" onClick={() => void removeRow(row)}>Remove assignment</button>}</div>}</div></div></td>
         </tr>;
       })}
       {!loading && !visibleRows.length && <tr><td colSpan={8} className="ratePlansEmpty">No rate plans match these filters.</td></tr>}
@@ -243,5 +274,6 @@ export default function RatePlansPage() {
     {masterModal && <div className="ratePlanModalBackdrop"><form className="ratePlanCopyModal ratePlanMasterModal" role="dialog" aria-modal="true" aria-labelledby="master-modal-title" onSubmit={saveMaster}><header><div><h2 id="master-modal-title">{masterModal.editing ? 'Edit rate plan' : 'Create rate plan'}</h2><p>Create the plan once and use it for one or more room types in this hotel.</p></div><button type="button" aria-label="Close" onClick={() => setMasterModal(null)}><X size={18} /></button></header><div className="two"><label>Plan code<input value={masterForm.code} onChange={(event) => setMasterForm({ ...masterForm, code: event.target.value })} placeholder="CP" required minLength={2} /></label><label>Plan name<input value={masterForm.name} onChange={(event) => setMasterForm({ ...masterForm, name: event.target.value })} placeholder="CP - Breakfast" required minLength={2} /></label></div><label>Meal plan<select value={masterForm.mealPlan} onChange={(event) => setMasterForm({ ...masterForm, mealPlan: event.target.value })}><option value="EP">EP · Room only</option><option value="CP">CP · Breakfast</option><option value="MAP">MAP · Breakfast + major meal</option><option value="AP">AP · All meals</option></select></label><label>Description<textarea rows={3} value={masterForm.description} onChange={(event) => setMasterForm({ ...masterForm, description: event.target.value })} placeholder="Describe inclusions and commercial terms" /></label><label className="checkLabel"><input type="checkbox" checked={masterForm.active} onChange={(event) => setMasterForm({ ...masterForm, active: event.target.checked })} /> Active and available for booking</label><footer><button className="smallBtn" type="button" onClick={() => setMasterModal(null)} disabled={busy}>Cancel</button><button className="btn" disabled={busy}>{busy ? 'Saving...' : masterModal.editing ? 'Save changes' : 'Create rate plan'}</button></footer></form></div>}
 
     {assignmentModal && <div className="ratePlanModalBackdrop"><form className="ratePlanCopyModal ratePlanAssignmentModal" role="dialog" aria-modal="true" aria-labelledby="assignment-modal-title" onSubmit={saveAssignment}><header><div><h2 id="assignment-modal-title">{assignmentModal.assignment ? 'Edit room assignment' : 'Assign existing rate plan'}</h2><p>{assignmentModal.master.name} ({assignmentModal.master.code})</p></div><button type="button" aria-label="Close" onClick={() => setAssignmentModal(null)}><X size={18} /></button></header><label>Room type<select value={assignmentForm.roomTypeId} onChange={(event) => setAssignmentForm({ ...assignmentForm, roomTypeId: event.target.value })} disabled={Boolean(assignmentModal.assignment)} required><option value="">Select room type</option>{rooms.filter((room) => room.id === assignmentModal.assignment?.roomTypeId || !assignmentModal.master.assignments.some((assignment) => assignment.roomTypeId === room.id)).map((room) => <option key={room.id} value={room.id}>{room.name} ({room.code})</option>)}</select></label><details><summary>Advanced / Channel Manager Mapping</summary><label>AxisRooms Rate Plan ID<input value={assignmentForm.axisRatePlanId} onChange={(event) => setAssignmentForm({ ...assignmentForm, axisRatePlanId: event.target.value })} placeholder="Optional assignment mapping ID" /></label><p className="ratePlanCopyNote">Optional. Used only when this room/rate plan is connected to AxisRooms.</p></details><label className="checkLabel"><input type="checkbox" checked={assignmentForm.active} onChange={(event) => setAssignmentForm({ ...assignmentForm, active: event.target.checked })} /> Active for this room</label><footer><button className="smallBtn" type="button" onClick={() => setAssignmentModal(null)} disabled={busy}>Cancel</button><button className="btn" disabled={busy || !assignmentForm.roomTypeId}>{busy ? 'Saving...' : assignmentModal.assignment ? 'Save assignment' : 'Assign rate plan'}</button></footer></form></div>}
+    {rateImportModal && <div className="rateImportModalBackdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeRateImportModal(); }}><section ref={rateImportDialogRef} className="rateImportModal" role="dialog" aria-modal="true" aria-labelledby="rate-import-modal-title" tabIndex={-1}><header className="rateImportModalHeader"><div><span>Rate management</span><h2 id="rate-import-modal-title">Import rates — {rateImportModal.masterName}</h2><p>Import daily room rates for this hotel rate plan.</p></div><button type="button" aria-label="Close rate import" onClick={closeRateImportModal} disabled={rateImportBusy}><X size={18} /></button></header><RatePlanRateImportForm key={`${rateImportModal.hotelId}:${rateImportModal.masterId}`} mode="modal" initialHotelId={rateImportModal.hotelId} initialMasterId={rateImportModal.masterId} lockContext onImportSuccess={handleRateImportSuccess} onCancel={closeRateImportModal} onBusyChange={setRateImportBusy} /></section></div>}
   </section></AdminLayout>;
 }
