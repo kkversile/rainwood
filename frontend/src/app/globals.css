@@ -640,6 +640,7 @@
 .rateCalendarPage .rangePreview .rangeSectionHeader h2{margin:0;font-size:1.15rem}
 .rateCalendarPage .rangePreview .calendarTable thead th{height:36px;padding:7px 9px}
 .rateCalendarPage .rangePreview .calendarTable tbody th,.rateCalendarPage .rangePreview .calendarTable tbody td{height:40px;padding:6px 9px}
+.rateCalendarPage>.rangeEditor,.rateCalendarPage>.rangeSubcard{position:relative;z-index:2;overflow:visible}
 @media(max-width:900px){.rateCalendarPage .rangeEditor .occupancyGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(min-width:1180px){
   .rateCalendarPage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
