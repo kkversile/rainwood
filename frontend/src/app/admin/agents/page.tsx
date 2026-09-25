@@ -328,7 +328,7 @@ export default function AgentsPage() {
         method: 'PUT',
         body: JSON.stringify({ hotelId: hotelFilter, masterId: selectedMasterId }),
       });
-      setAssignmentAgent(saved);
+      setAssignmentAgent(null);
       setMessage(`Rate plans saved for ${assignmentAgent.name}. Access mappings were preserved.`);
       setAgents((current) => current.map((item) => item.id === saved.id ? saved : item));
     } catch (reason) {
