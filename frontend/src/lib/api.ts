@@ -36,6 +36,14 @@ export function setAccessToken(token: string | null, role?: string) {
 
 export function clearAccessToken() { setAccessToken(null); }
 
+function redirectToLoginAfterUnauthorized() {
+  if (typeof window === 'undefined') return;
+  clearAccessToken();
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+  const loginPath = `${basePath}/login?next=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
+  if (!window.location.pathname.startsWith(`${basePath}/login`)) window.location.replace(loginPath);
+}
+
 async function readBody(response: Response) {
   const text = await response.text();
   if (!text) return null;
@@ -60,6 +68,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, retry 
       if (body?.accessToken) { setAccessToken(body.accessToken); return apiRequest<T>(path, init, false); }
     }
   }
+  if (response.status === 401 && !path.startsWith('/auth/')) redirectToLoginAfterUnauthorized();
   const body = await readBody(response);
   if (!response.ok) throw new Error(Array.isArray(body?.message) ? body.message.join(', ') : body?.message ?? `Request failed (${response.status})`);
   return body as T;
