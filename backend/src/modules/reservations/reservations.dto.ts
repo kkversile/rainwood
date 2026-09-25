@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsEmail, IsEnum, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsEmail, IsEnum, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 import { BookingSource, ModificationType } from '@prisma/client';
 
 export class CreateReservationDto {
@@ -150,4 +150,9 @@ export class PayDueMilestonesDto {
   @IsOptional()
   @IsString()
   idempotencyKey?: string;
+}
+
+export class ReconfirmationDto {
+  @IsBoolean()
+  reconfirmed!: boolean;
 }

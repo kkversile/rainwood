@@ -205,6 +205,7 @@ model User {
   refreshTokens          RefreshToken[]
   auditLogs              AuditLog[]                @relation("AuditActor")
   createdReservations    Reservation[]             @relation("ReservationCreator")
+  reconfirmedReservations Reservation[]             @relation("ReservationReconfirmedBy")
   uploadedFiles          StoredFile[]              @relation("FileUploader")
   agentDocuments         AgentDocument[]
   profileImageFileId      String?                   @unique
@@ -820,6 +821,9 @@ model Reservation {
   internalRemark     String?
   createdById        String?
   createdBy          User?                     @relation("ReservationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  reconfirmedAt      DateTime?
+  reconfirmedById    String?
+  reconfirmedBy      User?                     @relation("ReservationReconfirmedBy", fields: [reconfirmedById], references: [id], onDelete: SetNull)
   lines              ReservationLine[]
   payments           Payment[]
   paymentAttempts    PaymentAttempt[]

@@ -247,4 +247,17 @@ export class ReservationsService {
       return { reservation: updated, modification };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
+
+  async setReconfirmation(reference: string, reconfirmed: boolean, user: { id: string }) {
+    const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, status: true, reconfirmedAt: true, reconfirmedById: true } });
+    if (!reservation) throw new NotFoundException('Reservation not found');
+    if (['CANCELLED', 'EXPIRED', 'NO_SHOW'].includes(reservation.status)) throw new BadRequestException('This reservation cannot be reconfirmed');
+    const updated = await this.p.reservation.update({
+      where: { id: reservation.id },
+      data: { reconfirmedAt: reconfirmed ? new Date() : null, reconfirmedById: reconfirmed ? user.id : null },
+      select: { reference: true, reconfirmedAt: true, reconfirmedBy: { select: { id: true, name: true } } },
+    });
+    await this.audit.log({ actorUserId: user.id, action: reconfirmed ? 'RESERVATION_RECONFIRMED' : 'RESERVATION_RECONFIRMATION_CLEARED', entityType: 'Reservation', entityId: reservation.id, before: { reconfirmedAt: reservation.reconfirmedAt, reconfirmedById: reservation.reconfirmedById }, after: { reconfirmedAt: updated.reconfirmedAt, reconfirmedBy: updated.reconfirmedBy } });
+    return { reference: updated.reference, reconfirmed: Boolean(updated.reconfirmedAt), reconfirmedAt: updated.reconfirmedAt, reconfirmedBy: updated.reconfirmedBy };
+  }
 }

@@ -64,11 +64,84 @@ export class ReportsService {
     return { items, overall, filters: { from: query.from ?? null, to: query.to ?? null, hotelId: query.hotelId ?? null } };
   }
 
-  async expectedArrivals(query: ReportQueryDto) {
+  async expectedArrivals(query: ReportQueryDto, user?: { role?: string }) {
     const from = query.from ? parseDateOnly(query.from, 'from') : todayUtc();
-    const to = query.to ? parseDateOnly(query.to, 'to') : addDays(from, 1);
-    const rows = await this.prisma.reservation.findMany({ where: { ...this.where({ ...query, from: undefined, to: undefined }), checkIn: { gte: from, lt: to } }, include: { hotel: true, lines: { include: { roomType: true } }, payments: true }, orderBy: [{ checkIn: 'asc' }, { hotel: { name: 'asc' } }], take: 10000 });
-    return { items: rows.flatMap((reservation) => reservation.lines.map((line) => ({ hotel: reservation.hotel.name, reference: reservation.reference, guestName: reservation.guestName, departure: reservation.checkOut.toISOString().slice(0, 10), roomType: line.roomType.name, confirmed: ['CONFIRMED', 'COMPLETED'].includes(reservation.status), pax: line.adults + line.children, source: reservation.sourceName || reservation.source, advance: Number(reservation.advanceAmount), paymentMode: reservation.payments[0]?.mode ?? null, instruction: reservation.specialRequest || reservation.billingInstruction || '', mobile: reservation.mobile, amount: Number(reservation.totalAmount), balance: Number(reservation.balanceAmount), reconfirmed: reservation.status === 'CONFIRMED' }))) };
+    const to = query.to ? addDays(parseDateOnly(query.to, 'to'), 1) : addDays(from, 1);
+    const hotelIds = query.hotelIds?.length ? query.hotelIds : query.hotelId ? [query.hotelId] : undefined;
+    const statuses: ReservationStatus[] = query.statuses?.length ? query.statuses : query.status ? [query.status] : [ReservationStatus.CONFIRMED, ReservationStatus.TENTATIVE];
+    const where: Prisma.ReservationWhereInput = {
+      hotelId: hotelIds?.length ? { in: hotelIds } : undefined,
+      source: query.sources?.length ? { in: query.sources } : query.source,
+      status: { in: statuses },
+      checkIn: { gte: from, lt: to },
+      ...(query.reconfirmedOnly ? { reconfirmedAt: { not: null } } : {}),
+    };
+    const [reservations, total] = await Promise.all([
+      this.prisma.reservation.findMany({
+        where,
+        select: {
+          id: true, reference: true, hotel: { select: { id: true, name: true } }, guestName: true, checkIn: true, checkOut: true,
+          source: true, sourceName: true, status: true, paymentStatus: true, totalAmount: true, advanceAmount: true, balanceAmount: true,
+          mobile: true, gstin: true, specialRequest: true, billingInstruction: true, internalRemark: true,
+          createdBy: { select: { id: true, name: true } }, reconfirmedAt: true, reconfirmedBy: { select: { id: true, name: true } },
+          lines: { select: { rooms: true, adults: true, children: true, roomType: { select: { id: true, name: true } } } },
+          payments: { select: { mode: true, verified: true, paidAt: true, createdAt: true }, orderBy: { createdAt: 'desc' } },
+        },
+        orderBy: [{ checkIn: 'asc' }, { hotel: { name: 'asc' } }, { reference: 'asc' }],
+        take: 5000,
+      }),
+      this.prisma.reservation.count({ where }),
+    ]);
+    const includeWaitlist = Boolean(query.includeWaitlist);
+    const waitlist = includeWaitlist ? await this.prisma.waitlistEntry.findMany({
+      where: { hotelId: hotelIds?.length ? { in: hotelIds } : undefined, checkIn: { gte: from, lt: to }, status: 'WAITING' },
+      select: { id: true, hotel: { select: { id: true, name: true } }, roomType: { select: { id: true, name: true } }, guestName: true, checkIn: true, checkOut: true, rooms: true, status: true },
+      orderBy: [{ checkIn: 'asc' }, { hotel: { name: 'asc' } }, { createdAt: 'asc' }],
+      take: 5000,
+    }) : [];
+    const canSeeInternalRemarks = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION'].includes(user?.role ?? '');
+    const dateValue = (value: Date | null | undefined) => value ? value.toISOString().slice(0, 10) : null;
+    const reservationItems = reservations.map((reservation) => {
+      const roomTypes = new Map<string, { id: string; name: string; rooms: number }>();
+      let rooms = 0; let adults = 0; let children = 0;
+      for (const line of reservation.lines) {
+        rooms += line.rooms; adults += line.adults; children += line.children;
+        const current = roomTypes.get(line.roomType.id);
+        if (current) current.rooms += line.rooms;
+        else roomTypes.set(line.roomType.id, { id: line.roomType.id, name: line.roomType.name, rooms: line.rooms });
+      }
+      const paymentModes = [...new Set(reservation.payments.filter((payment) => payment.verified).map((payment) => payment.mode))];
+      const selectedPayment = reservation.payments.filter((payment) => payment.verified).sort((a, b) => (b.paidAt ?? b.createdAt).getTime() - (a.paidAt ?? a.createdAt).getTime())[0];
+      const specialRequest = reservation.specialRequest ?? null;
+      const billingInstruction = reservation.billingInstruction ?? null;
+      const internalRemark = canSeeInternalRemarks ? reservation.internalRemark ?? null : null;
+      return {
+        rowType: 'RESERVATION' as const, reservationId: reservation.id, reference: reservation.reference, hotel: reservation.hotel,
+        guestName: reservation.guestName, arrival: dateValue(reservation.checkIn), departure: dateValue(reservation.checkOut),
+        nights: Math.max(0, Math.round((reservation.checkOut.getTime() - reservation.checkIn.getTime()) / 86_400_000)), rooms,
+        roomTypes: [...roomTypes.values()], adults, children, pax: adults + children, status: reservation.status, source: reservation.source,
+        sourceName: reservation.sourceName, businessType: reservation.source === 'AGENT' || reservation.source === 'COMPANY' ? 'B2B' : reservation.source === 'OTA' ? 'OTA' : 'B2C',
+        advance: Number(reservation.advanceAmount), totalAmount: Number(reservation.totalAmount), balance: Number(reservation.balanceAmount),
+        paymentStatus: reservation.paymentStatus, paymentMode: selectedPayment?.mode ?? null, paymentModes,
+        creditDate: dateValue(selectedPayment ? (selectedPayment.paidAt ?? selectedPayment.createdAt) : null), bookedBy: reservation.createdBy, mobile: reservation.mobile, gstin: reservation.gstin,
+        specialRequest, billingInstruction, internalRemark, instruction: [specialRequest, billingInstruction].filter(Boolean).join(' | '),
+        reconfirmed: Boolean(reservation.reconfirmedAt), reconfirmedAt: dateValue(reservation.reconfirmedAt), reconfirmedBy: reservation.reconfirmedBy,
+        confirmed: ['CONFIRMED', 'COMPLETED'].includes(reservation.status), amount: Number(reservation.totalAmount),
+        roomType: [...roomTypes.values()].map((roomType) => `${roomType.name} × ${roomType.rooms}`).join(', '),
+      };
+    });
+    const waitlistItems = waitlist.map((entry) => ({
+      rowType: 'WAITLIST' as const, reservationId: null, reference: `WAIT-${entry.id.slice(-8).toUpperCase()}`, hotel: entry.hotel, guestName: entry.guestName,
+      arrival: dateValue(entry.checkIn), departure: dateValue(entry.checkOut), nights: Math.max(0, Math.round((entry.checkOut.getTime() - entry.checkIn.getTime()) / 86_400_000)), rooms: entry.rooms,
+      roomTypes: entry.roomType ? [{ id: entry.roomType.id, name: entry.roomType.name, rooms: entry.rooms }] : [], adults: null, children: null, pax: null,
+      status: entry.status, source: null, sourceName: null, businessType: null, advance: 0, totalAmount: 0, balance: 0, paymentStatus: null, paymentMode: null, paymentModes: [], creditDate: null,
+      bookedBy: null, mobile: null, gstin: null, specialRequest: null, billingInstruction: null, internalRemark: null, instruction: '', reconfirmed: false, reconfirmedAt: null, reconfirmedBy: null,
+      confirmed: false, amount: 0, roomType: entry.roomType ? `${entry.roomType.name} × ${entry.rooms}` : 'Any room type',
+    }));
+    const items = [...reservationItems, ...waitlistItems].sort((a, b) => String(a.arrival).localeCompare(String(b.arrival)) || a.hotel.name.localeCompare(b.hotel.name) || a.reference.localeCompare(b.reference));
+    const page = Math.max(1, Number(query.page)); const limit = Math.min(200, Math.max(1, Number(query.limit)));
+    const reservationSummary = reservationItems.reduce((summary, row) => ({ reservations: summary.reservations + 1, rooms: summary.rooms + row.rooms, adults: summary.adults + row.adults, children: summary.children + row.children, pax: summary.pax + row.pax, totalAmount: summary.totalAmount + row.totalAmount, advance: summary.advance + row.advance, balance: summary.balance + row.balance }), { reservations: 0, rooms: 0, adults: 0, children: 0, pax: 0, totalAmount: 0, advance: 0, balance: 0 });
+    return { items: items.slice((page - 1) * limit, page * limit), summary: { ...reservationSummary, waitlist: waitlistItems.length }, pagination: { page, limit, total: total + waitlistItems.length, pages: Math.ceil((total + waitlistItems.length) / limit) }, filters: { from: query.from ?? dateValue(from), to: query.to ?? dateValue(addDays(to, -1)), hotelIds: hotelIds ?? [], statuses, sources: query.sources ?? (query.source ? [query.source] : []), includeWaitlist, reconfirmedOnly: Boolean(query.reconfirmedOnly) } };
   }
 
   arrivals(query: ReportQueryDto) { return this.dateReport(query, 'checkIn'); }
@@ -96,7 +169,10 @@ export class ReportsService {
   }
 
   private where(query: ReportQueryDto): Prisma.ReservationWhereInput {
-    return { hotelId: query.hotelId, source: query.source as BookingSource | undefined, status: query.status as ReservationStatus | undefined, checkIn: query.from || query.to ? { gte: query.from ? parseDateOnly(query.from, 'from') : undefined, lt: query.to ? parseDateOnly(query.to, 'to') : undefined } : undefined };
+    const hotelIds = query.hotelIds?.length ? query.hotelIds : query.hotelId ? [query.hotelId] : undefined;
+    const statuses = query.statuses?.length ? { in: query.statuses } : query.status ? query.status : undefined;
+    const to = query.to ? addDays(parseDateOnly(query.to, 'to'), 1) : undefined;
+    return { hotelId: hotelIds?.length ? { in: hotelIds } : undefined, source: query.sources?.length ? { in: query.sources } : query.source, status: statuses, checkIn: query.from || query.to ? { gte: query.from ? parseDateOnly(query.from, 'from') : undefined, lt: to } : undefined };
   }
 
   private dateReport(query: ReportQueryDto, field: 'checkIn' | 'checkOut') {

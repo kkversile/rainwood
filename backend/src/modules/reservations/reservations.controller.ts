@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ReservationsService } from './reservations.service';
-import { CancellationDto, CreateReservationDto, ManualReservationDto, ModificationDto, PayDueMilestonesDto, RatePlanListQueryDto, ReservationListQueryDto } from './reservations.dto';
+import { CancellationDto, CreateReservationDto, ManualReservationDto, ModificationDto, PayDueMilestonesDto, RatePlanListQueryDto, ReconfirmationDto, ReservationListQueryDto } from './reservations.dto';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -68,4 +68,9 @@ export class ReservationsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION')
   modify(@Param('reference') reference: string, @Body() body: ModificationDto, @CurrentUser() user: any) { return this.s.modify(reference, body, user); }
+
+  @Patch(':reference/reconfirmation')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION')
+  reconfirmation(@Param('reference') reference: string, @Body() body: ReconfirmationDto, @CurrentUser() user: any) { return this.s.setReconfirmation(reference, body.reconfirmed, user); }
 }
