@@ -1,4 +1,5 @@
 import { ReservationsService } from './reservations.service';
+import { Prisma } from '@prisma/client';
 
 function reservationFixture(paid = 2000) {
   return {
@@ -95,5 +96,62 @@ describe('reservation detail projection', () => {
 
     const adminDetail: any = await service.get(reservation.reference, true, 'ADMIN');
     expect(adminDetail.internalRemark).toBe('Front desk only');
+  });
+});
+
+describe('reservation guest folio charges', () => {
+  const actor = { id: 'admin-1' };
+  const baseReservation = () => ({ id: 'reservation-folio-1', reference: 'RW-FOLIO-1', status: 'CONFIRMED', currency: 'INR', totalAmount: new Prisma.Decimal(1000), advanceAmount: new Prisma.Decimal(200), balanceAmount: new Prisma.Decimal(800) });
+  const charge = (status: 'POSTED' | 'VOIDED', amount: number, id = `charge-${status.toLowerCase()}`) => ({ id, category: 'MINIBAR', description: 'Minibar water', quantity: new Prisma.Decimal(1), unitAmount: new Prisma.Decimal(amount), taxableAmount: new Prisma.Decimal(amount), taxAmount: new Prisma.Decimal(0), totalAmount: new Prisma.Decimal(amount), postingDate: new Date('2026-09-27T00:00:00.000Z'), note: null, status, postedBy: { id: 'admin-1', name: 'Admin' }, voidedAt: status === 'VOIDED' ? new Date() : null, voidedBy: status === 'VOIDED' ? { id: 'admin-1', name: 'Admin' } : null, voidReason: status === 'VOIDED' ? 'Duplicate posting' : null, createdAt: new Date() });
+
+  function setup(rows: any[] = []) {
+    const reservation = baseReservation();
+    const audit = { log: jest.fn().mockResolvedValue(undefined) };
+    const prisma: any = {
+      reservation: { findUnique: jest.fn().mockResolvedValue({ ...reservation, folioCharges: rows }) },
+      reservationFolioCharge: {
+        create: jest.fn().mockResolvedValue({ id: 'charge-created', totalAmount: new Prisma.Decimal(125) }),
+        findUnique: jest.fn().mockResolvedValue({ ...charge('POSTED', 125, 'charge-created'), reservation: { id: reservation.id, reference: reservation.reference } }),
+        update: jest.fn().mockResolvedValue({ id: 'charge-created', totalAmount: new Prisma.Decimal(125) }),
+      },
+    };
+    const service = new ReservationsService(prisma, {} as any, audit as any, {} as any);
+    return { service, prisma, audit, reservation };
+  }
+
+  it('posts a dedicated charge, calculates the total, and never edits reservation financials', async () => {
+    const { service, prisma, audit, reservation } = setup([charge('POSTED', 125, 'charge-created')]);
+    await service.postFolioCharge('RW-FOLIO-1', { category: 'MINIBAR', description: 'Minibar water', quantity: 2, unitAmount: 62.5, postingDate: '2026-09-27' } as any, actor);
+    expect(prisma.reservationFolioCharge.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ category: 'MINIBAR', description: 'Minibar water', quantity: new Prisma.Decimal(2), unitAmount: new Prisma.Decimal(62.5), totalAmount: new Prisma.Decimal(125) }) }));
+    expect(prisma.reservation).not.toHaveProperty('update');
+    expect(reservation.totalAmount.toString()).toBe('1000');
+    expect(reservation.balanceAmount.toString()).toBe('800');
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'FOLIO_CHARGE_POSTED', entityType: 'ReservationFolioCharge' }));
+  });
+
+  it('rejects invalid amounts and ineligible reservations before creating a charge', async () => {
+    const { service, prisma } = setup();
+    await expect(service.postFolioCharge('RW-FOLIO-1', { category: 'MINIBAR', description: 'Water', quantity: 0, unitAmount: 10, postingDate: '2026-09-27' } as any, actor)).rejects.toThrow('quantity');
+    expect(prisma.reservationFolioCharge.create).not.toHaveBeenCalled();
+    prisma.reservation.findUnique.mockResolvedValueOnce({ ...baseReservation(), status: 'CANCELLED' });
+    await expect(service.postFolioCharge('RW-FOLIO-1', { category: 'MINIBAR', description: 'Water', quantity: 1, unitAmount: 10, postingDate: '2026-09-27' } as any, actor)).rejects.toThrow('cannot be posted');
+  });
+
+  it('excludes voided rows from active incidentals while keeping them in the response', async () => {
+    const { service } = setup([charge('POSTED', 125), charge('VOIDED', 50)]);
+    const result: any = await service.getFolio('RW-FOLIO-1');
+    expect(result.charges).toHaveLength(2);
+    expect(result.totals.incidentalCharges).toBe(125);
+    expect(result.totals.incidentalBalance).toBe(125);
+    expect(result.totals.totalOutstanding).toBe(925);
+  });
+
+  it('requires a reason, voids rather than deletes, and audits the operation', async () => {
+    const { service, prisma, audit } = setup([charge('POSTED', 125, 'charge-created')]);
+    await expect(service.voidFolioCharge('RW-FOLIO-1', 'charge-created', { reason: ' ' } as any, actor)).rejects.toThrow('reason');
+    await service.voidFolioCharge('RW-FOLIO-1', 'charge-created', { reason: 'Duplicate posting' }, actor);
+    expect(prisma.reservationFolioCharge.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'VOIDED', voidReason: 'Duplicate posting' }) }));
+    expect(prisma.reservationFolioCharge).not.toHaveProperty('delete');
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'FOLIO_CHARGE_VOIDED', entityType: 'ReservationFolioCharge' }));
   });
 });

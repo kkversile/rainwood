@@ -31,6 +31,16 @@ test('arrival detail modal renders operational sections and reconfirmation', () 
   assert.match(modal, /Nightly rate breakdown/);
 });
 
+test('arrival detail modal keeps guest folio accounting separate and auditable', () => {
+  for (const token of ['/reservations/${encodeURIComponent(reference)}/folio', 'Guest Folio', 'Add Charge', 'No incidental charges', 'Original Reservation Balance', 'Incidental Charges', 'Total Outstanding', 'FOOD_AND_BEVERAGE', 'Void Guest Charge', 'voidReason', 'reservationBalance', 'totalOutstanding']) {
+    assert.ok(modal.includes(token), `missing folio token: ${token}`);
+  }
+  assert.match(modal, /folio\/charges/);
+  assert.match(modal, /folioCategories/);
+  assert.match(modal, /setVoidTarget/);
+  assert.match(modal, /The row remains in the audit history/);
+});
+
 test('closing details returns focus to the reservation control and does not navigate', () => {
   assert.match(arrivals, /reservationButtonRefs/);
   assert.match(arrivals, /requestAnimationFrame/);

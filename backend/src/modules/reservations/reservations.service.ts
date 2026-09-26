@@ -1,10 +1,10 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, ReservationStatus, SyncStatus } from '@prisma/client';
+import { FolioChargeCategory, Prisma, ReservationStatus, SyncStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/audit.service';
 import { HoldsService } from '../holds/holds.service';
-import { CancellationDto, CreateReservationDto, ModificationDto, ReservationListQueryDto } from './reservations.dto';
+import { CancellationDto, CreateReservationDto, FolioChargeDto, ModificationDto, ReservationListQueryDto, VoidFolioChargeDto } from './reservations.dto';
 import { parseDateOnly, toDateOnly } from '../../common/dates';
 import { sha256 } from '../../common/security';
 import { serializable } from '../../common/transactions';
@@ -206,6 +206,120 @@ export class ReservationsService {
 
   private paymentSchedule(snapshot: unknown, verifiedPaid: number) {
     return calculateReservationPaymentSchedule(snapshot, verifiedPaid);
+  }
+
+  private assertFolioEligible(status: ReservationStatus) {
+    if (['CANCELLED', 'EXPIRED', 'NO_SHOW'].includes(status)) throw new BadRequestException('Guest folio charges cannot be posted for this reservation.');
+  }
+
+  async getFolio(reference: string) {
+    const reservation = await this.p.reservation.findUnique({
+      where: { reference },
+      select: {
+        id: true,
+        reference: true,
+        status: true,
+        currency: true,
+        totalAmount: true,
+        advanceAmount: true,
+        balanceAmount: true,
+        folioCharges: {
+          orderBy: [{ postingDate: 'desc' }, { createdAt: 'desc' }],
+          include: {
+            postedBy: { select: { id: true, name: true } },
+            voidedBy: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+    if (!reservation) throw new NotFoundException('Reservation not found');
+    const activeCharges = reservation.folioCharges.filter((charge) => charge.status === 'POSTED');
+    const incidentalCharges = activeCharges.reduce((sum, charge) => sum + Number(charge.totalAmount), 0);
+    const reservationBalance = Number(reservation.balanceAmount);
+    return {
+      reference: reservation.reference,
+      currency: reservation.currency,
+      status: reservation.status,
+      reservationAmount: Number(reservation.totalAmount),
+      reservationPaid: Number(reservation.advanceAmount),
+      reservationBalance,
+      incidentalPayments: 0,
+      incidentalBalance: incidentalCharges,
+      totalOutstanding: reservationBalance + incidentalCharges,
+      charges: reservation.folioCharges.map((charge) => ({
+        id: charge.id,
+        category: charge.category,
+        description: charge.description,
+        quantity: Number(charge.quantity),
+        unitAmount: Number(charge.unitAmount),
+        taxableAmount: Number(charge.taxableAmount),
+        taxAmount: Number(charge.taxAmount),
+        totalAmount: Number(charge.totalAmount),
+        postingDate: charge.postingDate,
+        note: charge.note,
+        status: charge.status,
+        postedBy: charge.postedBy,
+        voidedAt: charge.voidedAt,
+        voidedBy: charge.voidedBy,
+        voidReason: charge.voidReason,
+        createdAt: charge.createdAt,
+      })),
+      totals: {
+        reservationAmount: Number(reservation.totalAmount),
+        reservationPaid: Number(reservation.advanceAmount),
+        reservationBalance,
+        incidentalCharges,
+        incidentalPayments: 0,
+        incidentalBalance: incidentalCharges,
+        totalOutstanding: reservationBalance + incidentalCharges,
+      },
+    };
+  }
+
+  async postFolioCharge(reference: string, body: FolioChargeDto, user: { id: string }) {
+    const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, status: true } });
+    if (!reservation) throw new NotFoundException('Reservation not found');
+    this.assertFolioEligible(reservation.status);
+    if (!Object.values(FolioChargeCategory).includes(body.category)) throw new BadRequestException('Invalid folio charge category');
+    const description = String(body.description ?? '').trim();
+    const quantity = Number(body.quantity);
+    const unitAmount = Number(body.unitAmount);
+    if (description.length < 2) throw new BadRequestException('description must contain at least 2 characters');
+    if (!Number.isFinite(quantity) || quantity <= 0) throw new BadRequestException('quantity must be greater than zero');
+    if (!Number.isFinite(unitAmount) || unitAmount < 0) throw new BadRequestException('unitAmount must be zero or greater');
+    const postingDate = parseDateOnly(String(body.postingDate ?? ''), 'postingDate');
+    const quantityDecimal = new Prisma.Decimal(quantity.toFixed(2));
+    const unitAmountDecimal = new Prisma.Decimal(unitAmount.toFixed(2));
+    const totalAmount = quantityDecimal.mul(unitAmountDecimal);
+    const charge = await this.p.reservationFolioCharge.create({
+      data: {
+        reservation: { connect: { id: reservation.id } },
+        category: body.category,
+        description,
+        quantity: quantityDecimal,
+        unitAmount: unitAmountDecimal,
+        taxableAmount: totalAmount,
+        taxAmount: new Prisma.Decimal(0),
+        totalAmount,
+        postingDate,
+        note: body.note?.trim() || null,
+        postedBy: { connect: { id: user.id } },
+      },
+      select: { id: true, totalAmount: true },
+    });
+    await this.audit.log({ actorUserId: user.id, action: 'FOLIO_CHARGE_POSTED', entityType: 'ReservationFolioCharge', entityId: charge.id, after: { reference, reservationId: reservation.id, category: body.category, description, quantity, unitAmount, totalAmount: Number(charge.totalAmount) } });
+    return this.getFolio(reference);
+  }
+
+  async voidFolioCharge(reference: string, chargeId: string, body: VoidFolioChargeDto, user: { id: string }) {
+    const reason = String(body.reason ?? '').trim();
+    if (reason.length < 2) throw new BadRequestException('A void reason is required');
+    const charge = await this.p.reservationFolioCharge.findUnique({ where: { id: chargeId }, include: { reservation: { select: { id: true, reference: true } } } });
+    if (!charge || charge.reservation.reference !== reference) throw new NotFoundException('Folio charge not found');
+    if (charge.status === 'VOIDED') throw new BadRequestException('Folio charge is already voided');
+    const updated = await this.p.reservationFolioCharge.update({ where: { id: charge.id }, data: { status: 'VOIDED', voidedAt: new Date(), voidedBy: { connect: { id: user.id } }, voidReason: reason }, select: { id: true, totalAmount: true } });
+    await this.audit.log({ actorUserId: user.id, action: 'FOLIO_CHARGE_VOIDED', entityType: 'ReservationFolioCharge', entityId: updated.id, before: { status: 'POSTED', totalAmount: Number(updated.totalAmount) }, after: { reference, status: 'VOIDED', reason, totalAmount: Number(updated.totalAmount) } });
+    return this.getFolio(reference);
   }
 
   async payDueMilestones(reference: string, idempotencyKey: string | undefined, user: { id: string; role: string }) {

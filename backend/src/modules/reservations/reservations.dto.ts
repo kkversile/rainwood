@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsDateString, IsEmail, IsEnum, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
-import { BookingSource, ModificationType } from '@prisma/client';
+import { IsBoolean, IsDateString, IsEmail, IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import { BookingSource, FolioChargeCategory, ModificationType } from '@prisma/client';
 
 export class CreateReservationDto {
   @IsString()
@@ -155,4 +155,39 @@ export class PayDueMilestonesDto {
 export class ReconfirmationDto {
   @IsBoolean()
   reconfirmed!: boolean;
+}
+
+export class FolioChargeDto {
+  @IsEnum(FolioChargeCategory)
+  category!: FolioChargeCategory;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  description!: string;
+
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0.01)
+  quantity!: number;
+
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0)
+  unitAmount!: number;
+
+  @IsDateString()
+  postingDate!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
+}
+
+export class VoidFolioChargeDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(500)
+  reason!: string;
 }

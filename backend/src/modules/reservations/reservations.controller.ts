@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ReservationsService } from './reservations.service';
-import { CancellationDto, CreateReservationDto, ManualReservationDto, ModificationDto, PayDueMilestonesDto, RatePlanListQueryDto, ReconfirmationDto, ReservationListQueryDto } from './reservations.dto';
+import { CancellationDto, CreateReservationDto, FolioChargeDto, ManualReservationDto, ModificationDto, PayDueMilestonesDto, RatePlanListQueryDto, ReconfirmationDto, ReservationListQueryDto, VoidFolioChargeDto } from './reservations.dto';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -51,6 +51,21 @@ export class ReservationsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER')
   detail(@Param('reference') reference: string, @CurrentUser() user: any) { return this.s.get(reference, true, user?.role); }
+
+  @Get(':reference/folio')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER')
+  folio(@Param('reference') reference: string) { return this.s.getFolio(reference); }
+
+  @Post(':reference/folio/charges')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION')
+  addFolioCharge(@Param('reference') reference: string, @Body() body: FolioChargeDto, @CurrentUser() user: any) { return this.s.postFolioCharge(reference, body, user); }
+
+  @Post(':reference/folio/charges/:chargeId/void')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION')
+  voidFolioCharge(@Param('reference') reference: string, @Param('chargeId') chargeId: string, @Body() body: VoidFolioChargeDto, @CurrentUser() user: any) { return this.s.voidFolioCharge(reference, chargeId, body, user); }
 
   @Post(':reference/pay-due-milestones')
   @UseGuards(JwtAuthGuard, ActiveAgentGuard, RolesGuard)
