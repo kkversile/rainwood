@@ -14,6 +14,12 @@ export class AuthService {
 
   constructor(private p: PrismaService, private jwt: JwtService, private c: ConfigService) {}
 
+  async me(userId: string) {
+    const user = await this.p.user.findUnique({ where: { id: userId }, select: { id: true, email: true, name: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } } } });
+    if (!user) throw new UnauthorizedException('Session user not found');
+    return { user };
+  }
+
   async registerAgent(profile: { companyName: string; contactPerson: string; mobile: string; gstin?: string; place?: string; addressLine1: string; addressLine2?: string; state?: string; pinCode?: string; additionalInformation?: string }, email: string, password: string) {
     const normalizedEmail = email.trim().toLowerCase();
     const passwordHash = await bcrypt.hash(password, 12);

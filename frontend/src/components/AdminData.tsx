@@ -15,7 +15,7 @@ function refreshStaffSession() {
   }
   if (!refreshInFlight) {
     refreshInFlight = apiRequest<{ accessToken: string; user: { role: string } }>('/auth/refresh', { method: 'POST' })
-      .then((body) => { if (body.user.role === 'AGENT') throw new Error('AGENT_SESSION'); setAccessToken(body.accessToken, body.user.role); staffSessionCheckedAt = Date.now(); return body.accessToken; })
+      .then((body) => { if (body.user.role === 'AGENT') throw new Error('AGENT_SESSION'); if (body.user.role === 'SERVICE_STAFF') throw new Error('SERVICE_STAFF_SESSION'); setAccessToken(body.accessToken, body.user.role); staffSessionCheckedAt = Date.now(); return body.accessToken; })
       .catch((reason) => { staffSessionCheckedAt = 0; throw reason; })
       .finally(() => { refreshInFlight = null; });
   }
@@ -27,7 +27,7 @@ export function invalidateStaffSession() { staffSessionCheckedAt = 0; }
 export function AdminAuthGate({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    refreshStaffSession().then(() => setReady(true)).catch((reason) => { setAccessToken(null); window.location.href = reason instanceof Error && reason.message === 'AGENT_SESSION' ? `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/agent` : `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login?next=${encodeURIComponent(window.location.pathname)}`; });
+    refreshStaffSession().then(() => setReady(true)).catch((reason) => { setAccessToken(null); window.location.href = reason instanceof Error && reason.message === 'AGENT_SESSION' ? `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/agent` : reason instanceof Error && reason.message === 'SERVICE_STAFF_SESSION' ? `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/staff` : `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login?next=${encodeURIComponent(window.location.pathname)}`; });
   }, []);
   if (!ready) return <main className="page"><p className="loading">Checking staff session - </p></main>;
   return <>{children}</>;
@@ -103,10 +103,15 @@ export function JobsData() {
 }
 
 export function UsersData() {
-  const { data, error } = useData<{ id: string; name: string; email: string; role: string; active: boolean }[]>('/users');
-  if (error) return <p className="error">{error}</p>;
+  type UserRow = { id: string; name: string; email: string; mobile?: string | null; role: string; active: boolean; staffDepartment?: string | null; jobTitle?: string | null; staffHotel?: { id: string; name: string } | null };
+  type Hotel = { id: string; name: string };
+  const [reload, setReload] = useState(0); const [showStaffForm, setShowStaffForm] = useState(false); const [busy, setBusy] = useState(false); const [formError, setFormError] = useState('');
+  const [form, setForm] = useState({ name: '', email: '', mobile: '', password: '', staffDepartment: 'FOOD_BEVERAGE', jobTitle: '', staffHotelId: '' });
+  const { data, error } = useData<UserRow[]>(`/users?refresh=${reload}`); const { data: hotels, error: hotelError } = useData<Hotel[]>('/hotels');
+  async function createStaff(event: FormEvent) { event.preventDefault(); setBusy(true); setFormError(''); try { await apiRequest('/users', { method: 'POST', body: JSON.stringify({ ...form, role: 'SERVICE_STAFF' }) }); setForm({ name: '', email: '', mobile: '', password: '', staffDepartment: 'FOOD_BEVERAGE', jobTitle: '', staffHotelId: '' }); setShowStaffForm(false); setReload((value) => value + 1); } catch (reason) { setFormError(reason instanceof Error ? reason.message : 'Could not create service staff user.'); } finally { setBusy(false); } }
+  if (error || hotelError) return <p className="error">{error || hotelError}</p>;
   if (!data) return <p className="loading">Loading users - </p>;
-  return <section className="panel"><div className="tableScroll"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead><tbody>{data.map((row) => <tr key={row.id}><td>{row.name}</td><td>{row.email}</td><td>{row.role}</td><td><span className={`status ${row.active ? 'ok' : 'err'}`}>{row.active ? 'Active' : 'Inactive'}</span></td></tr>)}{!data.length && <tr><td colSpan={4}><p className="empty">No users found.</p></td></tr>}</tbody></table></div></section>;
+  return <><section className="panel usersAdminPanel"><div className="rangeSectionHeader"><div><span className="eyebrow">Access control</span><h2>Users</h2></div><button className="smallBtn" type="button" onClick={() => { setShowStaffForm((value) => !value); setFormError(''); }}>{showStaffForm ? 'Close' : 'Add service staff'}</button></div>{showStaffForm && <form className="formCard staffAdminForm" onSubmit={createStaff}><h3>New service staff account</h3><p className="muted">Assign one active hotel and a department. Staff accounts only see operational guest stays and their permitted folio categories.</p><div className="two"><label>Name<input required minLength={2} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label>Email<input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label></div><div className="two"><label>Mobile<input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} /></label><label>Password<input required minLength={12} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></label></div><div className="three"><label>Department<select value={form.staffDepartment} onChange={(e) => setForm({ ...form, staffDepartment: e.target.value })}><option value="FOOD_BEVERAGE">Food & beverage</option><option value="HOUSEKEEPING">Housekeeping</option><option value="ROOM_SERVICE">Room service</option><option value="FRONT_OFFICE">Front office</option><option value="OTHER">Other</option></select></label><label>Job title<input required minLength={2} value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} placeholder="e.g. Restaurant captain" /></label><label>Assigned hotel<select required value={form.staffHotelId} onChange={(e) => setForm({ ...form, staffHotelId: e.target.value })}><option value="">Select active hotel</option>{hotels?.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label></div>{formError && <p className="error" role="alert">{formError}</p>}<div className="formActions"><button className="smallBtn secondary" type="button" onClick={() => setShowStaffForm(false)}>Cancel</button><button className="smallBtn" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create staff account'}</button></div></form>}<div className="tableScroll"><table><thead><tr><th>Name</th><th>Contact</th><th>Role</th><th>Department / job</th><th>Hotel</th><th>Status</th></tr></thead><tbody>{data.map((row) => <tr key={row.id}><td>{row.name}</td><td>{row.email}<br />{row.mobile || ' - '}</td><td>{row.role}</td><td>{row.staffDepartment ? `${row.staffDepartment.replace(/_/g, ' ')} / ${row.jobTitle || ' - '}` : ' - '}</td><td>{row.staffHotel?.name || ' - '}</td><td><span className={`status ${row.active ? 'ok' : 'err'}`}>{row.active ? 'Active' : 'Inactive'}</span></td></tr>)}{!data.length && <tr><td colSpan={6}><p className="empty">No users found.</p></td></tr>}</tbody></table></div></section></>;
 }
 
 export function AuditData() {

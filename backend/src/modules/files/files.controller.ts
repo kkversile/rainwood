@@ -18,7 +18,7 @@ export class FilesController {
   }
 
   @Post('hotel-image')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveAgentGuard)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (_request, file, callback) => callback(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) }))
   uploadHotelImage(@UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: any) {
     if (!file) throw new BadRequestException('A JPEG, PNG, or WebP hotel image is required');
@@ -26,7 +26,7 @@ export class FilesController {
   }
 
   @Post('hotel-video')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveAgentGuard)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 150 * 1024 * 1024 }, fileFilter: (_request, file, callback) => callback(null, ['video/mp4', 'video/webm'].includes(file.mimetype)) }))
   uploadHotelVideo(@UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: any) {
     if (!file) throw new BadRequestException('An MP4 or WebM hotel video is required');
@@ -34,7 +34,7 @@ export class FilesController {
   }
 
   @Post('hotel-document')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveAgentGuard)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (_request, file, callback) => callback(null, ['image/jpeg', 'image/png', 'application/pdf'].includes(file.mimetype)) }))
   uploadHotelDocument(@UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: any) {
     if (!file) throw new BadRequestException('A PDF, PNG, or JPEG hotel document is required');
@@ -42,7 +42,7 @@ export class FilesController {
   }
 
   @Post('agent-document')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveAgentGuard)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (_request, file, callback) => callback(null, ['image/jpeg', 'image/png', 'application/pdf'].includes(file.mimetype)) }))
   uploadAgentDocument(@UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: any) {
     if (!file) throw new BadRequestException('A PDF, PNG, or JPEG agent document is required');
@@ -50,7 +50,7 @@ export class FilesController {
   }
 
   @Post('profile-image')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveAgentGuard)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 2 * 1024 * 1024 }, fileFilter: (_request, file, callback) => callback(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) }))
   uploadProfileImage(@UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: any) {
     if (!file) throw new BadRequestException('A JPEG, PNG, or WebP profile image is required');
@@ -65,7 +65,7 @@ export class FilesController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveAgentGuard)
   async download(@Param('id') id: string, @CurrentUser() user: any) {
     const { file, buffer } = await this.s.authorize(id, user);
     return new StreamableFile(buffer, { type: file.mimeType, disposition: `attachment; filename="${file.originalName.replace(/"/g, '')}"` });

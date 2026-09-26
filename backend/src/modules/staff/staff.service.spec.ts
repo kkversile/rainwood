@@ -1,0 +1,56 @@
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { StaffService } from './staff.service';
+
+const today = new Date();
+today.setUTCHours(0, 0, 0, 0);
+const tomorrow = new Date(today);
+tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+
+function profile(overrides: Record<string, unknown> = {}) {
+  return { id: 'staff-1', name: 'Demo Staff', role: 'SERVICE_STAFF', active: true, staffDepartment: 'FOOD_BEVERAGE', jobTitle: 'Restaurant captain', staffHotelId: 'hotel-1', staffHotel: { id: 'hotel-1', name: 'RainWood Demo', active: true }, ...overrides };
+}
+
+function stay(overrides: Record<string, unknown> = {}) {
+  return { reference: 'RW-STAFF-1', guestName: 'Demo Guest', checkIn: today, checkOut: tomorrow, status: 'CONFIRMED', hotelId: 'hotel-1', hotel: { id: 'hotel-1', name: 'RainWood Demo' }, lines: [{ rooms: 1, adults: 2, children: 1, roomType: { id: 'room-1', name: 'Valley Room' } }], ...overrides };
+}
+
+function setup(row: any = stay(), user: any = profile()) {
+  const prisma: any = { user: { findUnique: jest.fn().mockResolvedValue(user) }, reservation: { findUnique: jest.fn().mockResolvedValue(row), findMany: jest.fn().mockResolvedValue([row]) } };
+  const reservations: any = { getFolio: jest.fn().mockResolvedValue({ reference: row.reference, charges: [] }), postFolioCharge: jest.fn().mockResolvedValue({ reference: row.reference, charges: [{ id: 'charge-1', category: 'ROOM_SERVICE', description: 'Dinner', quantity: 1, unitAmount: 500, totalAmount: 500, postingDate: today, note: null, status: 'POSTED', postedBy: { name: 'Demo Staff' }, createdAt: today }] }) };
+  return { service: new StaffService(prisma, reservations), prisma, reservations };
+}
+
+describe('StaffService', () => {
+  it('returns only the assigned hotel and permitted department categories', async () => {
+    const { service } = setup();
+    await expect(service.getMe('staff-1')).resolves.toEqual(expect.objectContaining({ hotel: { id: 'hotel-1', name: 'RainWood Demo' }, allowedCategories: ['FOOD_AND_BEVERAGE', 'ROOM_SERVICE', 'MINIBAR', 'OTHER'] }));
+  });
+
+  it('scopes the stay list to the assigned hotel and active stay date window', async () => {
+    const { service, prisma } = setup();
+    await service.listStays('staff-1', {} as any);
+    expect(prisma.reservation.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ hotelId: 'hotel-1', status: { in: expect.arrayContaining(['CONFIRMED']) }, checkIn: { lte: today }, checkOut: { gt: today } }) }));
+  });
+
+  it('rejects a cross-hotel stay and non-operational statuses', async () => {
+    const crossHotel = setup(stay({ hotelId: 'hotel-2', hotel: { id: 'hotel-2', name: 'Other Hotel' } }));
+    await expect(crossHotel.service.getStay('staff-1', 'RW-STAFF-1')).rejects.toBeInstanceOf(NotFoundException);
+    const draft = setup(stay({ status: 'DRAFT' }));
+    await expect(draft.service.getStay('staff-1', 'RW-STAFF-1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('allows same-day arrival and blocks departed stays', async () => {
+    const current = setup();
+    await expect(current.service.getStay('staff-1', 'RW-STAFF-1')).resolves.toEqual(expect.objectContaining({ reference: 'RW-STAFF-1' }));
+    const departed = setup(stay({ checkOut: today }));
+    await expect(departed.service.getStay('staff-1', 'RW-STAFF-1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('enforces department categories before posting and delegates server-controlled posting', async () => {
+    const { service, reservations } = setup();
+    await expect(service.postCharge('staff-1', 'RW-STAFF-1', { category: 'LAUNDRY', description: 'Laundry', quantity: 1, unitAmount: 100, idempotencyKey: 'staff-key-001' } as any)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(reservations.postFolioCharge).not.toHaveBeenCalled();
+    await service.postCharge('staff-1', 'RW-STAFF-1', { category: 'ROOM_SERVICE', description: 'Dinner', quantity: 1, unitAmount: 500, idempotencyKey: 'staff-key-001' } as any);
+    expect(reservations.postFolioCharge).toHaveBeenCalledWith('RW-STAFF-1', expect.objectContaining({ category: 'ROOM_SERVICE', description: 'Dinner' }), { id: 'staff-1' }, expect.objectContaining({ staffOnly: true, idempotencyKey: 'staff-key-001', allowedCategories: expect.arrayContaining(['ROOM_SERVICE']) }));
+  });
+});

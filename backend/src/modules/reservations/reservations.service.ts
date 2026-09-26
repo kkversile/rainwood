@@ -212,6 +212,10 @@ export class ReservationsService {
     if (['CANCELLED', 'EXPIRED', 'NO_SHOW'].includes(status)) throw new BadRequestException('Guest folio charges cannot be posted for this reservation.');
   }
 
+  private assertStaffFolioEligible(status: ReservationStatus) {
+    if (['DRAFT', 'HELD', 'CANCELLED', 'EXPIRED', 'NO_SHOW'].includes(status)) throw new BadRequestException('This reservation is not eligible for service-staff folio charges.');
+  }
+
   async getFolio(reference: string) {
     const reservation = await this.p.reservation.findUnique({
       where: { reference },
@@ -276,38 +280,54 @@ export class ReservationsService {
     };
   }
 
-  async postFolioCharge(reference: string, body: FolioChargeDto, user: { id: string }) {
-    const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, status: true } });
+  async postFolioCharge(reference: string, body: FolioChargeDto, user: { id: string }, options?: { postingDate?: Date; allowedCategories?: readonly FolioChargeCategory[]; staffOnly?: boolean; idempotencyKey?: string }) {
+    const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, status: true, hotelId: true, hotel: { select: { id: true, name: true } } } });
     if (!reservation) throw new NotFoundException('Reservation not found');
-    this.assertFolioEligible(reservation.status);
+    if (options?.staffOnly) this.assertStaffFolioEligible(reservation.status);
+    else this.assertFolioEligible(reservation.status);
     if (!Object.values(FolioChargeCategory).includes(body.category)) throw new BadRequestException('Invalid folio charge category');
+    if (options?.allowedCategories && !options.allowedCategories.includes(body.category)) throw new ForbiddenException('Your department cannot post this folio category.');
     const description = String(body.description ?? '').trim();
     const quantity = Number(body.quantity);
     const unitAmount = Number(body.unitAmount);
     if (description.length < 2) throw new BadRequestException('description must contain at least 2 characters');
     if (!Number.isFinite(quantity) || quantity <= 0) throw new BadRequestException('quantity must be greater than zero');
     if (!Number.isFinite(unitAmount) || unitAmount < 0) throw new BadRequestException('unitAmount must be zero or greater');
-    const postingDate = parseDateOnly(String(body.postingDate ?? ''), 'postingDate');
+    const postingDate = options?.postingDate ?? parseDateOnly(String(body.postingDate ?? ''), 'postingDate');
     const quantityDecimal = new Prisma.Decimal(quantity.toFixed(2));
     const unitAmountDecimal = new Prisma.Decimal(unitAmount.toFixed(2));
     const totalAmount = quantityDecimal.mul(unitAmountDecimal);
-    const charge = await this.p.reservationFolioCharge.create({
-      data: {
-        reservation: { connect: { id: reservation.id } },
-        category: body.category,
-        description,
-        quantity: quantityDecimal,
-        unitAmount: unitAmountDecimal,
-        taxableAmount: totalAmount,
-        taxAmount: new Prisma.Decimal(0),
-        totalAmount,
-        postingDate,
-        note: body.note?.trim() || null,
-        postedBy: { connect: { id: user.id } },
-      },
-      select: { id: true, totalAmount: true },
-    });
-    await this.audit.log({ actorUserId: user.id, action: 'FOLIO_CHARGE_POSTED', entityType: 'ReservationFolioCharge', entityId: charge.id, after: { reference, reservationId: reservation.id, category: body.category, description, quantity, unitAmount, totalAmount: Number(charge.totalAmount) } });
+    if (options?.idempotencyKey) {
+      const existing = await this.p.reservationFolioCharge.findUnique({ where: { idempotencyKey: options.idempotencyKey }, select: { id: true, reservationId: true } });
+      if (existing) {
+        if (existing.reservationId !== reservation.id) throw new BadRequestException('This idempotency key was already used for another reservation.');
+        return this.getFolio(reference);
+      }
+    }
+    let charge;
+    try {
+      charge = await this.p.reservationFolioCharge.create({
+        data: {
+          reservation: { connect: { id: reservation.id } },
+          category: body.category,
+          description,
+          quantity: quantityDecimal,
+          unitAmount: unitAmountDecimal,
+          taxableAmount: totalAmount,
+          taxAmount: new Prisma.Decimal(0),
+          totalAmount,
+          postingDate,
+          note: body.note?.trim() || null,
+          idempotencyKey: options?.idempotencyKey,
+          postedBy: { connect: { id: user.id } },
+        },
+        select: { id: true, totalAmount: true },
+      });
+    } catch (error: any) {
+      if (options?.idempotencyKey && error?.code === 'P2002') return this.getFolio(reference);
+      throw error;
+    }
+    await this.audit.log({ actorUserId: user.id, action: 'FOLIO_CHARGE_POSTED', entityType: 'ReservationFolioCharge', entityId: charge.id, after: { reference, reservationId: reservation.id, hotelId: reservation.hotelId, hotel: reservation.hotel?.name, category: body.category, description, quantity, unitAmount, totalAmount: Number(charge.totalAmount) } });
     return this.getFolio(reference);
   }
 

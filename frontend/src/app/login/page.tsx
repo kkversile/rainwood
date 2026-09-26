@@ -27,7 +27,7 @@ export default function Login() {
       const safeStaffPath = pathWithoutBase.startsWith('/') && !pathWithoutBase.startsWith('//')
         ? pathWithoutBase
         : '/admin/dashboard';
-      router.replace(result.user.role === 'AGENT' ? '/agent' : safeStaffPath);
+      router.replace(result.user.role === 'AGENT' ? '/agent' : result.user.role === 'SERVICE_STAFF' ? '/staff' : safeStaffPath);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Login failed');
     } finally {

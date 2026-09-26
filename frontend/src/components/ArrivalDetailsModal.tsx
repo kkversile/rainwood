@@ -103,7 +103,7 @@ export function ArrivalDetailsModal({ reference, onClose, onReconfirmed }: { ref
     return () => { cancelled = true; };
   }, [reference, reloadKey]);
 
-  useEffect(() => { setUserRole(window.localStorage.getItem('rainwood_user_role') ?? ''); }, []);
+  useEffect(() => { apiRequest<{ user: { role: string } }>('/auth/me').then((body) => setUserRole(body.user.role)).catch(() => setUserRole('')); }, []);
 
   useEffect(() => {
     closeButtonRef.current?.focus();

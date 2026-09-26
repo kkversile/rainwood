@@ -9,14 +9,18 @@ import { Roles } from '../../common/roles.decorator';
 import bcrypt from 'bcryptjs';
 import { AgentPaymentMilestonesDto, PaymentMilestoneDto } from './users.dto';
 import { AgentsService } from '../agents/agents.service';
-import { AgentDocumentStatus, AgentPaymentPolicy } from '@prisma/client';
+import { AgentDocumentStatus, AgentPaymentPolicy, StaffDepartment, UserRole } from '@prisma/client';
 import { legacyPaymentMilestones, paymentMilestonesForAgent, validateAgentPaymentTerms, validatePaymentMilestones } from '../../common/agent-payment-terms';
 
 class CreateUserDto {
   @IsEmail() email!: string;
   @IsString() @MinLength(2) name!: string;
-  @IsOptional() @IsEnum(['SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'HOUSEKEEPING', 'VIEWER', 'AGENT']) role?: string;
+  @IsOptional() @IsString() mobile?: string;
+  @IsOptional() @IsEnum(UserRole) role?: UserRole;
   @IsString() @MinLength(12) password!: string;
+  @IsOptional() @IsEnum(StaffDepartment) staffDepartment?: StaffDepartment;
+  @IsOptional() @IsString() @MinLength(2) jobTitle?: string;
+  @IsOptional() @IsString() staffHotelId?: string;
   @IsOptional() @IsEnum(AgentPaymentPolicy) agentPaymentPolicy?: AgentPaymentPolicy;
   @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) bookingPaymentPercent?: number;
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => PaymentMilestoneDto) paymentMilestones?: PaymentMilestoneDto[];
@@ -24,9 +28,13 @@ class CreateUserDto {
 
 class UpdateUserDto {
   @IsOptional() @IsString() @MinLength(2) name?: string;
-  @IsOptional() @IsEnum(['SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'HOUSEKEEPING', 'VIEWER', 'AGENT']) role?: string;
+  @IsOptional() @IsString() mobile?: string;
+  @IsOptional() @IsEnum(UserRole) role?: UserRole;
   @IsOptional() @IsBoolean() active?: boolean;
   @IsOptional() @IsBoolean() revokeSessions?: boolean;
+  @IsOptional() @IsEnum(StaffDepartment) staffDepartment?: StaffDepartment;
+  @IsOptional() @IsString() @MinLength(2) jobTitle?: string;
+  @IsOptional() @IsString() staffHotelId?: string;
 }
 
 class AgentRatePlanMappingDto {
@@ -52,10 +60,18 @@ class AgentApprovalDto {
 @Roles('SUPER_ADMIN', 'ADMIN')
 export class UsersController {
   constructor(private p: PrismaService, @Optional() private agentsService?: AgentsService) {}
-  @Get('') list() { return this.p.user.findMany({ select: { id: true, email: true, name: true, role: true, active: true, createdAt: true } }); }
+  @Get('') list() { return this.p.user.findMany({ select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } }, createdAt: true } }); }
   @Get('agents') agents() { return this.p.user.findMany({ where: { role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, agentDocuments: { select: { status: true } }, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } }, orderBy: { createdAt: 'asc' } }); }
   @Get('agents/:agentId') agent(@Param('agentId') agentId: string) { return this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, agentDocuments: { include: { file: { select: { originalName: true, mimeType: true, size: true } } }, orderBy: { createdAt: 'desc' } }, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } } }); }
-  @Post('') async create(@Body() d: CreateUserDto) { return this.p.user.create({ data: { email: d.email.toLowerCase(), name: d.name, role: (d.role || 'RESERVATION') as any, passwordHash: await bcrypt.hash(d.password, 12), active: true }, select: { id: true, email: true, name: true, role: true, active: true } }); }
+  @Post('') async create(@Body() d: CreateUserDto) {
+    const role = d.role || UserRole.RESERVATION;
+    if (role === UserRole.SERVICE_STAFF) {
+      if (!d.staffDepartment || !d.jobTitle || !d.staffHotelId) throw new BadRequestException('Service staff require department, job title, and assigned hotel.');
+      const hotel = await this.p.hotel.findUnique({ where: { id: d.staffHotelId }, select: { id: true, active: true } });
+      if (!hotel?.active) throw new BadRequestException('Assigned hotel is not active.');
+    }
+    return this.p.user.create({ data: { email: d.email.toLowerCase(), name: d.name, mobile: d.mobile, role, passwordHash: await bcrypt.hash(d.password, 12), active: true, staffDepartment: role === UserRole.SERVICE_STAFF ? d.staffDepartment : null, jobTitle: role === UserRole.SERVICE_STAFF ? d.jobTitle : null, staffHotelId: role === UserRole.SERVICE_STAFF ? d.staffHotelId : null }, select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } } } });
+  }
   @Post('agents') async createAgent(@Body() d: CreateUserDto) {
     const milestones = d.paymentMilestones?.length ? validatePaymentMilestones(d.paymentMilestones) : paymentMilestonesForAgent({ agentPaymentPolicy: d.agentPaymentPolicy, bookingPaymentPercent: d.bookingPaymentPercent });
     const legacy = d.paymentMilestones?.length ? { policy: null, percentage: null } : validateAgentPaymentTerms({ agentPaymentPolicy: d.agentPaymentPolicy, bookingPaymentPercent: d.bookingPaymentPercent }, true);
@@ -64,7 +80,17 @@ export class UsersController {
       return user;
     });
   }
-  @Patch(':id') update(@Param('id') id: string, @Body() d: UpdateUserDto) { return this.p.user.update({ where: { id }, data: { name: d.name, role: d.role as any, active: d.active, tokenVersion: d.revokeSessions ? { increment: 1 } : undefined }, select: { id: true, email: true, name: true, role: true, active: true } }); }
+  @Patch(':id') async update(@Param('id') id: string, @Body() d: UpdateUserDto) {
+    const current = await this.p.user.findUnique({ where: { id }, select: { role: true } });
+    const role = d.role ?? current?.role;
+    if (!current) throw new BadRequestException('User not found');
+    if (role === UserRole.SERVICE_STAFF) {
+      if (!d.staffDepartment || !d.jobTitle || !d.staffHotelId) throw new BadRequestException('Service staff require department, job title, and assigned hotel.');
+      const hotel = await this.p.hotel.findUnique({ where: { id: d.staffHotelId }, select: { id: true, active: true } });
+      if (!hotel?.active) throw new BadRequestException('Assigned hotel is not active.');
+    }
+    return this.p.user.update({ where: { id }, data: { name: d.name, mobile: d.mobile, role, active: d.active, staffDepartment: role === UserRole.SERVICE_STAFF ? d.staffDepartment : null, jobTitle: role === UserRole.SERVICE_STAFF ? d.jobTitle : null, staffHotelId: role === UserRole.SERVICE_STAFF ? d.staffHotelId : null, tokenVersion: d.revokeSessions ? { increment: 1 } : undefined }, select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } } } });
+  }
   @Patch('agents/:id') async updateAgent(@Param('id') id: string, @Body() d: UpdateUserDto) {
     const current = await this.p.user.findFirstOrThrow({ where: { id, role: 'AGENT' }, include: { paymentMilestones: { orderBy: { sortOrder: 'asc' } } } });
     if (d.active === true && !current.paymentMilestones?.length && !current.agentPaymentPolicy) throw new BadRequestException('Assign payment milestones before activating this agent');

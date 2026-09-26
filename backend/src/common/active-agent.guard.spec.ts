@@ -16,4 +16,8 @@ describe('ActiveAgentGuard', () => {
     expect(() => new ActiveAgentGuard().canActivate(context({ role: 'AGENT', active: false, agentPaymentPolicy: null, bookingPaymentPercent: null }))).toThrow(ForbiddenException);
     expect(() => new ActiveAgentGuard().canActivate(context({ role: 'AGENT', active: false, agentPaymentPolicy: null, bookingPaymentPercent: null }))).toThrow('awaiting approval');
   });
+
+  it('blocks service staff from agent and public booking operations', () => {
+    expect(() => new ActiveAgentGuard().canActivate(context({ role: 'SERVICE_STAFF', active: true }))).toThrow(ForbiddenException);
+  });
 });

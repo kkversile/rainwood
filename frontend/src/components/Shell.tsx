@@ -30,6 +30,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   if (pathname.startsWith('/admin')) return <>{children}</>;
   if (pathname === '/login') return <>{children}</>;
   if (pathname.startsWith('/agent') && pathname !== '/agent/login' && pathname !== '/agent/register') return <>{children}</>;
+  if (pathname.startsWith('/staff')) return <>{children}</>;
   return <><div className="topbar">RainWood Hotels · Official direct booking</div><header className="siteHeader"><Link className="brand" href="/">{logoUrl ? <img className="siteLogo" src={apiAssetUrl(logoUrl)} alt="RainWood Hotels" style={{ display: 'block', maxWidth: '180px', maxHeight: '48px', width: 'auto', height: 'auto', objectFit: 'contain' }} /> : <>RAINWOOD <span>HOTELS</span></>}</Link><nav aria-label="Primary navigation">{visibleLinks.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}<StaffDashboardLink /></nav></header>{children}<footer><div><b>RainWood Hotels</b><p>Direct booking, transparent rates and reservation support.</p></div><div><Link href="/policies">Policies</Link> · <Link href="/contact">Contact</Link></div></footer></>;
 }
 
@@ -37,7 +38,7 @@ function StaffDashboardLink() {
   const [signedIn, setSignedIn] = useState(false);
   useEffect(() => { const sync = () => setSignedIn(Boolean(window.localStorage.getItem('rainwood_access_token'))); sync(); window.addEventListener('rainwood-auth-change', sync); window.addEventListener('storage', sync); return () => { window.removeEventListener('rainwood-auth-change', sync); window.removeEventListener('storage', sync); }; }, []);
   const role = typeof window !== 'undefined' ? window.localStorage.getItem('rainwood_user_role') : null;
-  return <Link href={signedIn ? (role === 'AGENT' ? '/agent' : '/admin/dashboard') : '/login'}>{signedIn ? 'Dashboard' : 'Staff Login'}</Link>;
+  return <Link href={signedIn ? (role === 'AGENT' ? '/agent' : role === 'SERVICE_STAFF' ? '/staff' : '/admin/dashboard') : '/login'}>{signedIn ? 'Dashboard' : 'Staff Login'}</Link>;
 }
 
 export function AdminNav() {

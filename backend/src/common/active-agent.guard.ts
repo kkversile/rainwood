@@ -5,6 +5,7 @@ import { agentAccessMessage, isAgentPendingOnboarding } from './agent-access';
 export class ActiveAgentGuard implements CanActivate {
   canActivate(context: ExecutionContext) {
     const user = context.switchToHttp().getRequest().user;
+    if (user?.role === 'SERVICE_STAFF') throw new ForbiddenException('Service staff can only use staff operations.');
     if (user?.role !== 'AGENT' || user.active === true) return true;
     if (isAgentPendingOnboarding(user)) throw new ForbiddenException(agentAccessMessage(user));
     throw new ForbiddenException(agentAccessMessage(user));

@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { AgentRegisterDto, LoginDto, LogoutDto, RefreshDto } from './auth.dto';
@@ -32,6 +32,10 @@ export class AuthController {
     this.setRefreshCookie(response, result.refreshToken);
     return { accessToken: result.accessToken, user: result.user };
   }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  me(@CurrentUser() user: any) { return this.s.me(user.id); }
 
   @Post('logout')
   @UseGuards(JwtAuthGuard)
