@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { apiRequest, setAccessToken } from '../../lib/api';
 import { demoLogin } from '../../lib/demo-login';
@@ -12,6 +13,7 @@ export default function Login() {
   const [password, setPassword] = useState(demoLogin.adminPassword);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  function prefillAdmin() { setEmail(demoLogin.adminEmail || 'admin@rainwood.demo'); setPassword(demoLogin.adminPassword); setError(''); }
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -34,5 +36,5 @@ export default function Login() {
       setBusy(false);
     }
   }
-  return <main className="adminLoginPage"><header className="adminLoginHeader"><img src="https://rainwoodhotels.com/wp-content/webp-express/webp-images/uploads/2023/09/rwh-logo.png.webp" alt="RainWood Hotels" /></header><section className="adminLoginBody"><form className="adminLoginCard" onSubmit={submit}><span className="adminLoginEyebrow">Operations access</span><h1>RainWood Operations</h1><p className="adminLoginSubtitle">Sign in to manage hotels, agents, inventory, and reservations.</p>{error && <p className="error" role="alert">{error}</p>}<label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" required /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label><button className="btn full adminLoginButton" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button></form></section></main>;
+  return <main className="adminLoginPage"><header className="adminLoginHeader"><img src="https://rainwoodhotels.com/wp-content/webp-express/webp-images/uploads/2023/09/rwh-logo.png.webp" alt="RainWood Hotels" /></header><section className="adminLoginBody"><form className="adminLoginCard" onSubmit={submit}><span className="adminLoginEyebrow">Operations access</span><h1>RainWood Operations</h1><p className="adminLoginSubtitle">Sign in to manage hotels, agents, inventory, and reservations.</p><nav className="loginRoleLinks" aria-label="Choose portal"><span>Portal</span><Link className="active" href="/login?demo=admin">Admin</Link><Link href="/staff/login?demo=staff">Staff</Link></nav><div className="demoLoginTools"><span>Demo shortcut</span><button type="button" onClick={prefillAdmin}>Prefill Admin login</button><Link href="/staff/login?demo=staff">Prefill Staff login</Link></div>{error && <p className="error" role="alert">{error}</p>}<label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" required /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label><button className="btn full adminLoginButton" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button></form></section></main>;
 }
