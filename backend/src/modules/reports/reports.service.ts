@@ -4,6 +4,10 @@ import { PrismaService } from '../../common/prisma.service';
 import { addDays, parseDateOnly, todayUtc } from '../../common/dates';
 import { ReportQueryDto } from './reports.dto';
 
+function flag(value: unknown) {
+  return value === true || ['true', '1', 'yes', 'on'].includes(String(value ?? '').toLowerCase());
+}
+
 @Injectable()
 export class ReportsService {
   constructor(private prisma: PrismaService) {}
@@ -69,12 +73,14 @@ export class ReportsService {
     const to = query.to ? addDays(parseDateOnly(query.to, 'to'), 1) : addDays(from, 1);
     const hotelIds = query.hotelIds?.length ? query.hotelIds : query.hotelId ? [query.hotelId] : undefined;
     const statuses: ReservationStatus[] = query.statuses?.length ? query.statuses : query.status ? [query.status] : [ReservationStatus.CONFIRMED, ReservationStatus.TENTATIVE];
+    const reconfirmedOnly = flag(query.reconfirmedOnly);
+    const includeWaitlist = flag(query.includeWaitlist);
     const where: Prisma.ReservationWhereInput = {
       hotelId: hotelIds?.length ? { in: hotelIds } : undefined,
       source: query.sources?.length ? { in: query.sources } : query.source,
       status: { in: statuses },
       checkIn: { gte: from, lt: to },
-      ...(query.reconfirmedOnly ? { reconfirmedAt: { not: null } } : {}),
+      ...(reconfirmedOnly ? { reconfirmedAt: { not: null } } : {}),
     };
     const [reservations, total] = await Promise.all([
       this.prisma.reservation.findMany({
@@ -92,7 +98,6 @@ export class ReportsService {
       }),
       this.prisma.reservation.count({ where }),
     ]);
-    const includeWaitlist = Boolean(query.includeWaitlist);
     const waitlist = includeWaitlist ? await this.prisma.waitlistEntry.findMany({
       where: { hotelId: hotelIds?.length ? { in: hotelIds } : undefined, checkIn: { gte: from, lt: to }, status: 'WAITING' },
       select: { id: true, hotel: { select: { id: true, name: true } }, roomType: { select: { id: true, name: true } }, guestName: true, checkIn: true, checkOut: true, rooms: true, status: true },
@@ -141,7 +146,7 @@ export class ReportsService {
     const items = [...reservationItems, ...waitlistItems].sort((a, b) => String(a.arrival).localeCompare(String(b.arrival)) || a.hotel.name.localeCompare(b.hotel.name) || a.reference.localeCompare(b.reference));
     const page = Math.max(1, Number(query.page)); const limit = Math.min(200, Math.max(1, Number(query.limit)));
     const reservationSummary = reservationItems.reduce((summary, row) => ({ reservations: summary.reservations + 1, rooms: summary.rooms + row.rooms, adults: summary.adults + row.adults, children: summary.children + row.children, pax: summary.pax + row.pax, totalAmount: summary.totalAmount + row.totalAmount, advance: summary.advance + row.advance, balance: summary.balance + row.balance }), { reservations: 0, rooms: 0, adults: 0, children: 0, pax: 0, totalAmount: 0, advance: 0, balance: 0 });
-    return { items: items.slice((page - 1) * limit, page * limit), summary: { ...reservationSummary, waitlist: waitlistItems.length }, pagination: { page, limit, total: total + waitlistItems.length, pages: Math.ceil((total + waitlistItems.length) / limit) }, filters: { from: query.from ?? dateValue(from), to: query.to ?? dateValue(addDays(to, -1)), hotelIds: hotelIds ?? [], statuses, sources: query.sources ?? (query.source ? [query.source] : []), includeWaitlist, reconfirmedOnly: Boolean(query.reconfirmedOnly) } };
+    return { items: items.slice((page - 1) * limit, page * limit), summary: { ...reservationSummary, waitlist: waitlistItems.length }, pagination: { page, limit, total: total + waitlistItems.length, pages: Math.ceil((total + waitlistItems.length) / limit) }, filters: { from: query.from ?? dateValue(from), to: query.to ?? dateValue(addDays(to, -1)), hotelIds: hotelIds ?? [], statuses, sources: query.sources ?? (query.source ? [query.source] : []), includeWaitlist, reconfirmedOnly } };
   }
 
   arrivals(query: ReportQueryDto) { return this.dateReport(query, 'checkIn'); }
