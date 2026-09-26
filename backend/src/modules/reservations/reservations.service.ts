@@ -139,11 +139,68 @@ export class ReservationsService {
     return assignments.map((assignment) => ({ id: assignment.ratePlan.id, code: assignment.ratePlan.code, name: assignment.ratePlan.name, mealPlan: assignment.ratePlan.mealPlan, description: assignment.ratePlan.description, hotel: assignment.ratePlan.roomType.hotel, room: { id: assignment.ratePlan.roomType.id, name: assignment.ratePlan.roomType.name, code: assignment.ratePlan.roomType.code }, rates: assignment.ratePlan.rates.map((rate) => ({ ...this.rateResolver.byDate({ assignedAgents: [assignment] }, userId).get(rate), date: rate.date })) }));
   }
 
-  async get(reference: string, full = false) {
-    const reservation = await this.p.reservation.findUnique({ where: { reference }, include: { hotel: true, lines: { include: { roomType: true, ratePlan: true, nights: true } }, payments: true, paymentAttempts: true, syncLogs: true, vouchers: { include: { file: true } }, cancellations: true, modifications: true } });
+  async get(reference: string, full = false, viewerRole?: string) {
+    const reservation = await this.p.reservation.findUnique({
+      where: { reference },
+      include: {
+        hotel: true,
+        createdBy: { select: { id: true, name: true } },
+        reconfirmedBy: { select: { id: true, name: true } },
+        lines: { include: { roomType: true, ratePlan: true, nights: { orderBy: { date: 'asc' } } } },
+        payments: { select: { id: true, amount: true, mode: true, verified: true, paidAt: true, createdAt: true }, orderBy: { createdAt: 'desc' } },
+      },
+    });
     if (!reservation) throw new NotFoundException('Reservation not found');
     const paymentSchedule = this.paymentSchedule(reservation.paymentTermsSnapshot, reservation.payments.filter((payment) => payment.verified).reduce((sum, payment) => sum + Number(payment.amount), 0));
-    if (full) return { ...reservation, paymentSchedule };
+    if (full) {
+      const canSeeInternalRemark = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION'].includes(viewerRole ?? '');
+      const businessType = reservation.source === 'AGENT' || reservation.source === 'COMPANY' ? 'B2B' : reservation.source === 'OTA' ? 'OTA' : 'B2C';
+      return {
+        id: reservation.id,
+        reference: reservation.reference,
+        status: reservation.status,
+        paymentStatus: reservation.paymentStatus,
+        syncStatus: reservation.syncStatus,
+        guestName: reservation.guestName,
+        email: reservation.email,
+        mobile: reservation.mobile,
+        address: reservation.address,
+        gstin: reservation.gstin,
+        source: reservation.source,
+        sourceName: reservation.sourceName,
+        businessType,
+        checkIn: reservation.checkIn,
+        checkOut: reservation.checkOut,
+        currency: reservation.currency,
+        totalAmount: reservation.totalAmount,
+        taxAmount: reservation.taxAmount,
+        advanceAmount: reservation.advanceAmount,
+        balanceAmount: reservation.balanceAmount,
+        specialRequest: reservation.specialRequest,
+        billingInstruction: reservation.billingInstruction,
+        ...(canSeeInternalRemark ? { internalRemark: reservation.internalRemark } : {}),
+        createdAt: reservation.createdAt,
+        createdBy: reservation.createdBy,
+        reconfirmedAt: reservation.reconfirmedAt,
+        reconfirmedBy: reservation.reconfirmedBy,
+        hotel: { id: reservation.hotel.id, name: reservation.hotel.name, slug: reservation.hotel.slug, city: reservation.hotel.city },
+        lines: reservation.lines.map((line) => ({
+          roomType: { id: line.roomType.id, name: line.roomType.name },
+          ratePlan: { id: line.ratePlan.id, name: line.ratePlan.name },
+          checkIn: line.checkIn,
+          checkOut: line.checkOut,
+          rooms: line.rooms,
+          adults: line.adults,
+          children: line.children,
+          nightlyRate: line.nightlyRate,
+          taxAmount: line.taxAmount,
+          lineTotal: line.lineTotal,
+          nights: line.nights.map((night) => ({ date: night.date, rooms: night.rooms, amount: night.amount, taxAmount: night.taxAmount, totalAmount: night.totalAmount })),
+        })),
+        payments: reservation.payments.map((payment) => ({ id: payment.id, amount: payment.amount, mode: payment.mode, verified: payment.verified, paidAt: payment.paidAt, createdAt: payment.createdAt })),
+        paymentSchedule,
+      };
+    }
     return { id: reservation.id, reference: reservation.reference, status: reservation.status, paymentStatus: reservation.paymentStatus, syncStatus: reservation.syncStatus, guestName: reservation.guestName, checkIn: reservation.checkIn, checkOut: reservation.checkOut, currency: reservation.currency, totalAmount: reservation.totalAmount, advanceAmount: reservation.advanceAmount, balanceAmount: reservation.balanceAmount, hotel: { name: reservation.hotel.name, slug: reservation.hotel.slug, city: reservation.hotel.city }, lines: reservation.lines.map((line) => ({ roomType: line.roomType.name, ratePlan: line.ratePlan.name, rooms: line.rooms, adults: line.adults, children: line.children, checkIn: line.checkIn, checkOut: line.checkOut })), paymentSchedule };
   }
 

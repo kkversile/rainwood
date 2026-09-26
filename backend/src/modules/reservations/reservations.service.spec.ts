@@ -66,3 +66,34 @@ describe('reservation due milestone payments', () => {
     expect(tx.payment.create).not.toHaveBeenCalled();
   });
 });
+
+describe('reservation detail projection', () => {
+  function detailFixture() {
+    return {
+      id: 'reservation-detail-1', reference: 'RW-DETAIL-1', status: 'CONFIRMED', paymentStatus: 'PARTIALLY_PAID', syncStatus: 'SYNCED',
+      guestName: 'Aarav Nair', email: 'aarav@example.com', mobile: '+919800000000', address: 'Demo address', gstin: null,
+      source: 'AGENT', sourceName: 'Demo Travels', checkIn: new Date('2026-09-26T00:00:00.000Z'), checkOut: new Date('2026-09-28T00:00:00.000Z'), currency: 'INR',
+      totalAmount: 15000, taxAmount: 0, advanceAmount: 7500, balanceAmount: 7500, paymentTermsSnapshot: null,
+      specialRequest: 'Late arrival', billingInstruction: 'Collect balance at check-in', internalRemark: 'Front desk only', createdAt: new Date('2026-09-01T10:00:00.000Z'),
+      createdBy: { id: 'admin-1', name: 'Admin' }, reconfirmedAt: null, reconfirmedBy: null,
+      hotel: { id: 'hotel-1', name: 'RainWood Demo', slug: 'rainwood-demo', city: 'Kodaikanal' },
+      lines: [{ roomType: { id: 'room-1', name: 'Premium Valley Room' }, ratePlan: { id: 'plan-1', name: 'CP' }, checkIn: new Date('2026-09-26T00:00:00.000Z'), checkOut: new Date('2026-09-28T00:00:00.000Z'), rooms: 1, adults: 2, children: 0, nightlyRate: 7500, taxAmount: 0, lineTotal: 15000, nights: [{ date: new Date('2026-09-26T00:00:00.000Z'), rooms: 1, amount: 7500, taxAmount: 0, totalAmount: 7500 }] }],
+      payments: [{ id: 'payment-1', amount: 7500, mode: 'UPI', verified: true, paidAt: new Date('2026-09-01T10:00:00.000Z'), createdAt: new Date('2026-09-01T10:00:00.000Z') }],
+    };
+  }
+
+  it('returns operational detail fields and protects internal remarks by role', async () => {
+    const reservation = detailFixture();
+    const prisma: any = { reservation: { findUnique: jest.fn().mockResolvedValue(reservation) } };
+    const service = new ReservationsService(prisma, {} as any, {} as any, {} as any);
+
+    const viewerDetail: any = await service.get(reservation.reference, true, 'VIEWER');
+    expect(viewerDetail).toEqual(expect.objectContaining({ reference: reservation.reference, guestName: 'Aarav Nair', businessType: 'B2B', hotel: expect.objectContaining({ name: 'RainWood Demo' }) }));
+    expect(viewerDetail.lines[0]).toEqual(expect.objectContaining({ roomType: { id: 'room-1', name: 'Premium Valley Room' }, ratePlan: { id: 'plan-1', name: 'CP' }, nights: expect.any(Array) }));
+    expect(viewerDetail.payments[0]).toEqual(expect.objectContaining({ mode: 'UPI', verified: true }));
+    expect(viewerDetail).not.toHaveProperty('internalRemark');
+
+    const adminDetail: any = await service.get(reservation.reference, true, 'ADMIN');
+    expect(adminDetail.internalRemark).toBe('Front desk only');
+  });
+});

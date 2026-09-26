@@ -50,7 +50,7 @@ export class ReservationsController {
   @Get(':reference/detail')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER')
-  detail(@Param('reference') reference: string) { return this.s.get(reference, true); }
+  detail(@Param('reference') reference: string, @CurrentUser() user: any) { return this.s.get(reference, true, user?.role); }
 
   @Post(':reference/pay-due-milestones')
   @UseGuards(JwtAuthGuard, ActiveAgentGuard, RolesGuard)
