@@ -104,8 +104,8 @@ describe('reservation guest folio charges', () => {
   const baseReservation = () => ({ id: 'reservation-folio-1', reference: 'RW-FOLIO-1', status: 'CONFIRMED', currency: 'INR', totalAmount: new Prisma.Decimal(1000), advanceAmount: new Prisma.Decimal(200), balanceAmount: new Prisma.Decimal(800) });
   const charge = (status: 'POSTED' | 'VOIDED', amount: number, id = `charge-${status.toLowerCase()}`) => ({ id, category: 'MINIBAR', description: 'Minibar water', quantity: new Prisma.Decimal(1), unitAmount: new Prisma.Decimal(amount), taxableAmount: new Prisma.Decimal(amount), taxAmount: new Prisma.Decimal(0), totalAmount: new Prisma.Decimal(amount), postingDate: new Date('2026-09-27T00:00:00.000Z'), note: null, status, postedBy: { id: 'admin-1', name: 'Admin' }, voidedAt: status === 'VOIDED' ? new Date() : null, voidedBy: status === 'VOIDED' ? { id: 'admin-1', name: 'Admin' } : null, voidReason: status === 'VOIDED' ? 'Duplicate posting' : null, createdAt: new Date() });
 
-  function setup(rows: any[] = []) {
-    const reservation = baseReservation();
+  function setup(rows: any[] = [], status = 'CONFIRMED') {
+    const reservation = { ...baseReservation(), status };
     const audit = { log: jest.fn().mockResolvedValue(undefined) };
     const prisma: any = {
       reservation: { findUnique: jest.fn().mockResolvedValue({ ...reservation, folioCharges: rows }) },
@@ -135,6 +135,14 @@ describe('reservation guest folio charges', () => {
     expect(prisma.reservationFolioCharge.create).not.toHaveBeenCalled();
     prisma.reservation.findUnique.mockResolvedValueOnce({ ...baseReservation(), status: 'CANCELLED' });
     await expect(service.postFolioCharge('RW-FOLIO-1', { category: 'MINIBAR', description: 'Water', quantity: 1, unitAmount: 10, postingDate: '2026-09-27' } as any, actor)).rejects.toThrow('cannot be posted');
+  });
+
+  it('keeps pending, tentative, and completed stays out of the staff-only posting path', async () => {
+    for (const status of ['PENDING_PAYMENT', 'TENTATIVE', 'COMPLETED']) {
+      const { service, prisma } = setup([], status);
+      await expect(service.postFolioCharge('RW-FOLIO-1', { category: 'MINIBAR', description: 'Water', quantity: 1, unitAmount: 10, postingDate: '2026-09-27' } as any, actor, { staffOnly: true })).rejects.toThrow('not eligible for service-staff');
+      expect(prisma.reservationFolioCharge.create).not.toHaveBeenCalled();
+    }
   });
 
   it('excludes voided rows from active incidentals while keeping them in the response', async () => {

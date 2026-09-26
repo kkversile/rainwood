@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { staffServiceWorkerConfig } from '../src/lib/staff-service-worker';
 
 const root = path.resolve(process.cwd());
 const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8');
@@ -13,7 +14,18 @@ test('service staff PWA exposes the scoped routes and confirmation flow', () => 
   assert.match(data, /idempotencyKey/);
   assert.match(data, /Confirm Post/);
   assert.match(data, /You're offline/);
+  assert.match(data, /VOIDED/);
+  assert.match(data, /staffChargeVoided/);
+  assert.match(data, /incidentalCharges/);
   assert.doesNotMatch(data, /voidFolioCharge|Void Charge/);
+});
+
+test('service worker registration is scoped to the staff portal for every base path', () => {
+  assert.deepEqual(staffServiceWorkerConfig(''), { url: '/sw.js', scope: '/staff/' });
+  assert.deepEqual(staffServiceWorkerConfig('/rainwood'), { url: '/rainwood/sw.js', scope: '/rainwood/staff/' });
+  const data = read('src/components/StaffData.tsx');
+  assert.match(data, /staffServiceWorkerConfig/);
+  assert.match(data, /register\(url, \{ scope \}\)/);
 });
 
 test('staff manifest and service worker avoid caching authenticated guest data', () => {
@@ -22,7 +34,10 @@ test('staff manifest and service worker avoid caching authenticated guest data',
   assert.match(manifest, /start_url: `\$\{basePath\}\/staff`/);
   assert.match(manifest, /display: 'standalone'/);
   assert.match(worker, /\/api\//);
-  assert.match(worker, /fetch\(request\)\.catch/);
+  assert.match(worker, /request\.method !== 'GET'/);
+  assert.match(worker, /fetch\(request, \{ cache: 'no-store' \}\)/);
+  assert.match(worker, /isStaticAsset/);
+  assert.doesNotMatch(worker, /event\.request\.method === 'POST'/);
   assert.match(worker, /caches\.match\(request\)/);
 });
 

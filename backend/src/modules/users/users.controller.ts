@@ -81,15 +81,18 @@ export class UsersController {
     });
   }
   @Patch(':id') async update(@Param('id') id: string, @Body() d: UpdateUserDto) {
-    const current = await this.p.user.findUnique({ where: { id }, select: { role: true } });
+    const current = await this.p.user.findUnique({ where: { id }, select: { role: true, staffDepartment: true, jobTitle: true, staffHotelId: true } });
     const role = d.role ?? current?.role;
     if (!current) throw new BadRequestException('User not found');
+    const effectiveStaffDepartment = d.staffDepartment ?? current.staffDepartment;
+    const effectiveJobTitle = d.jobTitle ?? current.jobTitle;
+    const effectiveStaffHotelId = d.staffHotelId ?? current.staffHotelId;
     if (role === UserRole.SERVICE_STAFF) {
-      if (!d.staffDepartment || !d.jobTitle || !d.staffHotelId) throw new BadRequestException('Service staff require department, job title, and assigned hotel.');
-      const hotel = await this.p.hotel.findUnique({ where: { id: d.staffHotelId }, select: { id: true, active: true } });
+      if (!effectiveStaffDepartment || !effectiveJobTitle || !effectiveStaffHotelId) throw new BadRequestException('Service staff require department, job title, and assigned hotel.');
+      const hotel = await this.p.hotel.findUnique({ where: { id: effectiveStaffHotelId }, select: { id: true, active: true } });
       if (!hotel?.active) throw new BadRequestException('Assigned hotel is not active.');
     }
-    return this.p.user.update({ where: { id }, data: { name: d.name, mobile: d.mobile, role, active: d.active, staffDepartment: role === UserRole.SERVICE_STAFF ? d.staffDepartment : null, jobTitle: role === UserRole.SERVICE_STAFF ? d.jobTitle : null, staffHotelId: role === UserRole.SERVICE_STAFF ? d.staffHotelId : null, tokenVersion: d.revokeSessions ? { increment: 1 } : undefined }, select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } } } });
+    return this.p.user.update({ where: { id }, data: { name: d.name, mobile: d.mobile, role, active: d.active, staffDepartment: role === UserRole.SERVICE_STAFF ? effectiveStaffDepartment : null, jobTitle: role === UserRole.SERVICE_STAFF ? effectiveJobTitle : null, staffHotelId: role === UserRole.SERVICE_STAFF ? effectiveStaffHotelId : null, tokenVersion: d.revokeSessions ? { increment: 1 } : undefined }, select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } } } });
   }
   @Patch('agents/:id') async updateAgent(@Param('id') id: string, @Body() d: UpdateUserDto) {
     const current = await this.p.user.findFirstOrThrow({ where: { id, role: 'AGENT' }, include: { paymentMilestones: { orderBy: { sortOrder: 'asc' } } } });

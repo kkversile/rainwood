@@ -55,3 +55,55 @@ describe('agent rate-plan mappings', () => {
   });
 
 });
+
+describe('service staff partial updates', () => {
+  const current = { id: 'staff-1', role: 'SERVICE_STAFF', staffDepartment: 'FOOD_BEVERAGE', jobTitle: 'Restaurant captain', staffHotelId: 'hotel-1' };
+
+  function staffController(hotel: any = { id: 'hotel-1', active: true }) {
+    const prisma: any = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue(current),
+        update: jest.fn().mockResolvedValue({ ...current }),
+      },
+      hotel: { findUnique: jest.fn().mockResolvedValue(hotel) },
+    };
+    return { controller: new UsersController(prisma), prisma };
+  }
+
+  it('allows deactivation with only active=false and preserves staff metadata', async () => {
+    const { controller, prisma } = staffController();
+    await controller.update('staff-1', { active: false });
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ active: false, staffDepartment: 'FOOD_BEVERAGE', jobTitle: 'Restaurant captain', staffHotelId: 'hotel-1' }) }));
+  });
+
+  it('allows a name-only update', async () => {
+    const { controller, prisma } = staffController();
+    await controller.update('staff-1', { name: 'New Captain' });
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ name: 'New Captain', staffDepartment: 'FOOD_BEVERAGE', jobTitle: 'Restaurant captain', staffHotelId: 'hotel-1' }) }));
+  });
+
+  it('allows department-only and hotel-only updates after validating effective values', async () => {
+    const department = staffController();
+    await department.controller.update('staff-1', { staffDepartment: 'HOUSEKEEPING' });
+    expect(department.prisma.user.update.mock.calls[0][0].data).toEqual(expect.objectContaining({ staffDepartment: 'HOUSEKEEPING', jobTitle: 'Restaurant captain', staffHotelId: 'hotel-1' }));
+
+    const hotel = staffController({ id: 'hotel-2', active: true });
+    await hotel.controller.update('staff-1', { staffHotelId: 'hotel-2' });
+    expect(hotel.prisma.hotel.findUnique).toHaveBeenCalledWith({ where: { id: 'hotel-2' }, select: { id: true, active: true } });
+    expect(hotel.prisma.user.update.mock.calls[0][0].data).toEqual(expect.objectContaining({ staffDepartment: 'FOOD_BEVERAGE', jobTitle: 'Restaurant captain', staffHotelId: 'hotel-2' }));
+  });
+
+  it('rejects inactive or missing assigned hotels', async () => {
+    for (const hotel of [{ id: 'hotel-2', active: false }, null]) {
+      const { controller } = staffController(hotel);
+      await expect(controller.update('staff-1', { staffHotelId: 'hotel-2' })).rejects.toThrow('Assigned hotel is not active');
+    }
+  });
+
+  it('clears staff metadata when the role changes away from SERVICE_STAFF', async () => {
+    const { controller, prisma } = staffController();
+    await controller.update('staff-1', { role: 'ADMIN' });
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ role: 'ADMIN', staffDepartment: null, jobTitle: null, staffHotelId: null }) }));
+    expect(prisma.hotel.findUnique).not.toHaveBeenCalled();
+  });
+});

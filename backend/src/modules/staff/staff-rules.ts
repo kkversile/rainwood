@@ -1,6 +1,9 @@
 import { FolioChargeCategory, StaffDepartment } from '@prisma/client';
 
-export const STAFF_OPERATIONAL_STATUSES = ['PENDING_PAYMENT', 'TENTATIVE', 'CONFIRMED', 'MODIFIED', 'COMPLETED'] as const;
+// Temporary rule: date overlap plus CONFIRMED/MODIFIED is the safest status signal
+// available until the PMS exposes EXPECTED/CHECKED_IN/CHECKED_OUT lifecycle state.
+// This does not prove that the guest physically checked in.
+export const STAFF_OPERATIONAL_STATUSES = ['CONFIRMED', 'MODIFIED'] as const;
 
 const rules: Record<StaffDepartment, readonly FolioChargeCategory[]> = {
   FOOD_BEVERAGE: ['FOOD_AND_BEVERAGE', 'ROOM_SERVICE', 'MINIBAR', 'OTHER'],

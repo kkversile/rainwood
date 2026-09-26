@@ -1,0 +1,5 @@
+.staffFolioTotal{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0;padding:11px 13px;border-radius:10px;background:#f1fafa;color:#61777b;font-size:12px;font-weight:800}
+.staffFolioTotal strong{color:#145563;font-size:17px}
+.staffChargeCard small{color:#8a6464;font-size:11px}
+.staffChargeVoided{border-color:#e4d5d5;background:#faf7f7;opacity:.72}
+.staffChargeVoided strong,.staffChargeVoided b{color:#6f7779}

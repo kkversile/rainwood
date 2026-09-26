@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import 'leaflet/dist/leaflet.css';
 import './globals.css';
+import './staff.css';
 import './agent-booking-selection.css';
 import './agent-reports.css';
 import './agent-report-tweaks.css';

@@ -31,6 +31,11 @@ test('arrival detail modal renders operational sections and reconfirmation', () 
   assert.match(modal, /Nightly rate breakdown/);
 });
 
+test('arrival detail modal uses canonical line occupancy totals for pax', () => {
+  assert.match(modal, /detail\.lines\.reduce\(\(sum, line\) => sum \+ line\.adults \+ line\.children, 0\)/);
+  assert.doesNotMatch(modal, /line\.rooms \* \(line\.adults \+ line\.children\)/);
+});
+
 test('arrival detail modal keeps guest folio accounting separate and auditable', () => {
   for (const token of ['/reservations/${encodeURIComponent(reference)}/folio', 'Guest Folio', 'Add Charge', 'No incidental charges', 'Original Reservation Balance', 'Incidental Charges', 'Total Outstanding', 'FOOD_AND_BEVERAGE', 'Void Guest Charge', 'voidReason', 'reservationBalance', 'totalOutstanding']) {
     assert.ok(modal.includes(token), `missing folio token: ${token}`);

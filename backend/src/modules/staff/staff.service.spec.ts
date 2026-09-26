@@ -16,7 +16,7 @@ function stay(overrides: Record<string, unknown> = {}) {
 
 function setup(row: any = stay(), user: any = profile()) {
   const prisma: any = { user: { findUnique: jest.fn().mockResolvedValue(user) }, reservation: { findUnique: jest.fn().mockResolvedValue(row), findMany: jest.fn().mockResolvedValue([row]) } };
-  const reservations: any = { getFolio: jest.fn().mockResolvedValue({ reference: row.reference, charges: [] }), postFolioCharge: jest.fn().mockResolvedValue({ reference: row.reference, charges: [{ id: 'charge-1', category: 'ROOM_SERVICE', description: 'Dinner', quantity: 1, unitAmount: 500, totalAmount: 500, postingDate: today, note: null, status: 'POSTED', postedBy: { name: 'Demo Staff' }, createdAt: today }] }) };
+  const reservations: any = { getFolio: jest.fn().mockResolvedValue({ reference: row.reference, charges: [], totals: { incidentalCharges: 0, incidentalBalance: 0, totalOutstanding: 100 } }), postFolioCharge: jest.fn().mockResolvedValue({ reference: row.reference, charges: [] }) };
   return { service: new StaffService(prisma, reservations), prisma, reservations };
 }
 
@@ -29,14 +29,21 @@ describe('StaffService', () => {
   it('scopes the stay list to the assigned hotel and active stay date window', async () => {
     const { service, prisma } = setup();
     await service.listStays('staff-1', {} as any);
-    expect(prisma.reservation.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ hotelId: 'hotel-1', status: { in: expect.arrayContaining(['CONFIRMED']) }, checkIn: { lte: today }, checkOut: { gt: today } }) }));
+    expect(prisma.reservation.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ hotelId: 'hotel-1', status: { in: ['CONFIRMED', 'MODIFIED'] }, checkIn: { lte: today }, checkOut: { gt: today } }) }));
+  });
+
+  it('summarizes multi-room line occupancy without multiplying guest totals by rooms', async () => {
+    const { service } = setup(stay({ lines: [{ rooms: 2, adults: 3, children: 1, roomType: { id: 'room-1', name: 'Valley Room' } }] }));
+    await expect(service.getStay('staff-1', 'RW-STAFF-1')).resolves.toEqual(expect.objectContaining({ rooms: 2, adults: 3, children: 1, pax: 4 }));
   });
 
   it('rejects a cross-hotel stay and non-operational statuses', async () => {
     const crossHotel = setup(stay({ hotelId: 'hotel-2', hotel: { id: 'hotel-2', name: 'Other Hotel' } }));
     await expect(crossHotel.service.getStay('staff-1', 'RW-STAFF-1')).rejects.toBeInstanceOf(NotFoundException);
-    const draft = setup(stay({ status: 'DRAFT' }));
-    await expect(draft.service.getStay('staff-1', 'RW-STAFF-1')).rejects.toBeInstanceOf(NotFoundException);
+    for (const status of ['DRAFT', 'PENDING_PAYMENT', 'TENTATIVE', 'COMPLETED']) {
+      const invalid = setup(stay({ status }));
+      await expect(invalid.service.getStay('staff-1', 'RW-STAFF-1')).rejects.toBeInstanceOf(NotFoundException);
+    }
   });
 
   it('allows same-day arrival and blocks departed stays', async () => {
@@ -52,5 +59,16 @@ describe('StaffService', () => {
     expect(reservations.postFolioCharge).not.toHaveBeenCalled();
     await service.postCharge('staff-1', 'RW-STAFF-1', { category: 'ROOM_SERVICE', description: 'Dinner', quantity: 1, unitAmount: 500, idempotencyKey: 'staff-key-001' } as any);
     expect(reservations.postFolioCharge).toHaveBeenCalledWith('RW-STAFF-1', expect.objectContaining({ category: 'ROOM_SERVICE', description: 'Dinner' }), { id: 'staff-1' }, expect.objectContaining({ staffOnly: true, idempotencyKey: 'staff-key-001', allowedCategories: expect.arrayContaining(['ROOM_SERVICE']) }));
+  });
+
+  it('returns the same folio history and active totals for GET and POST', async () => {
+    const voided = { id: 'charge-voided', category: 'ROOM_SERVICE', description: 'Voided dinner', quantity: 1, unitAmount: 500, totalAmount: 500, postingDate: today, note: null, status: 'VOIDED', postedBy: { name: 'Demo Staff' }, voidedAt: today, voidedBy: { name: 'Admin' }, voidReason: 'Duplicate', createdAt: today };
+    const posted = { id: 'charge-posted', category: 'ROOM_SERVICE', description: 'Dinner', quantity: 1, unitAmount: 300, totalAmount: 300, postingDate: today, note: null, status: 'POSTED', postedBy: { name: 'Demo Staff' }, voidedAt: null, voidedBy: null, voidReason: null, createdAt: today };
+    const { service, reservations } = setup();
+    reservations.getFolio.mockResolvedValue({ reference: 'RW-STAFF-1', charges: [voided, posted], totals: { incidentalCharges: 300, incidentalBalance: 300, totalOutstanding: 400 } });
+    const expected = { reference: 'RW-STAFF-1', charges: expect.arrayContaining([expect.objectContaining({ id: 'charge-voided', status: 'VOIDED', voidReason: 'Duplicate' }), expect.objectContaining({ id: 'charge-posted', status: 'POSTED' })]), totals: { incidentalCharges: 300, incidentalBalance: 300, totalOutstanding: 400 } };
+    await expect(service.getFolio('staff-1', 'RW-STAFF-1')).resolves.toEqual(expected);
+    await expect(service.postCharge('staff-1', 'RW-STAFF-1', { category: 'ROOM_SERVICE', description: 'Dinner', quantity: 1, unitAmount: 300, idempotencyKey: 'staff-key-002' } as any)).resolves.toEqual(expected);
+    expect(reservations.getFolio).toHaveBeenCalledTimes(2);
   });
 });

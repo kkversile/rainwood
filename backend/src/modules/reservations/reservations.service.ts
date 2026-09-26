@@ -213,7 +213,7 @@ export class ReservationsService {
   }
 
   private assertStaffFolioEligible(status: ReservationStatus) {
-    if (['DRAFT', 'HELD', 'CANCELLED', 'EXPIRED', 'NO_SHOW'].includes(status)) throw new BadRequestException('This reservation is not eligible for service-staff folio charges.');
+    if (!['CONFIRMED', 'MODIFIED'].includes(status)) throw new BadRequestException('This reservation is not eligible for service-staff folio charges.');
   }
 
   async getFolio(reference: string) {

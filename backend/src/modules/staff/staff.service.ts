@@ -30,9 +30,9 @@ export class StaffService {
   private summarize(row: any) {
     const roomTypes = [...new Map(row.lines.map((line: any) => [line.roomType.id, line.roomType.name])).values()];
     const rooms = row.lines.reduce((sum: number, line: any) => sum + line.rooms, 0);
-    const adults = row.lines.reduce((sum: number, line: any) => sum + line.rooms * line.adults, 0);
-    const children = row.lines.reduce((sum: number, line: any) => sum + line.rooms * line.children, 0);
-    return { reference: row.reference, guestName: row.guestName, checkIn: row.checkIn, checkOut: row.checkOut, status: row.status, roomTypes, adults, children, pax: adults + children, hotel: row.hotel };
+    const adults = row.lines.reduce((sum: number, line: any) => sum + line.adults, 0);
+    const children = row.lines.reduce((sum: number, line: any) => sum + line.children, 0);
+    return { reference: row.reference, guestName: row.guestName, checkIn: row.checkIn, checkOut: row.checkOut, status: row.status, rooms, roomTypes, adults, children, pax: adults + children, hotel: row.hotel };
   }
 
   async getMe(userId: string) {
@@ -62,18 +62,26 @@ export class StaffService {
     return this.summarize(row);
   }
 
+  private staffFolio(folio: any) {
+    return {
+      reference: folio.reference,
+      charges: folio.charges.map((charge: any) => ({ id: charge.id, category: charge.category, description: charge.description, quantity: charge.quantity, unitAmount: charge.unitAmount, totalAmount: charge.totalAmount, postingDate: charge.postingDate, note: charge.note, status: charge.status, postedBy: charge.postedBy?.name ?? 'RainWood staff', voidedAt: charge.voidedAt, voidedBy: charge.voidedBy?.name ?? null, voidReason: charge.voidReason, createdAt: charge.createdAt })),
+      totals: { incidentalCharges: folio.totals.incidentalCharges, incidentalBalance: folio.totals.incidentalBalance, totalOutstanding: folio.totals.totalOutstanding },
+    };
+  }
+
   async getFolio(userId: string, reference: string) {
     await this.staffStay(userId, reference);
     const folio = await this.reservations.getFolio(reference);
-    return { reference: folio.reference, charges: folio.charges.map((charge) => ({ id: charge.id, category: charge.category, description: charge.description, quantity: charge.quantity, unitAmount: charge.unitAmount, totalAmount: charge.totalAmount, postingDate: charge.postingDate, note: charge.note, status: charge.status, postedBy: charge.postedBy?.name ?? 'RainWood staff', createdAt: charge.createdAt })) };
+    return this.staffFolio(folio);
   }
 
   async postCharge(userId: string, reference: string, body: StaffFolioChargeDto) {
-    const { user, row } = await this.staffStay(userId, reference);
+    const { user } = await this.staffStay(userId, reference);
     const department = user.staffDepartment as StaffDepartment | null;
     const allowed = allowedStaffFolioCategories(department);
     if (!allowed.includes(body.category as FolioChargeCategory)) throw new ForbiddenException('Your department cannot post this folio category.');
-    const result = await this.reservations.postFolioCharge(reference, { category: body.category, description: body.description, quantity: body.quantity, unitAmount: body.unitAmount, note: body.note, postingDate: toDateOnly(todayUtc()) }, { id: user.id }, { allowedCategories: allowed, staffOnly: true, postingDate: todayUtc(), idempotencyKey: body.idempotencyKey });
-    return { reference: row.reference, charges: result.charges.filter((charge) => charge.status === 'POSTED').map((charge) => ({ id: charge.id, category: charge.category, description: charge.description, quantity: charge.quantity, unitAmount: charge.unitAmount, totalAmount: charge.totalAmount, postingDate: charge.postingDate, note: charge.note, status: charge.status, postedBy: charge.postedBy?.name ?? user.name, createdAt: charge.createdAt })) };
+    await this.reservations.postFolioCharge(reference, { category: body.category, description: body.description, quantity: body.quantity, unitAmount: body.unitAmount, note: body.note, postingDate: toDateOnly(todayUtc()) }, { id: user.id }, { allowedCategories: allowed, staffOnly: true, postingDate: todayUtc(), idempotencyKey: body.idempotencyKey });
+    return this.staffFolio(await this.reservations.getFolio(reference));
   }
 }
