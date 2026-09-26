@@ -33,7 +33,8 @@ export function AdminArrivals() {
 
   useEffect(() => { apiRequest<Hotel[]>('/hotels').then(setHotels).catch((reason) => setHotelError(reason instanceof Error ? reason.message : 'Could not load hotels')); }, []);
   useEffect(() => {
-    let cancelled = false; const query = new URLSearchParams({ from: applied.from, to: applied.to, page: '1', limit: '100', includeWaitlist: String(applied.includeWaitlist), reconfirmedOnly: String(applied.reconfirmedOnly), showRemarks: String(applied.showRemarks) });
+    let cancelled = false; const query = new URLSearchParams({ from: applied.from, to: applied.to, page: '1', limit: '100' });
+    if (applied.includeWaitlist) query.set('includeWaitlist', 'true'); if (applied.reconfirmedOnly) query.set('reconfirmedOnly', 'true'); if (applied.showRemarks) query.set('showRemarks', 'true');
     if (applied.hotelIds.length) query.set('hotelIds', applied.hotelIds.join(',')); if (applied.statuses.length) query.set('statuses', applied.statuses.join(',')); if (applied.source) query.set('source', applied.source);
     setLoading(true); setError(''); apiRequest<ArrivalResponse>(`/reports/expected-arrivals?${query.toString()}`).then((body) => { if (!cancelled) setData(body); }).catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Could not load arrivals'); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
