@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ReservationsService } from './reservations.service';
-import { CancellationDto, CheckInDto, CheckOutDto, CreateReservationDto, FolioChargeDto, ManualReservationDto, ModificationDto, PayDueMilestonesDto, RatePlanListQueryDto, ReconfirmationDto, ReservationListQueryDto, RoomChangeDto, VoidFolioChargeDto } from './reservations.dto';
+import { CancellationDto, CheckInDto, CheckOutDto, CheckoutPaymentDto, CreateReservationDto, FolioChargeDto, ManualReservationDto, ModificationDto, PayDueMilestonesDto, RatePlanListQueryDto, ReconfirmationDto, ReservationListQueryDto, RoomChangeDto, VoidFolioChargeDto } from './reservations.dto';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -76,6 +76,21 @@ export class ReservationsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION')
   checkOut(@Param('reference') reference: string, @Body() body: CheckOutDto, @CurrentUser() user: any) { return this.s.checkOut(reference, body, user); }
+
+  @Get(':reference/checkout-preview')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER')
+  checkoutPreview(@Param('reference') reference: string) { return this.s.checkoutPreview(reference); }
+
+  @Post(':reference/checkout-payment')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION')
+  checkoutPayment(@Param('reference') reference: string, @Body() body: CheckoutPaymentDto, @CurrentUser() user: any) { return this.s.recordCheckoutPayment(reference, body, user); }
+
+  @Get(':reference/final-folio')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER')
+  finalFolio(@Param('reference') reference: string) { return this.s.finalFolio(reference); }
 
   @Get(':reference/folio')
   @UseGuards(JwtAuthGuard, RolesGuard)

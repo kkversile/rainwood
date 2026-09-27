@@ -70,7 +70,10 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, retry 
   }
   if (response.status === 401 && !path.startsWith('/auth/')) redirectToLoginAfterUnauthorized();
   const body = await readBody(response);
-  if (!response.ok) throw new Error(Array.isArray(body?.message) ? body.message.join(', ') : body?.message ?? `Request failed (${response.status})`);
+  if (!response.ok) {
+    const message = Array.isArray(body?.message) ? body.message.join(', ') : typeof body?.message === 'object' && body.message ? body.message.message ?? JSON.stringify(body.message) : body?.message;
+    throw new Error(message ?? `Request failed (${response.status})`);
+  }
   return body as T;
 }
 

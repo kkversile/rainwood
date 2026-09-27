@@ -1,10 +1,10 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { FolioChargeCategory, Prisma, ReservationStatus, RoomOperationalStatus, StayStatus, SyncStatus } from '@prisma/client';
+import { FolioChargeCategory, Prisma, ReservationSettlementStatus, ReservationStatus, RoomOperationalStatus, StayStatus, SyncStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/audit.service';
 import { HoldsService } from '../holds/holds.service';
-import { CancellationDto, CheckInDto, CheckOutDto, CreateReservationDto, FolioChargeDto, ModificationDto, ReservationListQueryDto, RoomChangeDto, VoidFolioChargeDto } from './reservations.dto';
+import { CancellationDto, CheckInDto, CheckOutDto, CheckoutPaymentDto, CreateReservationDto, FolioChargeDto, ModificationDto, ReservationListQueryDto, RoomChangeDto, VoidFolioChargeDto } from './reservations.dto';
 import { parseDateOnly, toDateOnly } from '../../common/dates';
 import { getHotelOperationalDate } from '../../common/hotel-dates';
 import { sha256 } from '../../common/security';
@@ -13,6 +13,15 @@ import { assertReservationTransition } from './reservation-state';
 import { RateResolverService } from '../availability/rate-resolver';
 import { calculateAgentBookingPaymentTerms, calculateReservationPaymentSchedule } from '../../common/agent-payment-terms';
 import { HousekeepingService } from '../housekeeping/housekeeping.service';
+
+const checkoutInclude = {
+  hotel: { select: { id: true, name: true } },
+  lines: { include: { roomType: { select: { id: true, name: true } }, ratePlan: { select: { id: true, name: true } } } },
+  roomAssignments: { where: { unassignedAt: null }, include: { room: { include: { roomType: { select: { name: true } } } } } },
+  folioCharges: { where: { status: 'POSTED' }, include: { postedBy: { select: { id: true, name: true } } }, orderBy: [{ postingDate: 'asc' }, { createdAt: 'asc' }] },
+  payments: { where: { verified: true }, orderBy: { paidAt: 'asc' } },
+  settlement: true,
+} satisfies Prisma.ReservationInclude;
 
 @Injectable()
 export class ReservationsService {
@@ -105,22 +114,81 @@ export class ReservationsService {
   async checkOut(reference: string, body: CheckOutDto, user: { id: string; role?: string }) {
     this.assertOperationalRole(user.role);
     return serializable(this.p, async (tx) => {
-      const reservation = await tx.reservation.findUnique({ where: { reference }, include: { roomAssignments: { where: { unassignedAt: null }, include: { room: true } }, folioCharges: { where: { status: 'POSTED' }, select: { totalAmount: true } } } });
+      const reservation = await tx.reservation.findUnique({ where: { reference }, include: checkoutInclude });
       if (!reservation) throw new NotFoundException('Reservation not found');
+      if (reservation.stayStatus === StayStatus.CHECKED_OUT && reservation.settlement) return this.settlementResult(reservation.settlement, reservation.reference);
+      if (reservation.stayStatus === StayStatus.CHECKED_OUT) throw new ConflictException('This stay was checked out before a final settlement was recorded.');
       if (reservation.stayStatus !== StayStatus.CHECKED_IN) throw new BadRequestException('Only checked-in stays can be checked out.');
-      const totalOutstanding = Number(reservation.balanceAmount) + reservation.folioCharges.reduce((sum, charge) => sum + Number(charge.totalAmount), 0);
-      if (totalOutstanding > 0.005 && !body.force) throw new ConflictException({ code: 'OUTSTANDING_BALANCE', message: `Outstanding balance is INR ${totalOutstanding.toFixed(2)}. Confirm checkout to continue.`, totalOutstanding });
+      const totals = this.settlementTotals(reservation);
+      const allowOutstanding = Boolean(body.allowOutstanding || body.force);
+      if (totals.outstandingAmount > 0.005 && !allowOutstanding) throw new ConflictException({ code: 'OUTSTANDING_BALANCE', message: `Outstanding balance is INR ${totals.outstandingAmount.toFixed(2)}. Record payment or provide an authorized checkout override.`, totalOutstanding: totals.outstandingAmount });
+      if (totals.outstandingAmount > 0.005 && (!body.overrideReason || !body.authorizedBy?.trim())) throw new BadRequestException('An override reason and authorized-by value are required to check out with an outstanding balance.');
       const now = new Date();
       for (const assignment of reservation.roomAssignments) {
         await tx.room.update({ where: { id: assignment.roomId }, data: { status: RoomOperationalStatus.DIRTY } });
         await this.housekeeping?.ensureTaskForDirtyRoom(tx, assignment.roomId, user.id);
       }
       await tx.reservationRoomAssignment.updateMany({ where: { reservationId: reservation.id, unassignedAt: null }, data: { unassignedAt: now, unassignedById: user.id, reason: body.note?.trim() || 'Guest checked out' } });
+      const finalFolioNumber = this.finalFolioNumber();
+      const status = totals.outstandingAmount <= 0.005 ? ReservationSettlementStatus.SETTLED : body.overrideReason === 'WRITE_OFF' ? ReservationSettlementStatus.WRITTEN_OFF : ReservationSettlementStatus.PARTIAL;
+      const snapshot = this.settlementSnapshot(reservation, totals, finalFolioNumber, status, body, now);
+      const settlement = await tx.reservationSettlement.create({ data: { reservationId: reservation.id, status, reservationAmount: totals.reservationAmount, incidentalAmount: totals.incidentalAmount, taxAmount: totals.taxAmount, discountAmount: 0, adjustmentAmount: 0, grossAmount: totals.grossAmount, paidAmount: totals.paidAmount, balanceAmount: totals.outstandingAmount, finalFolioNumber, settledAt: now, settledById: user.id, overrideReason: body.overrideReason ?? null, overrideAuthorizedBy: body.authorizedBy?.trim() || null, notes: body.note?.trim() || null, snapshot: snapshot as Prisma.InputJsonValue } });
       const updated = await tx.reservation.update({ where: { id: reservation.id }, data: { stayStatus: StayStatus.CHECKED_OUT, checkedOutAt: now, checkedOutById: user.id }, include: { checkedOutBy: { select: { id: true, name: true } } } });
-      await tx.auditLog.create({ data: { actorUserId: user.id, action: 'GUEST_CHECKED_OUT', entityType: 'Reservation', entityId: reservation.id, after: { reference, rooms: reservation.roomAssignments.map((assignment) => assignment.room.roomNumber), totalOutstanding, note: body.note?.trim() || null } } });
-      return { reference: updated.reference, stayStatus: updated.stayStatus, checkedOutAt: updated.checkedOutAt, checkedOutBy: updated.checkedOutBy, totalOutstanding };
+      await tx.auditLog.create({ data: { actorUserId: user.id, action: 'GUEST_SETTLED', entityType: 'ReservationSettlement', entityId: settlement.id, after: { reference, hotelId: reservation.hotelId, grossAmount: totals.grossAmount, paidAmount: totals.paidAmount, balanceAmount: totals.outstandingAmount, status, overrideReason: body.overrideReason ?? null } } });
+      await tx.auditLog.create({ data: { actorUserId: user.id, action: 'GUEST_CHECKED_OUT', entityType: 'Reservation', entityId: reservation.id, after: { reference, rooms: reservation.roomAssignments.map((assignment) => assignment.room.roomNumber), totalOutstanding: totals.outstandingAmount, settlementId: settlement.id, finalFolioNumber, note: body.note?.trim() || null } } });
+      return { reference: updated.reference, stayStatus: updated.stayStatus, checkedOutAt: updated.checkedOutAt, checkedOutBy: updated.checkedOutBy, totalOutstanding: totals.outstandingAmount, settlement: this.settlementResult(settlement).settlement, finalFolioNumber, snapshot };
     });
   }
+
+  async checkoutPreview(reference: string) {
+    const reservation = await this.p.reservation.findUnique({ where: { reference }, include: checkoutInclude });
+    if (!reservation) throw new NotFoundException('Reservation not found');
+    const totals = this.settlementTotals(reservation);
+    return { reservation: { reference: reservation.reference, amount: totals.reservationAmount, advance: Number(reservation.advanceAmount), paid: totals.paidAmount, balance: Math.max(totals.reservationAmount - totals.paidAmount, 0) }, folio: { postedCharges: totals.incidentalAmount, incidentals: reservation.folioCharges.map((charge) => ({ id: charge.id, description: charge.description, category: charge.category, quantity: Number(charge.quantity), totalAmount: Number(charge.totalAmount), postingDate: charge.postingDate, postedBy: charge.postedBy })) }, payments: { totalPaid: totals.paidAmount, items: reservation.payments.map((payment) => ({ id: payment.id, amount: Number(payment.amount), mode: payment.mode, reference: payment.reference, paidAt: payment.paidAt })) }, settlement: { grossAmount: totals.grossAmount, paidAmount: totals.paidAmount, outstandingAmount: totals.outstandingAmount, status: reservation.settlement?.status ?? 'OPEN', finalFolioNumber: reservation.settlement?.finalFolioNumber ?? null }, stay: { stayStatus: reservation.stayStatus, checkIn: reservation.checkIn, checkOut: reservation.checkOut, assignedRooms: reservation.roomAssignments.map((assignment) => ({ id: assignment.id, roomNumber: assignment.room.roomNumber, roomType: assignment.room.roomType?.name ?? null, status: assignment.room.status })) } };
+  }
+
+  async recordCheckoutPayment(reference: string, body: CheckoutPaymentDto, user: { id: string; role?: string }) {
+    this.assertOperationalRole(user.role);
+    return serializable(this.p, async (tx) => {
+      const reservation = await tx.reservation.findUnique({ where: { reference }, include: { folioCharges: { where: { status: 'POSTED' }, select: { totalAmount: true } }, payments: { where: { verified: true }, select: { amount: true } } } });
+      if (!reservation) throw new NotFoundException('Reservation not found');
+      if (reservation.stayStatus !== StayStatus.CHECKED_IN) throw new ConflictException('Checkout payments can only be recorded for a checked-in stay.');
+      if (body.idempotencyKey) {
+        const existing = await tx.payment.findUnique({ where: { idempotencyKey: body.idempotencyKey } });
+        if (existing) return existing;
+      }
+      const totals = this.settlementTotals(reservation);
+      if (body.amount > totals.outstandingAmount + 0.005) throw new BadRequestException(`Payment exceeds total outstanding of INR ${totals.outstandingAmount.toFixed(2)}.`);
+      const payment = await tx.payment.create({ data: { reservationId: reservation.id, amount: new Prisma.Decimal(body.amount.toFixed(2)), mode: body.mode, provider: 'MANUAL', reference: body.reference?.trim() || null, idempotencyKey: body.idempotencyKey, verified: true, verifiedById: user.id, paidAt: new Date() } });
+      const paidAmount = totals.paidAmount + body.amount;
+      const reservationBalance = Math.max(totals.reservationAmount - paidAmount, 0);
+      await tx.reservation.update({ where: { id: reservation.id }, data: { advanceAmount: reservationBalance === 0 ? totals.reservationAmount : paidAmount, balanceAmount: reservationBalance, paymentStatus: reservationBalance <= 0.005 ? 'PAID' : 'PARTIALLY_PAID' } });
+      await tx.auditLog.create({ data: { actorUserId: user.id, action: 'PAYMENT_RECORDED', entityType: 'Payment', entityId: payment.id, after: { reference, reservationId: reservation.id, amount: body.amount, mode: body.mode, context: 'CHECKOUT' } } });
+      return payment;
+    });
+  }
+
+  async finalFolio(reference: string) {
+    const settlement = await this.p.reservationSettlement.findFirst({ where: { reservation: { reference } }, include: { reservation: { select: { reference: true, guestName: true, hotel: { select: { name: true } } } } } });
+    if (!settlement) throw new NotFoundException('Final folio is not available until checkout is finalized.');
+    return this.settlementResult(settlement);
+  }
+
+  private settlementTotals(reservation: any) {
+    const reservationAmount = Number(reservation.totalAmount);
+    const incidentalAmount = (reservation.folioCharges ?? []).reduce((sum: number, charge: any) => sum + Number(charge.totalAmount), 0);
+    const paidAmount = (reservation.payments ?? []).filter((payment: any) => payment.verified !== false).reduce((sum: number, payment: any) => sum + Number(payment.amount), 0);
+    const grossAmount = reservationAmount + incidentalAmount;
+    return { reservationAmount, incidentalAmount, taxAmount: 0, paidAmount, grossAmount, outstandingAmount: Math.max(grossAmount - paidAmount, 0) };
+  }
+
+  private finalFolioNumber() { return `RW-FOLIO-${new Date().getUTCFullYear()}-${randomUUID().slice(0, 10).toUpperCase()}`; }
+
+  private settlementSnapshot(reservation: any, totals: any, finalFolioNumber: string, status: string, body: CheckOutDto, settledAt: Date) {
+    return { finalFolioNumber, hotel: { id: reservation.hotel.id, name: reservation.hotel.name }, reservation: reservation.reference, guest: { name: reservation.guestName, email: reservation.email, mobile: reservation.mobile, gstin: reservation.gstin ?? null }, stay: { checkIn: reservation.checkIn, checkOut: reservation.checkOut, rooms: reservation.roomAssignments.map((assignment: any) => ({ roomNumber: assignment.room.roomNumber, roomType: assignment.room.roomType?.name ?? null })) }, charges: { reservationAmount: totals.reservationAmount, incidentals: reservation.folioCharges.map((charge: any) => ({ description: charge.description, category: charge.category, quantity: Number(charge.quantity), totalAmount: Number(charge.totalAmount), postingDate: charge.postingDate })), incidentalAmount: totals.incidentalAmount, grossAmount: totals.grossAmount }, payments: reservation.payments.map((payment: any) => ({ amount: Number(payment.amount), mode: payment.mode, reference: payment.reference, paidAt: payment.paidAt })), paidAmount: totals.paidAmount, balanceAmount: totals.outstandingAmount, status, overrideReason: body.overrideReason ?? null, authorizedBy: body.authorizedBy?.trim() || null, settledAt };
+  }
+
+  private settlementResult(settlement: any, reference?: string) { return { reference: reference ?? settlement.reservation?.reference, stayStatus: 'CHECKED_OUT', status: settlement.status, finalFolioNumber: settlement.finalFolioNumber, settlement: { id: settlement.id, status: settlement.status, reservationAmount: Number(settlement.reservationAmount), incidentalAmount: Number(settlement.incidentalAmount), grossAmount: Number(settlement.grossAmount), paidAmount: Number(settlement.paidAmount), balanceAmount: Number(settlement.balanceAmount), settledAt: settlement.settledAt }, snapshot: settlement.snapshot ?? null }; }
 
   async inHouse(hotelId?: string) {
     const rows = await this.p.reservation.findMany({ where: { stayStatus: StayStatus.CHECKED_IN, hotelId: hotelId || undefined }, orderBy: [{ hotel: { name: 'asc' } }, { guestName: 'asc' }], include: { hotel: { select: { id: true, name: true } }, checkedInBy: { select: { id: true, name: true } }, lines: { include: { roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, include: { room: { select: { id: true, roomNumber: true, floor: true, wing: true, status: true, roomType: { select: { id: true, name: true } } } } } }, folioCharges: { where: { status: 'POSTED' }, select: { totalAmount: true } } } });
@@ -412,8 +480,9 @@ export class ReservationsService {
   }
 
   async postFolioCharge(reference: string, body: FolioChargeDto, user: { id: string }, options?: { postingDate?: Date; allowedCategories?: readonly FolioChargeCategory[]; staffOnly?: boolean; idempotencyKey?: string }) {
-    const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, status: true, hotelId: true, hotel: { select: { id: true, name: true } } } });
+    const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, status: true, stayStatus: true, hotelId: true, hotel: { select: { id: true, name: true } } } });
     if (!reservation) throw new NotFoundException('Reservation not found');
+    if (reservation.stayStatus === StayStatus.CHECKED_OUT) throw new ConflictException('Finalized stays cannot receive new folio charges. Use the post-checkout adjustment workflow.');
     if (options?.staffOnly) await this.assertStaffFolioEligible(reference);
     else this.assertFolioEligible(reservation.status);
     if (!Object.values(FolioChargeCategory).includes(body.category)) throw new BadRequestException('Invalid folio charge category');

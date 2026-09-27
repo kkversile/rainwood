@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../lib/api';
 import { CheckInDialog } from './CheckInDialog';
 import { RoomChangeDialog } from './RoomChangeDialog';
+import { CheckoutSettlementDialog } from './CheckoutSettlementDialog';
 
 type Money = number | string;
 type Person = { id: string; name: string } | null;
@@ -97,6 +98,7 @@ export function ArrivalDetailsModal({ reference, onClose, onReconfirmed }: { ref
   const [chargeForm, setChargeForm] = useState<ChargeForm>({ category: 'FOOD_AND_BEVERAGE', description: '', quantity: '1', unitAmount: '', postingDate: new Date().toISOString().slice(0, 10), note: '' });
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [roomChangeOpen, setRoomChangeOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -133,14 +135,6 @@ export function ArrivalDetailsModal({ reference, onClose, onReconfirmed }: { ref
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : 'Could not reconfirm arrival.');
     } finally { setBusy(false); }
-  }
-
-  async function checkOut(force = false) {
-    if (!detail) return;
-    setBusy(true); setActionError('');
-    try { await apiRequest(`/reservations/${encodeURIComponent(detail.reference)}/check-out`, { method: 'POST', body: JSON.stringify({ force }) }); setSuccess('Guest checked out. Assigned rooms are now DIRTY for housekeeping.'); setReloadKey((value) => value + 1); }
-    catch (reason) { const message = reason instanceof Error ? reason.message : 'Could not check out guest.'; if (!force && /Outstanding balance|OUTSTANDING_BALANCE/i.test(message) && window.confirm(`${message}\n\nCheckout anyway?`)) { await checkOut(true); } else setActionError(message); }
-    finally { setBusy(false); }
   }
 
   const canManageFolio = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION'].includes(userRole);
@@ -187,7 +181,7 @@ export function ArrivalDetailsModal({ reference, onClose, onReconfirmed }: { ref
           <div className="arrivalDetailSummary"><DataItem name="Arrival" value={dateLabel(detail.checkIn)} /><DataItem name="Departure" value={dateLabel(detail.checkOut)} /><DataItem name="Nights" value={nightsBetween(detail.checkIn, detail.checkOut)} /><DataItem name="Rooms" value={detail.lines.reduce((sum, line) => sum + line.rooms, 0)} /><DataItem name="Pax" value={detail.lines.reduce((sum, line) => sum + line.adults + line.children, 0)} />{Number(detail.balanceAmount) > 0 && <DataItem name="Balance Due" value={<b className="arrivalDetailBalance">{money(detail.balanceAmount)}</b>} />}</div>
           {success && <p className="arrivalDetailsSuccess" role="status">{success}</p>}
           {actionError && <p className="arrivalDetailsActionError" role="alert">{actionError}</p>}
-          <section className="arrivalDetailSection"><div className="arrivalFolioHeader"><div><h3>Stay Status</h3><p>{detail.stayStatus === 'CHECKED_IN' ? `Checked in ${dateTimeLabel(detail.checkedInAt)}${detail.checkedInBy ? ` · ${detail.checkedInBy.name}` : ''}` : detail.stayStatus === 'CHECKED_OUT' ? `Checked out ${dateTimeLabel(detail.checkedOutAt)}${detail.checkedOutBy ? ` · ${detail.checkedOutBy.name}` : ''}` : 'No physical room assignment yet.'}</p></div><div>{detail.stayStatus === 'EXPECTED' && <button className="smallBtn" type="button" onClick={() => setCheckInOpen(true)}>Check In Guest</button>}{detail.stayStatus === 'CHECKED_IN' && <><button className="smallBtn secondary" type="button" onClick={() => setRoomChangeOpen(true)}>Change Room</button><button className="smallBtn secondary" type="button" disabled={busy} onClick={() => void checkOut(false)}>Check Out</button></>}</div></div><div className="arrivalDetailGrid"><DataItem name="Status" value={label(detail.stayStatus)} /><DataItem name="Assigned Rooms" value={detail.roomAssignments.filter((item) => !item.unassignedAt).map((item) => `${item.room.roomNumber} — ${item.room.roomType.name}`).join(', ') || 'None'} /></div></section>
+          <section className="arrivalDetailSection"><div className="arrivalFolioHeader"><div><h3>Stay Status</h3><p>{detail.stayStatus === 'CHECKED_IN' ? `Checked in ${dateTimeLabel(detail.checkedInAt)}${detail.checkedInBy ? ` · ${detail.checkedInBy.name}` : ''}` : detail.stayStatus === 'CHECKED_OUT' ? `Checked out ${dateTimeLabel(detail.checkedOutAt)}${detail.checkedOutBy ? ` · ${detail.checkedOutBy.name}` : ''}` : 'No physical room assignment yet.'}</p></div><div>{detail.stayStatus === 'EXPECTED' && <button className="smallBtn" type="button" onClick={() => setCheckInOpen(true)}>Check In Guest</button>}{detail.stayStatus === 'CHECKED_IN' && <><button className="smallBtn secondary" type="button" onClick={() => setRoomChangeOpen(true)}>Change Room</button><button className="smallBtn secondary" type="button" disabled={busy} onClick={() => setCheckoutOpen(true)}>Check Out</button></>}</div></div><div className="arrivalDetailGrid"><DataItem name="Status" value={label(detail.stayStatus)} /><DataItem name="Assigned Rooms" value={detail.roomAssignments.filter((item) => !item.unassignedAt).map((item) => `${item.room.roomNumber} — ${item.room.roomType.name}`).join(', ') || 'None'} /></div></section>
 
           <section className="arrivalDetailSection"><h3>Guest Details</h3><div className="arrivalDetailGrid"><DataItem name="Guest Name" value={detail.guestName} /><DataItem name="Mobile" value={detail.mobile ? <a href={`tel:${detail.mobile}`}>{detail.mobile}</a> : '—'} /><DataItem name="Email" value={detail.email ? <a href={`mailto:${detail.email}`}>{detail.email}</a> : '—'} /><DataItem name="Address" value={detail.address || '—'} /><DataItem name="GSTIN" value={detail.gstin || '—'} /></div></section>
 
@@ -218,6 +212,7 @@ export function ArrivalDetailsModal({ reference, onClose, onReconfirmed }: { ref
       {voidTarget && <div className="arrivalFolioDialogBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setVoidTarget(null); }}><section className="arrivalFolioDialog arrivalFolioVoidDialog" role="dialog" aria-modal="true" aria-labelledby="arrival-folio-void-title"><header><div><span className="eyebrow">Guest Folio</span><h3 id="arrival-folio-void-title">Void Guest Charge</h3></div><button className="uiModalClose" type="button" aria-label="Close void dialog" onClick={() => setVoidTarget(null)}>Ã—</button></header><form onSubmit={(event) => void voidCharge(event)}><p>Voiding keeps <strong>{voidTarget.description}</strong> in the folio history and removes it from active totals.</p><label>Reason<textarea required minLength={2} maxLength={500} value={voidReason} onChange={(event) => setVoidReason(event.target.value)} placeholder="Explain why this charge is being voided" /></label>{folioActionError && <p className="arrivalDetailsActionError" role="alert">{folioActionError}</p>}<footer><button className="smallBtn secondary" type="button" onClick={() => setVoidTarget(null)}>Cancel</button><button className="smallBtn" type="submit" disabled={folioBusy}>{folioBusy ? 'Voiding…' : 'Void Charge'}</button></footer></form></section></div>}
       {checkInOpen && <CheckInDialog reference={reference} onClose={() => setCheckInOpen(false)} onSuccess={() => { setCheckInOpen(false); setSuccess('Guest checked in successfully.'); setReloadKey((value) => value + 1); }} />}
       {roomChangeOpen && <RoomChangeDialog reference={reference} hotelId={detail?.hotel.id ?? ''} assignments={(detail?.roomAssignments ?? []).filter((item) => !item.unassignedAt)} onClose={() => setRoomChangeOpen(false)} onSuccess={() => { setRoomChangeOpen(false); setSuccess('Room changed successfully. The previous room is DIRTY for housekeeping.'); setReloadKey((value) => value + 1); }} />}
+      {checkoutOpen && <CheckoutSettlementDialog reference={reference} onClose={() => { setCheckoutOpen(false); setSuccess('Guest checkout finalized. Assigned rooms are now DIRTY for housekeeping.'); setReloadKey((value) => value + 1); }} />}
     </section>
   </div>;
 }

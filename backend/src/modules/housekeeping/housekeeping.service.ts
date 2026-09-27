@@ -196,14 +196,19 @@ export class HousekeepingService {
   }
 
   async setManagementRoomStatus(adminUserId: string, roomId: string, body: HousekeepingRoomStatusDto) {
-    const admin = await this.managementUser(adminUserId);
-    const room = await this.p.room.findUnique({ where: { id: roomId }, select: { hotelId: true } });
+    return serializable(this.p, (tx) => this.setManagementRoomStatusInTransaction(tx, adminUserId, roomId, body.status));
+  }
+
+  async setManagementRoomStatusInTransaction(client: PrismaService | Prisma.TransactionClient, adminUserId: string, roomId: string, status: RoomOperationalStatus) {
+    const admin = await client.user.findUnique({ where: { id: adminUserId }, select: { id: true, role: true, staffHotelId: true } });
+    if (!admin || !MANAGEMENT_ROLES.includes(admin.role)) throw new ForbiddenException('Management permission is required.');
+    const room = await client.room.findUnique({ where: { id: roomId }, select: { id: true, hotelId: true, roomNumber: true, status: true } });
     if (!room) throw new NotFoundException('Physical room not found.');
     this.assertAdminHotelScope(admin, room.hotelId);
-    const updated = await this.hotels.updatePhysicalRoom(roomId, { status: body.status });
-    if (body.status === RoomOperationalStatus.OUT_OF_ORDER || body.status === RoomOperationalStatus.AVAILABLE) await this.p.housekeepingTask.updateMany({ where: { roomId, status: { in: ACTIVE_TASK_STATUSES } }, data: { status: HousekeepingTaskStatus.CANCELLED, note: 'Cancelled by management room status change.' } });
-    if (body.status === RoomOperationalStatus.DIRTY) await this.ensureTaskForDirtyRoom(this.p, roomId, adminUserId);
-    await this.audit.log({ actorUserId: adminUserId, action: 'HOUSEKEEPING_ROOM_STATUS_CHANGED', entityType: 'Room', entityId: roomId, after: { roomId, status: body.status } });
+    const updated = await this.hotels.updatePhysicalRoomWithClient(client, roomId, { status });
+    if (status === RoomOperationalStatus.OUT_OF_ORDER || status === RoomOperationalStatus.AVAILABLE) await client.housekeepingTask.updateMany({ where: { roomId, status: { in: ACTIVE_TASK_STATUSES } }, data: { status: HousekeepingTaskStatus.CANCELLED, note: 'Cancelled by management room status change.' } });
+    if (status === RoomOperationalStatus.DIRTY) await this.ensureTaskForDirtyRoom(client, roomId, adminUserId);
+    await client.auditLog.create({ data: { actorUserId: adminUserId, action: 'HOUSEKEEPING_ROOM_STATUS_CHANGED', entityType: 'Room', entityId: roomId, after: { roomId, status } } });
     return updated;
   }
 

@@ -25,7 +25,7 @@ function setup() {
     auditLog: { create: jest.fn().mockResolvedValue({}) },
   };
   const audit = { log: jest.fn().mockResolvedValue({}) } as any;
-  const hotels = { updatePhysicalRoom: jest.fn() } as any;
+  const hotels = { updatePhysicalRoom: jest.fn(), updatePhysicalRoomWithClient: jest.fn().mockResolvedValue({ id: 'room-203' }) } as any;
   return { service: new HousekeepingService(prisma, audit, hotels), prisma, audit };
 }
 
@@ -183,10 +183,10 @@ describe('housekeeping workflow', () => {
     prisma.user.findUnique.mockResolvedValue(admin({ role: UserRole.ADMIN, staffHotelId: 'hotel-1' }));
     prisma.room.findUnique.mockResolvedValue({ hotelId: 'hotel-1' });
     await service.setManagementRoomStatus('admin-1', 'room-203', { status: RoomOperationalStatus.DIRTY });
-    expect((service as any).hotels.updatePhysicalRoom).toHaveBeenCalledWith('room-203', { status: RoomOperationalStatus.DIRTY });
+    expect((service as any).hotels.updatePhysicalRoomWithClient).toHaveBeenCalledWith(prisma, 'room-203', { status: RoomOperationalStatus.DIRTY });
     prisma.user.findUnique.mockResolvedValue(admin({ role: UserRole.ADMIN, staffHotelId: 'hotel-1' }));
     prisma.room.findUnique.mockResolvedValue({ hotelId: 'hotel-2' });
     await expect(service.setManagementRoomStatus('admin-1', 'room-203', { status: RoomOperationalStatus.DIRTY })).rejects.toBeInstanceOf(NotFoundException);
-    expect((service as any).hotels.updatePhysicalRoom).toHaveBeenCalledTimes(1);
+    expect((service as any).hotels.updatePhysicalRoomWithClient).toHaveBeenCalledTimes(1);
   });
 });

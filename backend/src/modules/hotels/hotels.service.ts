@@ -38,22 +38,32 @@ export class HotelsService {
   }
 
   async updatePhysicalRoom(id: string, body: Partial<PhysicalRoomDto>) {
-    const current = await this.prisma.room.findUnique({ where: { id }, include: { assignments: { where: { unassignedAt: null }, select: { id: true } } } });
+    return this.updatePhysicalRoomWithClient(this.prisma, id, body);
+  }
+
+  async updatePhysicalRoomWithClient(client: PrismaService | Prisma.TransactionClient, id: string, body: Partial<PhysicalRoomDto>) {
+    const current = await client.room.findUnique({ where: { id }, include: { assignments: { where: { unassignedAt: null }, select: { id: true } } } });
     if (!current) throw new NotFoundException('Physical room not found.');
     const hasActiveAssignment = current.assignments.length > 0;
+    const requestedRoomNumber = body.roomNumber?.trim();
+    const roomNumberChanged = requestedRoomNumber !== undefined && requestedRoomNumber !== current.roomNumber;
     const incompatibleEdit = (body.roomTypeId !== undefined && body.roomTypeId !== current.roomTypeId)
+      || roomNumberChanged
       || body.active === false
       || (body.status !== undefined && body.status !== current.status);
     if (hasActiveAssignment && incompatibleEdit) {
+      if (roomNumberChanged) {
+        throw new ConflictException(`Room ${current.roomNumber} is currently assigned to an in-house guest and cannot be renumbered.`);
+      }
       throw new ConflictException(`Room ${current.roomNumber} is currently assigned to an in-house guest and cannot be modified.`);
     }
     if (body.status !== undefined) assertAdminRoomStatusTransition(current.status, body.status, current.roomNumber);
     if (body.roomTypeId) {
-      const roomType = await this.prisma.roomType.findFirst({ where: { id: body.roomTypeId, hotelId: current.hotelId } });
+      const roomType = await client.roomType.findFirst({ where: { id: body.roomTypeId, hotelId: current.hotelId } });
       if (!roomType) throw new BadRequestException('Room type does not belong to this hotel.');
     }
     try {
-      return await this.prisma.room.update({ where: { id }, data: { roomNumber: body.roomNumber?.trim(), roomTypeId: body.roomTypeId, floor: body.floor === undefined ? undefined : body.floor?.trim() || null, wing: body.wing === undefined ? undefined : body.wing?.trim() || null, status: body.status, active: body.active }, include: { hotel: { select: { id: true, name: true } }, roomType: { select: { id: true, name: true } } } });
+      return await client.room.update({ where: { id }, data: { roomNumber: requestedRoomNumber, roomTypeId: body.roomTypeId, floor: body.floor === undefined ? undefined : body.floor?.trim() || null, wing: body.wing === undefined ? undefined : body.wing?.trim() || null, status: body.status, active: body.active }, include: { hotel: { select: { id: true, name: true } }, roomType: { select: { id: true, name: true } } } });
     } catch (error: any) {
       if (error?.code === 'P2002') throw new ConflictException('That room number already exists at this hotel.');
       throw error;

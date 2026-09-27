@@ -163,3 +163,69 @@ describe('reservation guest folio charges', () => {
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'FOLIO_CHARGE_VOIDED', entityType: 'ReservationFolioCharge' }));
   });
 });
+
+describe('checkout settlement', () => {
+  function checkoutSetup(overrides: Record<string, any> = {}) {
+    const reservation: any = {
+      id: 'reservation-checkout-1', reference: 'RW-CHECKOUT-1', hotelId: 'hotel-1', status: 'CONFIRMED', stayStatus: 'CHECKED_IN',
+      guestName: 'Demo Guest', email: 'guest@example.com', mobile: '9999999999', gstin: null,
+      totalAmount: new Prisma.Decimal(1000), advanceAmount: new Prisma.Decimal(1000), balanceAmount: new Prisma.Decimal(0),
+      checkIn: new Date('2026-09-28T00:00:00.000Z'), checkOut: new Date('2026-09-30T00:00:00.000Z'),
+      hotel: { id: 'hotel-1', name: 'RainWood Demo' }, lines: [],
+      roomAssignments: [{ id: 'assignment-1', roomId: 'room-1', room: { roomNumber: '101', roomType: { name: 'Deluxe' } } }],
+      folioCharges: [{ id: 'charge-1', description: 'Minibar', category: 'MINIBAR', quantity: new Prisma.Decimal(1), totalAmount: new Prisma.Decimal(50), postingDate: new Date('2026-09-28T00:00:00.000Z'), postedBy: { id: 'admin-1', name: 'Admin' } }],
+      payments: [{ id: 'payment-1', amount: new Prisma.Decimal(1050), mode: 'CASH', reference: 'receipt-1', paidAt: new Date('2026-09-28T00:00:00.000Z'), verified: true }],
+      ...overrides,
+    };
+    const settlement: any = { id: 'settlement-1', status: 'SETTLED', reservationId: reservation.id, reservationAmount: new Prisma.Decimal(1000), incidentalAmount: new Prisma.Decimal(50), grossAmount: new Prisma.Decimal(1050), paidAmount: new Prisma.Decimal(1050), balanceAmount: new Prisma.Decimal(0), finalFolioNumber: 'RW-FOLIO-2026-DEMO1', settledAt: new Date('2026-09-28T12:00:00.000Z'), snapshot: { finalFolioNumber: 'RW-FOLIO-2026-DEMO1' } };
+    const tx: any = {
+      reservation: { findUnique: jest.fn().mockResolvedValue(reservation), update: jest.fn().mockResolvedValue({ reference: reservation.reference, stayStatus: 'CHECKED_OUT', checkedOutAt: new Date(), checkedOutBy: { id: 'admin-1', name: 'Admin' } }) },
+      room: { update: jest.fn().mockResolvedValue({}) },
+      reservationRoomAssignment: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      reservationSettlement: { create: jest.fn().mockResolvedValue(settlement), findUnique: jest.fn().mockResolvedValue(null) },
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
+      payment: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'payment-new', amount: new Prisma.Decimal(50) }) },
+    };
+    const prisma: any = { ...tx, $transaction: jest.fn(async (work: any) => work(tx)) };
+    return { service: new ReservationsService(prisma, {} as any, {} as any, {} as any), prisma, tx, reservation, settlement };
+  }
+
+  it('does not mutate a checked-in stay when an outstanding balance has no override', async () => {
+    const setup = checkoutSetup({ advanceAmount: new Prisma.Decimal(0), balanceAmount: new Prisma.Decimal(1000), payments: [] });
+    await expect(setup.service.checkOut('RW-CHECKOUT-1', {}, { id: 'admin-1', role: 'ADMIN' })).rejects.toThrow('Outstanding balance');
+    expect(setup.tx.room.update).not.toHaveBeenCalled();
+    expect(setup.tx.reservationSettlement.create).not.toHaveBeenCalled();
+    expect(setup.tx.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('creates an immutable final settlement, closes assignments, dirties rooms, and audits both events', async () => {
+    const setup = checkoutSetup();
+    const result = await setup.service.checkOut('RW-CHECKOUT-1', {}, { id: 'admin-1', role: 'ADMIN' });
+    expect(result).toEqual(expect.objectContaining({ stayStatus: 'CHECKED_OUT', finalFolioNumber: expect.stringMatching(/^RW-FOLIO-2026-/) }));
+    expect(setup.tx.room.update).toHaveBeenCalledWith({ where: { id: 'room-1' }, data: { status: 'DIRTY' } });
+    expect(setup.tx.reservationRoomAssignment.updateMany).toHaveBeenCalled();
+    expect(setup.tx.reservationSettlement.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ reservationId: 'reservation-checkout-1', incidentalAmount: 50, grossAmount: 1050, balanceAmount: 0 }) }));
+    expect(setup.tx.auditLog.create).toHaveBeenCalledTimes(2);
+    expect(setup.tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'GUEST_SETTLED' }) }));
+    expect(setup.tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'GUEST_CHECKED_OUT' }) }));
+  });
+
+  it('is idempotent when the stay is already checked out with a settlement', async () => {
+    const setup = checkoutSetup({ stayStatus: 'CHECKED_OUT', settlement: setupSettlement() });
+    const result = await setup.service.checkOut('RW-CHECKOUT-1', {}, { id: 'admin-1', role: 'ADMIN' });
+    expect(result.finalFolioNumber).toBe('RW-FOLIO-2026-DEMO1');
+    expect(setup.tx.reservationSettlement.create).not.toHaveBeenCalled();
+    expect(setup.tx.reservation.update).not.toHaveBeenCalled();
+  });
+
+  it('returns an idempotent checkout payment without creating a duplicate', async () => {
+    const setup = checkoutSetup();
+    const existing = { id: 'payment-existing', amount: new Prisma.Decimal(50), idempotencyKey: 'same-key' };
+    setup.tx.payment.findUnique.mockResolvedValue(existing);
+    const result = await setup.service.recordCheckoutPayment('RW-CHECKOUT-1', { amount: 50, mode: 'CASH', idempotencyKey: 'same-key' } as any, { id: 'admin-1', role: 'ADMIN' });
+    expect(result).toBe(existing);
+    expect(setup.tx.payment.create).not.toHaveBeenCalled();
+  });
+
+  function setupSettlement() { return { id: 'settlement-1', status: 'SETTLED', reservationAmount: new Prisma.Decimal(1000), incidentalAmount: new Prisma.Decimal(50), grossAmount: new Prisma.Decimal(1050), paidAmount: new Prisma.Decimal(1050), balanceAmount: new Prisma.Decimal(0), finalFolioNumber: 'RW-FOLIO-2026-DEMO1', settledAt: new Date(), snapshot: { finalFolioNumber: 'RW-FOLIO-2026-DEMO1' } }; }
+});

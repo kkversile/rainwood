@@ -212,15 +212,22 @@ export class MaintenanceService {
   }
 
   async takeRoomOutOfOrder(adminUserId: string, ticketId: string, body: MaintenanceImpactDto) {
-    const { ticket } = await this.adminTicket(adminUserId, ticketId);
-    if (!ACTIVE_STATUSES.includes(ticket.status)) throw new ConflictException('Only active maintenance tickets can place a room out of order.');
+    const admin = await this.managementUser(adminUserId);
     if (!body.requiresOutOfOrder) throw new BadRequestException('This action must request an out-of-order room impact.');
-    if (!ticket.room) throw new BadRequestException('A room is required before applying out-of-order impact.');
-    if (ticket.room.status === RoomOperationalStatus.OCCUPIED) throw new ConflictException('Occupied rooms cannot be taken out of order before the guest is moved.');
-    if (ticket.room.status !== RoomOperationalStatus.OUT_OF_ORDER) await this.housekeeping.setManagementRoomStatus(adminUserId, ticket.room.id, { status: RoomOperationalStatus.OUT_OF_ORDER });
-    const updated = await this.p.maintenanceTicket.update({ where: { id: ticketId }, data: { requiresOutOfOrder: true, outOfOrderAppliedAt: new Date() }, include: ticketInclude });
-    await this.audit.log({ actorUserId: adminUserId, action: 'ROOM_MARKED_OUT_OF_ORDER', entityType: 'MaintenanceTicket', entityId: ticketId, after: { ticketId, hotelId: ticket.hotelId, roomId: ticket.room.id, status: RoomOperationalStatus.OUT_OF_ORDER } });
-    return this.view(updated);
+    return serializable(this.p, async (tx) => {
+      const ticket = await tx.maintenanceTicket.findUnique({ where: { id: ticketId }, include: ticketInclude });
+      if (!ticket) throw new NotFoundException('Maintenance ticket not found.');
+      this.assertScope(admin, ticket.hotelId);
+      if (!ACTIVE_STATUSES.includes(ticket.status)) throw new ConflictException('Only active maintenance tickets can place a room out of order.');
+      if (!ticket.room) throw new BadRequestException('A room is required before applying out-of-order impact.');
+      if (ticket.room.status === RoomOperationalStatus.OCCUPIED) throw new ConflictException('Occupied rooms cannot be taken out of order before the guest is moved.');
+      // OOO is idempotent for an active ticket. Preserve the first impact timestamp.
+      if (ticket.room.status !== RoomOperationalStatus.OUT_OF_ORDER) await this.housekeeping.setManagementRoomStatusInTransaction(tx, adminUserId, ticket.room.id, RoomOperationalStatus.OUT_OF_ORDER);
+      const now = new Date();
+      const updated = await tx.maintenanceTicket.update({ where: { id: ticket.id }, data: { requiresOutOfOrder: true, outOfOrderAppliedAt: ticket.outOfOrderAppliedAt ?? now }, include: ticketInclude });
+      await tx.auditLog.create({ data: { actorUserId: adminUserId, action: 'ROOM_MARKED_OUT_OF_ORDER', entityType: 'MaintenanceTicket', entityId: ticket.id, after: { ticketId: ticket.id, hotelId: ticket.hotelId, roomId: ticket.room.id, status: RoomOperationalStatus.OUT_OF_ORDER } } });
+      return this.view(updated);
+    });
   }
 
   async staffTasks(staffUserId: string, query: MaintenanceStaffQueryDto) {

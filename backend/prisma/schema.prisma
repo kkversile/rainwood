@@ -59,6 +59,14 @@ enum StayStatus {
   NO_SHOW
 }
 
+enum ReservationSettlementStatus {
+  OPEN
+  SETTLED
+  PARTIAL
+  WRITTEN_OFF
+  VOIDED
+}
+
 enum RoomOperationalStatus {
   AVAILABLE
   OCCUPIED
@@ -302,6 +310,7 @@ model User {
   reconfirmedReservations    Reservation[]               @relation("ReservationReconfirmedBy")
   checkedInReservations      Reservation[]               @relation("ReservationCheckedInBy")
   checkedOutReservations     Reservation[]               @relation("ReservationCheckedOutBy")
+  reservationSettlements     ReservationSettlement[]     @relation("SettlementActor")
   uploadedFiles              StoredFile[]                @relation("FileUploader")
   agentDocuments             AgentDocument[]
   profileImageFileId         String?                     @unique
@@ -951,6 +960,7 @@ model Reservation {
   payments             Payment[]
   folioCharges         ReservationFolioCharge[]
   paymentAttempts      PaymentAttempt[]
+  settlement           ReservationSettlement?
   syncLogs             AxisSyncLog[]
   vouchers             Voucher[]
   cancellations        CancellationRequest[]
@@ -962,6 +972,33 @@ model Reservation {
   @@index([status, paymentStatus, syncStatus])
   @@index([stayStatus, checkIn, checkOut])
   @@index([email, createdAt])
+}
+
+model ReservationSettlement {
+  id                   String                      @id @default(cuid())
+  reservationId        String                      @unique
+  reservation          Reservation                 @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  status               ReservationSettlementStatus @default(OPEN)
+  reservationAmount    Decimal                     @db.Decimal(12, 2)
+  incidentalAmount     Decimal                     @db.Decimal(12, 2)
+  taxAmount            Decimal                     @default(0) @db.Decimal(12, 2)
+  discountAmount       Decimal                     @default(0) @db.Decimal(12, 2)
+  adjustmentAmount     Decimal                     @default(0) @db.Decimal(12, 2)
+  grossAmount          Decimal                     @db.Decimal(12, 2)
+  paidAmount           Decimal                     @db.Decimal(12, 2)
+  balanceAmount        Decimal                     @db.Decimal(12, 2)
+  finalFolioNumber     String?                     @unique
+  settledAt            DateTime?
+  settledById          String?
+  settledBy            User?                       @relation("SettlementActor", fields: [settledById], references: [id], onDelete: SetNull)
+  overrideReason       String?
+  overrideAuthorizedBy String?
+  notes                String?
+  snapshot             Json?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+
+  @@index([status, settledAt])
 }
 
 model Room {
@@ -1158,6 +1195,7 @@ model Payment {
   verifiedById      String?
   verifiedBy        User?           @relation("PaymentVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
   paidAt            DateTime?
+  idempotencyKey    String?         @unique
   createdAt         DateTime        @default(now())
 
   @@unique([provider, providerPaymentId])

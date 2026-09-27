@@ -5,7 +5,7 @@ const today = new Date(); today.setUTCHours(0, 0, 0, 0);
 const checkout = new Date(today); checkout.setUTCDate(checkout.getUTCDate() + 3);
 
 function serviceSetup() {
-  const reservation = { id: 'reservation-1', reference: 'RW-ARRIVAL-001', hotelId: 'hotel-1', hotel: { id: 'hotel-1', name: 'RainWood Demo', timezoneName: 'UTC' }, status: 'CONFIRMED', stayStatus: 'EXPECTED', checkIn: today, checkOut: checkout, lines: [{ id: 'line-1', rooms: 1, roomTypeId: 'type-1', roomType: { id: 'type-1', name: 'Deluxe' } }], roomAssignments: [] };
+  const reservation = { id: 'reservation-1', reference: 'RW-ARRIVAL-001', hotelId: 'hotel-1', hotel: { id: 'hotel-1', name: 'RainWood Demo', timezoneName: 'UTC' }, status: 'CONFIRMED', stayStatus: 'EXPECTED', checkIn: today, checkOut: checkout, totalAmount: 5000, advanceAmount: 0, balanceAmount: 5000, payments: [], folioCharges: [], lines: [{ id: 'line-1', rooms: 1, roomTypeId: 'type-1', roomType: { id: 'type-1', name: 'Deluxe' } }], roomAssignments: [] };
   const room = { id: 'room-203', hotelId: 'hotel-1', roomTypeId: 'type-1', roomNumber: '203', floor: '2', wing: null, status: 'AVAILABLE', active: true, assignments: [] };
   const updated = { reference: reservation.reference, stayStatus: 'CHECKED_IN', checkedInAt: new Date(), checkedInBy: { id: 'admin-1', name: 'Front Desk' }, roomAssignments: [{ room }] };
   const tx: any = {

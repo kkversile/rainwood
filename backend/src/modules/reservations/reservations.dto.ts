@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
-import { BookingSource, FolioChargeCategory, ModificationType } from '@prisma/client';
+import { IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { BookingSource, FolioChargeCategory, ModificationType, PaymentMode } from '@prisma/client';
 
 export class CreateReservationDto {
   @IsString()
@@ -231,7 +231,42 @@ export class CheckOutDto {
   force?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  allowOutstanding?: boolean;
+
+  @IsOptional()
+  @IsIn(['COMPANY_CREDIT', 'AGENT_CREDIT', 'MANAGEMENT_APPROVAL', 'WRITE_OFF', 'OTHER'])
+  overrideReason?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  authorizedBy?: string;
+
+  @IsOptional()
   @IsString()
   @MaxLength(500)
   note?: string;
+}
+
+export class CheckoutPaymentDto {
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  amount!: number;
+
+  @IsEnum(PaymentMode)
+  mode!: PaymentMode;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  reference?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  @MaxLength(120)
+  idempotencyKey?: string;
 }

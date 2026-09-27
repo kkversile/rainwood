@@ -9,7 +9,7 @@ function setup() {
   const p: any = { user: { findUnique: jest.fn().mockResolvedValue(admin) }, maintenanceTicket: { findUnique: jest.fn().mockResolvedValue(ticket), findUniqueOrThrow: jest.fn().mockResolvedValue(ticket), findMany: jest.fn().mockResolvedValue([]), groupBy: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0), create: jest.fn().mockResolvedValue(ticket), update: jest.fn().mockResolvedValue(ticket), updateMany: jest.fn().mockResolvedValue({ count: 1 }) }, room: { findUnique: jest.fn().mockResolvedValue({ id: 'room-203', hotelId: 'hotel-1', hotel: { active: true } }), count: jest.fn().mockResolvedValue(0), update: jest.fn() }, hotel: { findUnique: jest.fn().mockResolvedValue({ id: 'hotel-1', active: true }) }, $transaction: jest.fn(async (fn: any) => fn(p)), auditLog: { create: jest.fn() } };
   const audit = { log: jest.fn() } as any;
   const hotels = {} as any;
-  const housekeeping = { setManagementRoomStatus: jest.fn(), ensureTaskForDirtyRoom: jest.fn() } as any;
+  const housekeeping = { setManagementRoomStatusInTransaction: jest.fn(), ensureTaskForDirtyRoom: jest.fn() } as any;
   return { service: new MaintenanceService(p, audit, hotels, housekeeping), p, audit, ticket, maintenance, housekeeping };
 }
 
@@ -56,14 +56,31 @@ describe('maintenance workflow', () => {
     const { service, p, ticket, housekeeping } = setup();
     p.maintenanceTicket.findUnique.mockResolvedValue({ ...ticket, status });
     await expect(service.takeRoomOutOfOrder('admin-1', 'ticket-1', { requiresOutOfOrder: true })).resolves.toBeDefined();
-    expect(housekeeping.setManagementRoomStatus).toHaveBeenCalledWith('admin-1', 'room-203', { status: RoomOperationalStatus.OUT_OF_ORDER });
+    expect(housekeeping.setManagementRoomStatusInTransaction).toHaveBeenCalledWith(p, 'admin-1', 'room-203', RoomOperationalStatus.OUT_OF_ORDER);
+  });
+
+  it('does not update the ticket or audit when the room transition rolls back', async () => {
+    const { service, p, housekeeping } = setup();
+    housekeeping.setManagementRoomStatusInTransaction.mockRejectedValue(new ConflictException('room transition failed'));
+    await expect(service.takeRoomOutOfOrder('admin-1', 'ticket-1', { requiresOutOfOrder: true })).rejects.toThrow('room transition failed');
+    expect(p.maintenanceTicket.update).not.toHaveBeenCalled();
+    expect(p.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('idempotently attaches an already out-of-order room and preserves its original timestamp', async () => {
+    const { service, p, ticket, housekeeping } = setup();
+    const appliedAt = new Date('2026-09-27T08:00:00.000Z');
+    p.maintenanceTicket.findUnique.mockResolvedValue({ ...ticket, status: MaintenanceTicketStatus.IN_PROGRESS, requiresOutOfOrder: false, outOfOrderAppliedAt: appliedAt, room: { ...ticket.room, status: RoomOperationalStatus.OUT_OF_ORDER } });
+    await expect(service.takeRoomOutOfOrder('admin-1', 'ticket-1', { requiresOutOfOrder: true })).resolves.toBeDefined();
+    expect(housekeeping.setManagementRoomStatusInTransaction).not.toHaveBeenCalled();
+    expect(p.maintenanceTicket.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ outOfOrderAppliedAt: appliedAt }) }));
   });
 
   it.each([MaintenanceTicketStatus.RESOLVED, MaintenanceTicketStatus.CANCELLED])('rejects %s tickets from requesting out-of-order impact', async (status) => {
     const { service, p, ticket, housekeeping } = setup();
     p.maintenanceTicket.findUnique.mockResolvedValue({ ...ticket, status });
     await expect(service.takeRoomOutOfOrder('admin-1', 'ticket-1', { requiresOutOfOrder: true })).rejects.toBeInstanceOf(ConflictException);
-    expect(housekeeping.setManagementRoomStatus).not.toHaveBeenCalled();
+    expect(housekeeping.setManagementRoomStatusInTransaction).not.toHaveBeenCalled();
     expect(p.maintenanceTicket.update).not.toHaveBeenCalled();
   });
 
