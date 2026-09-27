@@ -17,7 +17,7 @@ test('admin housekeeping board exposes management filters and legal status actio
   const component = read('src/components/HousekeepingBoard.tsx');
   const page = read('src/app/admin/housekeeping/page.tsx');
   const shell = read('src/components/Shell.tsx');
-  for (const token of ['/housekeeping/board', '/housekeeping/staff', 'Assigned to', 'OUT_OF_ORDER', 'Restore dirty', 'Cancel task']) assert.match(component, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  for (const token of ['/housekeeping/board', '/housekeeping/staff', 'staffHotelId', 'roomStaff', "['PENDING', 'ACCEPTED']", 'Cleaning in progress', 'OUT_OF_ORDER', 'Restore dirty', 'Cancel task']) assert.match(component, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(page, /HousekeepingBoard/);
   assert.match(shell, /admin\/housekeeping', 'Housekeeping'/);
 });

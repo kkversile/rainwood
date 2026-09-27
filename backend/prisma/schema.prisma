@@ -945,6 +945,9 @@ model Room {
 }
 
 model HousekeepingTask {
+  // PostgreSQL migration 20260927170000_enforce_single_active_housekeeping_task
+  // owns a partial unique index so each room has at most one PENDING, ACCEPTED,
+  // or CLEANING task while retaining all completed/cancelled history.
   id                String                 @id @default(cuid())
   hotelId           String
   hotel             Hotel                  @relation(fields: [hotelId], references: [id], onDelete: Cascade)

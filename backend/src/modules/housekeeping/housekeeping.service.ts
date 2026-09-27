@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { HousekeepingTaskStatus, Prisma, RoomOperationalStatus, StaffDepartment, UserRole } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { AuditService } from '../../common/audit.service';
 import { PrismaService } from '../../common/prisma.service';
 import { serializable } from '../../common/transactions';
@@ -23,7 +24,16 @@ export class HousekeepingService {
     if (!room || room.status !== RoomOperationalStatus.DIRTY) return null;
     const existing = await client.housekeepingTask.findFirst({ where: { roomId, status: { in: ACTIVE_TASK_STATUSES } }, orderBy: { createdAt: 'desc' } });
     if (existing) return existing;
-    const task = await client.housekeepingTask.create({ data: { hotelId: room.hotelId, roomId: room.id, status: HousekeepingTaskStatus.PENDING, createdById: createdById ?? null } });
+    const inserted = await client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      INSERT INTO "HousekeepingTask" ("id", "hotelId", "roomId", "status", "createdById", "createdAt", "updatedAt")
+      VALUES (${randomUUID()}, ${room.hotelId}, ${room.id}, 'PENDING'::"HousekeepingTaskStatus", ${createdById ?? null}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT ("roomId") WHERE "status" IN ('PENDING'::"HousekeepingTaskStatus", 'ACCEPTED'::"HousekeepingTaskStatus", 'CLEANING'::"HousekeepingTaskStatus") DO NOTHING
+      RETURNING "id"
+    `);
+    if (!inserted.length) {
+      return client.housekeepingTask.findFirst({ where: { roomId, status: { in: ACTIVE_TASK_STATUSES } }, orderBy: { createdAt: 'desc' } });
+    }
+    const task = await client.housekeepingTask.findUniqueOrThrow({ where: { id: inserted[0].id } });
     await client.auditLog.create({ data: { actorUserId: createdById, action: 'HOUSEKEEPING_TASK_CREATED', entityType: 'HousekeepingTask', entityId: task.id, after: { hotelId: room.hotelId, roomId: room.id, roomNumber: room.roomNumber, status: task.status } } });
     return task;
   }
@@ -39,7 +49,7 @@ export class HousekeepingService {
   }
 
   private roomView(room: any) {
-    return { roomId: room.id, roomNumber: room.roomNumber, floor: room.floor, wing: room.wing, roomType: room.roomType, roomStatus: room.status, task: room.housekeepingTasks?.[0] ? this.taskView(room.housekeepingTasks[0]) : null };
+    return { hotelId: room.hotelId, roomId: room.id, roomNumber: room.roomNumber, floor: room.floor, wing: room.wing, roomType: room.roomType, roomStatus: room.status, task: room.housekeepingTasks?.[0] ? this.taskView(room.housekeepingTasks[0]) : null };
   }
 
   private roomWhere(query: HousekeepingBoardQueryDto, defaultStatuses?: RoomOperationalStatus[]) {
@@ -136,24 +146,26 @@ export class HousekeepingService {
   async assign(adminUserId: string, taskId: string, body: HousekeepingAssignDto) {
     const admin = await this.p.user.findUnique({ where: { id: adminUserId }, select: { id: true, role: true, staffHotelId: true } });
     if (!admin || !MANAGEMENT_ROLES.includes(admin.role)) throw new ForbiddenException('Management permission is required.');
-    const staff = await this.p.user.findUnique({ where: { id: body.staffUserId }, select: { id: true, name: true, role: true, active: true, staffDepartment: true, staffHotelId: true } });
-    if (!staff || !staff.active || staff.role !== UserRole.SERVICE_STAFF || staff.staffDepartment !== StaffDepartment.HOUSEKEEPING || (admin.staffHotelId && staff.staffHotelId !== admin.staffHotelId)) throw new BadRequestException('Housekeeping staff must be active and assigned to the same hotel.');
     const task = await this.p.housekeepingTask.findUnique({ where: { id: taskId }, select: { id: true, hotelId: true, roomId: true, status: true } });
     if (!task || (admin.staffHotelId && task.hotelId !== admin.staffHotelId)) throw new NotFoundException('Housekeeping task not found.');
     if (task.status !== HousekeepingTaskStatus.PENDING && task.status !== HousekeepingTaskStatus.ACCEPTED) throw new ConflictException('Only pending or accepted tasks can be assigned.');
+    const staff = await this.p.user.findUnique({ where: { id: body.staffUserId }, select: { id: true, name: true, role: true, active: true, staffDepartment: true, staffHotelId: true, staffHotel: { select: { active: true } } } });
+    if (!staff || !staff.active || staff.role !== UserRole.SERVICE_STAFF || staff.staffDepartment !== StaffDepartment.HOUSEKEEPING || staff.staffHotelId !== task.hotelId || !staff.staffHotel?.active) throw new BadRequestException('Selected housekeeping staff member is not assigned to this hotel.');
     const updated = await this.p.housekeepingTask.update({ where: { id: taskId }, data: { assignedToId: staff.id, status: HousekeepingTaskStatus.ACCEPTED, acceptedAt: new Date() }, include: taskInclude });
-    await this.audit.log({ actorUserId: adminUserId, action: 'HOUSEKEEPING_TASK_ASSIGNED', entityType: 'HousekeepingTask', entityId: taskId, after: { hotelId: task.hotelId, roomId: task.roomId, assignedToId: staff.id } });
+    await this.audit.log({ actorUserId: adminUserId, action: 'HOUSEKEEPING_TASK_ASSIGNED', entityType: 'HousekeepingTask', entityId: taskId, after: { taskId, hotelId: task.hotelId, roomId: task.roomId, assignedToId: staff.id, assignedToName: staff.name } });
     return this.taskView(updated);
   }
 
   async cancel(adminUserId: string, taskId: string, body: HousekeepingCancelDto) {
-    const task = await this.p.housekeepingTask.findUnique({ where: { id: taskId }, select: { id: true, hotelId: true, roomId: true, status: true } });
+    const task = await this.p.housekeepingTask.findUnique({ where: { id: taskId }, select: { id: true, hotelId: true, roomId: true, status: true, room: { select: { status: true, roomNumber: true } } } });
     if (!task) throw new NotFoundException('Housekeeping task not found.');
     const admin = await this.p.user.findUnique({ where: { id: adminUserId }, select: { role: true, staffHotelId: true } });
     if (!admin || !MANAGEMENT_ROLES.includes(admin.role) || (admin.staffHotelId && admin.staffHotelId !== task.hotelId)) throw new ForbiddenException('Management permission is required.');
-    if (![...ACTIVE_TASK_STATUSES].includes(task.status)) throw new ConflictException('Only active housekeeping tasks can be cancelled.');
+    if (task.status === HousekeepingTaskStatus.CLEANING) throw new ConflictException('Cleaning has already started. Complete the task or use an authorized room-status exception workflow.');
+    if (task.status !== HousekeepingTaskStatus.PENDING && task.status !== HousekeepingTaskStatus.ACCEPTED) throw new ConflictException('Only pending or accepted housekeeping tasks can be cancelled.');
+    if (task.room.status !== RoomOperationalStatus.DIRTY) throw new ConflictException(`Room ${task.room.roomNumber} is not dirty and cannot be cancelled safely.`);
     const updated = await this.p.housekeepingTask.update({ where: { id: taskId }, data: { status: HousekeepingTaskStatus.CANCELLED, note: body.note?.trim() || null }, include: taskInclude });
-    await this.audit.log({ actorUserId: adminUserId, action: 'HOUSEKEEPING_TASK_CANCELLED', entityType: 'HousekeepingTask', entityId: taskId, after: { hotelId: task.hotelId, roomId: task.roomId, note: body.note?.trim() || null } });
+    await this.audit.log({ actorUserId: adminUserId, action: 'HOUSEKEEPING_TASK_CANCELLED', entityType: 'HousekeepingTask', entityId: taskId, before: { taskId, hotelId: task.hotelId, roomId: task.roomId, status: task.status }, after: { taskId, hotelId: task.hotelId, roomId: task.roomId, status: HousekeepingTaskStatus.CANCELLED, note: body.note?.trim() || null } });
     return this.taskView(updated);
   }
 
