@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { apiRequest, clearAccessToken, setAccessToken } from '../lib/api';
 import { staffServiceWorkerConfig } from '../lib/staff-service-worker';
 import { HousekeepingData, type HousekeepingProfile } from './HousekeepingData';
+import { MaintenanceData } from './MaintenanceData';
 
 export type StaffProfile = HousekeepingProfile & { allowedCategories: string[] };
 type Stay = { reference: string; guestName: string; checkIn: string; checkOut: string; status: string; stayStatus: string; rooms: number; roomTypes: string[]; adults: number; children: number; pax: number; hotel: { id: string; name: string }; assignedRooms: { id: string; roomNumber: string; floor?: string | null; wing?: string | null; roomType?: string | null }[] };
@@ -52,5 +53,6 @@ export function StaffHomeRouter() {
   const [profile, setProfile] = useState<StaffProfile | null>(null);
   useEffect(() => { apiRequest<StaffProfile>('/staff/me').then(setProfile).catch(() => undefined); }, []);
   if (profile?.department === 'HOUSEKEEPING') return <HousekeepingData profile={profile} />;
+  if (profile?.department === 'MAINTENANCE') return <MaintenanceData profile={profile} />;
   return <StaffHomeData />;
 }

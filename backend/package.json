@@ -9,6 +9,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
+    "housekeeping:integrity": "tsx scripts/check-housekeeping-integrity.ts",
     "test": "jest --runInBand",
     "test:e2e": "jest --config test/jest-e2e.json --runInBand",
     "lint": "eslint src prisma --max-warnings 0",

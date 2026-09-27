@@ -12,7 +12,7 @@ import { HousekeepingService } from './housekeeping.service';
 export class HousekeepingController {
   constructor(private service: HousekeepingService) {}
 
-  @Get('board') board(@Query() query: HousekeepingBoardQueryDto) { return this.service.board(query); }
+  @Get('board') board(@CurrentUser() user: any, @Query() query: HousekeepingBoardQueryDto) { return this.service.board(user.id, query); }
   @Get('staff') staff(@CurrentUser() user: any) { return this.service.staffList(user.id); }
   @Get('rooms/:roomId/tasks') history(@CurrentUser() user: any, @Param('roomId') roomId: string) { return this.service.history(user.id, roomId); }
   @Post('tasks/:taskId/assign') assign(@CurrentUser() user: any, @Param('taskId') taskId: string, @Body() body: HousekeepingAssignDto) { return this.service.assign(user.id, taskId, body); }

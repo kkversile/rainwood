@@ -10,6 +10,7 @@ const rules: Record<StaffDepartment, readonly FolioChargeCategory[]> = {
   HOUSEKEEPING: [],
   ROOM_SERVICE: ['FOOD_AND_BEVERAGE', 'ROOM_SERVICE', 'MINIBAR', 'OTHER'],
   FRONT_OFFICE: ['EXTRA_BED', 'TRANSPORT', 'ACTIVITY', 'SPA', 'EARLY_CHECKIN', 'LATE_CHECKOUT', 'ROOM_UPGRADE', 'OTHER'],
+  MAINTENANCE: [],
   OTHER: ['OTHER'],
 };
 

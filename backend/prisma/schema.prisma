@@ -21,6 +21,7 @@ enum UserRole {
 enum StaffDepartment {
   FOOD_BEVERAGE
   HOUSEKEEPING
+  MAINTENANCE
   ROOM_SERVICE
   FRONT_OFFICE
   OTHER
@@ -71,6 +72,42 @@ enum HousekeepingTaskStatus {
   ACCEPTED
   CLEANING
   COMPLETED
+  CANCELLED
+}
+
+enum MaintenanceTicketSource {
+  HOUSEKEEPING
+  FRONT_DESK
+  STAFF
+  ADMIN
+  OTHER
+}
+
+enum MaintenanceCategory {
+  ELECTRICAL
+  PLUMBING
+  HVAC
+  TV_ELECTRONICS
+  FURNITURE
+  BATHROOM
+  DOOR_LOCK
+  INTERNET
+  GENERAL
+  OTHER
+}
+
+enum MaintenancePriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum MaintenanceTicketStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
   CANCELLED
 }
 
@@ -284,6 +321,9 @@ model User {
   housekeepingTasksCreated   HousekeepingTask[]          @relation("HousekeepingTaskCreator")
   housekeepingTasksCompleted HousekeepingTask[]          @relation("HousekeepingTaskCompleter")
   housekeepingIssuesReported HousekeepingTask[]          @relation("HousekeepingIssueReporter")
+  maintenanceTicketsReported MaintenanceTicket[]         @relation("MaintenanceTicketReporter")
+  maintenanceTicketsAssigned MaintenanceTicket[]         @relation("MaintenanceTicketAssignee")
+  maintenanceTicketsCreated  MaintenanceTicket[]         @relation("MaintenanceTicketCreator")
   wallet                     AgentWallet?
   createdAt                  DateTime                    @default(now())
   updatedAt                  DateTime                    @updatedAt
@@ -373,6 +413,7 @@ model Hotel {
   reservations         Reservation[]
   staffUsers           User[]                     @relation("StaffHotel")
   housekeepingTasks    HousekeepingTask[]
+  maintenanceTickets   MaintenanceTicket[]
   holds                InventoryHold[]
   waitlist             WaitlistEntry[]
   createdAt            DateTime                   @default(now())
@@ -924,20 +965,21 @@ model Reservation {
 }
 
 model Room {
-  id                String                      @id @default(cuid())
-  hotelId           String
-  hotel             Hotel                       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  roomTypeId        String
-  roomType          RoomType                    @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
-  roomNumber        String
-  floor             String?
-  wing              String?
-  status            RoomOperationalStatus       @default(AVAILABLE)
-  active            Boolean                     @default(true)
-  assignments       ReservationRoomAssignment[]
-  housekeepingTasks HousekeepingTask[]
-  createdAt         DateTime                    @default(now())
-  updatedAt         DateTime                    @updatedAt
+  id                 String                      @id @default(cuid())
+  hotelId            String
+  hotel              Hotel                       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomTypeId         String
+  roomType           RoomType                    @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
+  roomNumber         String
+  floor              String?
+  wing               String?
+  status             RoomOperationalStatus       @default(AVAILABLE)
+  active             Boolean                     @default(true)
+  assignments        ReservationRoomAssignment[]
+  housekeepingTasks  HousekeepingTask[]
+  maintenanceTickets MaintenanceTicket[]
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
 
   @@unique([hotelId, roomNumber])
   @@index([hotelId, roomTypeId, active])
@@ -970,10 +1012,48 @@ model HousekeepingTask {
   issueReportedById String?
   issueReportedBy   User?                  @relation("HousekeepingIssueReporter", fields: [issueReportedById], references: [id], onDelete: SetNull)
   updatedAt         DateTime               @updatedAt
+  maintenanceTicket MaintenanceTicket?
 
   @@index([hotelId, status])
   @@index([roomId, status])
   @@index([assignedToId, status])
+}
+
+model MaintenanceTicket {
+  id                  String                  @id @default(cuid())
+  hotelId             String
+  hotel               Hotel                   @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomId              String?
+  room                Room?                   @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  housekeepingTaskId  String?                 @unique
+  housekeepingTask    HousekeepingTask?       @relation(fields: [housekeepingTaskId], references: [id], onDelete: SetNull)
+  source              MaintenanceTicketSource
+  category            MaintenanceCategory
+  priority            MaintenancePriority     @default(NORMAL)
+  status              MaintenanceTicketStatus @default(OPEN)
+  title               String
+  description         String
+  reportedById        String?
+  reportedBy          User?                   @relation("MaintenanceTicketReporter", fields: [reportedById], references: [id], onDelete: SetNull)
+  reportedAt          DateTime                @default(now())
+  assignedToId        String?
+  assignedTo          User?                   @relation("MaintenanceTicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedAt          DateTime?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  resolutionNote      String?
+  requiresOutOfOrder  Boolean                 @default(false)
+  outOfOrderAppliedAt DateTime?
+  outOfOrderClearedAt DateTime?
+  createdById         String?
+  createdBy           User?                   @relation("MaintenanceTicketCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  @@index([hotelId, status])
+  @@index([roomId, status])
+  @@index([assignedToId, status])
+  @@index([hotelId, priority, status])
 }
 
 model ReservationRoomAssignment {

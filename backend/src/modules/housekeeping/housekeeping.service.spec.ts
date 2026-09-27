@@ -19,8 +19,9 @@ function setup() {
     $transaction: jest.fn(async (operation: any) => operation(prisma)),
     $queryRaw: jest.fn().mockResolvedValue([{ id: 'task-1' }]),
     user: { findUnique: jest.fn().mockResolvedValue(staff()) },
-    room: { findUnique: jest.fn().mockResolvedValue({ id: 'room-203', hotelId: 'hotel-1', roomNumber: '203', status: RoomOperationalStatus.DIRTY }), update: jest.fn() },
+    room: { findUnique: jest.fn().mockResolvedValue({ id: 'room-203', hotelId: 'hotel-1', roomNumber: '203', status: RoomOperationalStatus.DIRTY }), findMany: jest.fn().mockResolvedValue([]), groupBy: jest.fn().mockResolvedValue([]), update: jest.fn() },
     housekeepingTask: { findFirst: jest.fn().mockResolvedValue(null), findUnique: jest.fn().mockResolvedValue(task()), findUniqueOrThrow: jest.fn().mockResolvedValue(task()), update: jest.fn().mockResolvedValue(task()), updateMany: jest.fn().mockResolvedValue({ count: 1 }), findMany: jest.fn() },
+    maintenanceTicket: { upsert: jest.fn().mockResolvedValue({ id: 'maintenance-1' }) },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
   };
   const audit = { log: jest.fn().mockResolvedValue({}) } as any;
@@ -78,7 +79,7 @@ describe('housekeeping workflow', () => {
     prisma.housekeepingTask.findUnique.mockResolvedValue(task({ status: HousekeepingTaskStatus.CLEANING, assignedToId: 'staff-1', room: { roomNumber: '203' } }));
     await service.reportIssue('staff-1', 'task-1', { note: 'AC leaking' });
     expect(prisma.housekeepingTask.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ issueNote: 'AC leaking' }) }));
-    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'HOUSEKEEPING_ISSUE_REPORTED' }));
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'HOUSEKEEPING_ISSUE_REPORTED' }) }));
     expect(prisma.room.update).not.toHaveBeenCalled();
   });
 
@@ -136,5 +137,34 @@ describe('housekeeping workflow', () => {
     prepareCancel(prisma, status);
     await expect(service.cancel('admin-1', 'task-1', {})).rejects.toBeInstanceOf(ConflictException);
     expect(prisma.housekeepingTask.update).not.toHaveBeenCalled();
+  });
+
+  it('scopes a hotel admin board to its own hotel and rejects another hotel query', async () => {
+    const { service, prisma } = setup();
+    prisma.user.findUnique.mockResolvedValue(admin({ role: UserRole.ADMIN, staffHotelId: 'hotel-1' }));
+    await expect(service.board('admin-1', {})).resolves.toEqual({ summary: expect.any(Object), rooms: [] });
+    expect(prisma.room.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ hotelId: 'hotel-1' }) }));
+    await expect(service.board('admin-1', { hotelId: 'hotel-2' })).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('lets a global admin choose a hotel or view all hotels', async () => {
+    const { service, prisma } = setup();
+    prisma.user.findUnique.mockResolvedValue(admin());
+    await service.board('admin-1', { hotelId: 'hotel-2' });
+    expect(prisma.room.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ hotelId: 'hotel-2' }) }));
+    await service.board('admin-1', {});
+    expect(prisma.room.findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.not.objectContaining({ hotelId: expect.anything() }) }));
+  });
+
+  it('authorizes room status changes before calling the physical-room service', async () => {
+    const { service, prisma } = setup();
+    prisma.user.findUnique.mockResolvedValue(admin({ role: UserRole.ADMIN, staffHotelId: 'hotel-1' }));
+    prisma.room.findUnique.mockResolvedValue({ hotelId: 'hotel-1' });
+    await service.setManagementRoomStatus('admin-1', 'room-203', { status: RoomOperationalStatus.DIRTY });
+    expect((service as any).hotels.updatePhysicalRoom).toHaveBeenCalledWith('room-203', { status: RoomOperationalStatus.DIRTY });
+    prisma.user.findUnique.mockResolvedValue(admin({ role: UserRole.ADMIN, staffHotelId: 'hotel-1' }));
+    prisma.room.findUnique.mockResolvedValue({ hotelId: 'hotel-2' });
+    await expect(service.setManagementRoomStatus('admin-1', 'room-203', { status: RoomOperationalStatus.DIRTY })).rejects.toBeInstanceOf(NotFoundException);
+    expect((service as any).hotels.updatePhysicalRoom).toHaveBeenCalledTimes(1);
   });
 });
