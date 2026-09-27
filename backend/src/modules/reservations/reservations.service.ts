@@ -12,10 +12,11 @@ import { serializable } from '../../common/transactions';
 import { assertReservationTransition } from './reservation-state';
 import { RateResolverService } from '../availability/rate-resolver';
 import { calculateAgentBookingPaymentTerms, calculateReservationPaymentSchedule } from '../../common/agent-payment-terms';
+import { HousekeepingService } from '../housekeeping/housekeeping.service';
 
 @Injectable()
 export class ReservationsService {
-  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService) {}
+  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, private readonly housekeeping?: HousekeepingService) {}
 
   private operationalRoles = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION'];
 
@@ -93,6 +94,7 @@ export class ReservationsService {
       const now = new Date();
       await tx.reservationRoomAssignment.update({ where: { id: current.id }, data: { unassignedAt: now, unassignedById: user.id, reason } });
       await tx.room.update({ where: { id: current.roomId }, data: { status: RoomOperationalStatus.DIRTY } });
+      await this.housekeeping?.ensureTaskForDirtyRoom(tx, current.roomId, user.id);
       const next = await tx.reservationRoomAssignment.create({ data: { reservationId: reservation.id, reservationLineId: current.reservationLineId, roomId: target.id, assignedById: user.id, assignedAt: now, reason } });
       await tx.room.update({ where: { id: target.id }, data: { status: RoomOperationalStatus.OCCUPIED } });
       await tx.auditLog.create({ data: { actorUserId: user.id, action: 'ROOM_CHANGED', entityType: 'ReservationRoomAssignment', entityId: next.id, after: { reference, oldRoom: current.room.roomNumber, newRoom: target.roomNumber, reason } } });
@@ -109,7 +111,10 @@ export class ReservationsService {
       const totalOutstanding = Number(reservation.balanceAmount) + reservation.folioCharges.reduce((sum, charge) => sum + Number(charge.totalAmount), 0);
       if (totalOutstanding > 0.005 && !body.force) throw new ConflictException({ code: 'OUTSTANDING_BALANCE', message: `Outstanding balance is INR ${totalOutstanding.toFixed(2)}. Confirm checkout to continue.`, totalOutstanding });
       const now = new Date();
-      for (const assignment of reservation.roomAssignments) await tx.room.update({ where: { id: assignment.roomId }, data: { status: RoomOperationalStatus.DIRTY } });
+      for (const assignment of reservation.roomAssignments) {
+        await tx.room.update({ where: { id: assignment.roomId }, data: { status: RoomOperationalStatus.DIRTY } });
+        await this.housekeeping?.ensureTaskForDirtyRoom(tx, assignment.roomId, user.id);
+      }
       await tx.reservationRoomAssignment.updateMany({ where: { reservationId: reservation.id, unassignedAt: null }, data: { unassignedAt: now, unassignedById: user.id, reason: body.note?.trim() || 'Guest checked out' } });
       const updated = await tx.reservation.update({ where: { id: reservation.id }, data: { stayStatus: StayStatus.CHECKED_OUT, checkedOutAt: now, checkedOutById: user.id }, include: { checkedOutBy: { select: { id: true, name: true } } } });
       await tx.auditLog.create({ data: { actorUserId: user.id, action: 'GUEST_CHECKED_OUT', entityType: 'Reservation', entityId: reservation.id, after: { reference, rooms: reservation.roomAssignments.map((assignment) => assignment.room.roomNumber), totalOutstanding, note: body.note?.trim() || null } } });

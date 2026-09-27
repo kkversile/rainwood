@@ -26,6 +26,10 @@ export class StaffService {
     };
   }
 
+  private assertGuestOperationsAllowed(user: { staffDepartment: StaffDepartment | null }) {
+    if (user.staffDepartment === StaffDepartment.HOUSEKEEPING) throw new ForbiddenException('Housekeeping staff must use the housekeeping room board.');
+  }
+
   private summarize(row: any) {
     const roomTypes = [...new Map(row.lines.map((line: any) => [line.roomType.id, line.roomType.name])).values()];
     const rooms = row.lines.reduce((sum: number, line: any) => sum + line.rooms, 0);
@@ -42,12 +46,14 @@ export class StaffService {
 
   async listStays(userId: string, query: StaffStaysQueryDto) {
     const user = await this.profile(userId);
+    this.assertGuestOperationsAllowed(user);
     const rows = await this.p.reservation.findMany({ where: this.operationalWhere(user.staffHotelId!, query.q), orderBy: [{ checkIn: 'asc' }, { guestName: 'asc' }], select: { reference: true, guestName: true, checkIn: true, checkOut: true, status: true, stayStatus: true, hotel: { select: { id: true, name: true } }, lines: { select: { rooms: true, adults: true, children: true, roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, select: { id: true, room: { select: { roomNumber: true, floor: true, wing: true, roomType: { select: { name: true } } } } } } } });
     return rows.map((row) => this.summarize(row));
   }
 
   private async staffStay(userId: string, reference: string) {
     const user = await this.profile(userId);
+    this.assertGuestOperationsAllowed(user);
     const row = await this.p.reservation.findUnique({ where: { reference }, select: { reference: true, guestName: true, checkIn: true, checkOut: true, status: true, stayStatus: true, hotelId: true, hotel: { select: { id: true, name: true } }, lines: { select: { rooms: true, adults: true, children: true, roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, select: { id: true, room: { select: { roomNumber: true, floor: true, wing: true, roomType: { select: { name: true } } } } } } } });
     if (!row || row.hotelId !== user.staffHotelId) throw new NotFoundException('Operational stay not found');
     if (row.stayStatus !== StayStatus.CHECKED_IN) throw new NotFoundException('Operational stay not found');

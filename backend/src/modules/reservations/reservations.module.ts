@@ -1,1 +1,9 @@
-import { Module } from '@nestjs/common';import { ReservationsService } from './reservations.service';import { ReservationsController } from './reservations.controller';import { HoldsModule } from '../holds/holds.module';import { AvailabilityModule } from '../availability/availability.module';@Module({imports:[HoldsModule, AvailabilityModule],providers:[ReservationsService],controllers:[ReservationsController],exports:[ReservationsService]})export class ReservationsModule{}
+import { Module } from '@nestjs/common';
+import { AvailabilityModule } from '../availability/availability.module';
+import { HoldsModule } from '../holds/holds.module';
+import { HousekeepingModule } from '../housekeeping/housekeeping.module';
+import { ReservationsController } from './reservations.controller';
+import { ReservationsService } from './reservations.service';
+
+@Module({ imports: [HoldsModule, AvailabilityModule, HousekeepingModule], providers: [ReservationsService], controllers: [ReservationsController], exports: [ReservationsService] })
+export class ReservationsModule {}

@@ -46,6 +46,12 @@ describe('StaffService', () => {
     }
   });
 
+  it('keeps housekeeping staff out of guest stays and folios', async () => {
+    const housekeeping = setup(stay(), profile({ staffDepartment: 'HOUSEKEEPING' }));
+    await expect(housekeeping.service.listStays('staff-1', {} as any)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(housekeeping.service.getFolio('staff-1', 'RW-STAFF-1')).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('returns checked-in stays independent of reservation date heuristics', async () => {
     const current = setup();
     await expect(current.service.getStay('staff-1', 'RW-STAFF-1')).resolves.toEqual(expect.objectContaining({ reference: 'RW-STAFF-1' }));

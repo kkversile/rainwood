@@ -24,6 +24,7 @@ import { SiteSettingsModule } from './modules/site-settings/site-settings.module
 import { AgentsModule } from './modules/agents/agents.module';
 import { SupplementaryChargesModule } from './modules/supplementary-charges/supplementary-charges.module';
 import { StaffModule } from './modules/staff/staff.module';
+import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { StaffModule } from './modules/staff/staff.module';
     AgentsModule,
     SupplementaryChargesModule,
     StaffModule,
+    HousekeepingModule,
   ],
 })
 export class AppModule {}
