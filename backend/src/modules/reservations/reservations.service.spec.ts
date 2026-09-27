@@ -165,7 +165,7 @@ describe('reservation guest folio charges', () => {
 });
 
 describe('checkout settlement', () => {
-  function checkoutSetup(overrides: Record<string, any> = {}) {
+  function checkoutSetup(overrides: Record<string, any> = {}, actorRole = 'ADMIN') {
     const reservation: any = {
       id: 'reservation-checkout-1', reference: 'RW-CHECKOUT-1', hotelId: 'hotel-1', status: 'CONFIRMED', stayStatus: 'CHECKED_IN',
       guestName: 'Demo Guest', email: 'guest@example.com', mobile: '9999999999', gstin: null,
@@ -179,6 +179,7 @@ describe('checkout settlement', () => {
     };
     const settlement: any = { id: 'settlement-1', status: 'SETTLED', reservationId: reservation.id, reservationAmount: new Prisma.Decimal(1000), incidentalAmount: new Prisma.Decimal(50), grossAmount: new Prisma.Decimal(1050), paidAmount: new Prisma.Decimal(1050), balanceAmount: new Prisma.Decimal(0), finalFolioNumber: 'RW-FOLIO-2026-DEMO1', settledAt: new Date('2026-09-28T12:00:00.000Z'), snapshot: { finalFolioNumber: 'RW-FOLIO-2026-DEMO1' } };
     const tx: any = {
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'admin-1', name: 'Authenticated Admin', role: actorRole }) },
       reservation: { findUnique: jest.fn().mockResolvedValue(reservation), update: jest.fn().mockResolvedValue({ reference: reservation.reference, stayStatus: 'CHECKED_OUT', checkedOutAt: new Date(), checkedOutBy: { id: 'admin-1', name: 'Admin' } }) },
       room: { update: jest.fn().mockResolvedValue({}) },
       reservationRoomAssignment: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
@@ -225,6 +226,48 @@ describe('checkout settlement', () => {
     const result = await setup.service.recordCheckoutPayment('RW-CHECKOUT-1', { amount: 50, mode: 'CASH', idempotencyKey: 'same-key' } as any, { id: 'admin-1', role: 'ADMIN' });
     expect(result).toBe(existing);
     expect(setup.tx.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('records an incidental checkout payment without rewriting reservation accommodation financials', async () => {
+    const setup = checkoutSetup({ totalAmount: new Prisma.Decimal(10000), advanceAmount: new Prisma.Decimal(10000), balanceAmount: new Prisma.Decimal(0), folioCharges: [{ totalAmount: new Prisma.Decimal(2000) }], payments: [{ amount: new Prisma.Decimal(10000), verified: true }] });
+    await setup.service.recordCheckoutPayment('RW-CHECKOUT-1', { amount: 2000, mode: 'CASH', idempotencyKey: 'incidental-payment-1' } as any, { id: 'admin-1', role: 'ADMIN' });
+    expect(setup.tx.payment.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ amount: new Prisma.Decimal(2000) }) }));
+    expect(setup.tx.reservation.update).not.toHaveBeenCalled();
+    expect(setup.reservation.totalAmount).toEqual(new Prisma.Decimal(10000));
+    expect(setup.reservation.advanceAmount).toEqual(new Prisma.Decimal(10000));
+    expect(setup.reservation.balanceAmount).toEqual(new Prisma.Decimal(0));
+  });
+
+  it('keeps partially paid accommodation fields unchanged when checkout payment covers only incidentals', async () => {
+    const setup = checkoutSetup({ totalAmount: new Prisma.Decimal(10000), advanceAmount: new Prisma.Decimal(6000), balanceAmount: new Prisma.Decimal(4000), folioCharges: [{ totalAmount: new Prisma.Decimal(2000) }], payments: [{ amount: new Prisma.Decimal(6000), verified: true }] });
+    await setup.service.recordCheckoutPayment('RW-CHECKOUT-1', { amount: 2000, mode: 'UPI', idempotencyKey: 'incidental-payment-2' } as any, { id: 'admin-1', role: 'ADMIN' });
+    expect(setup.tx.reservation.update).not.toHaveBeenCalled();
+    expect(setup.reservation.advanceAmount).toEqual(new Prisma.Decimal(6000));
+    expect(setup.reservation.balanceAmount).toEqual(new Prisma.Decimal(4000));
+  });
+
+  it('allows a reservation user to complete a zero-balance checkout', async () => {
+    const setup = checkoutSetup({}, 'RESERVATION');
+    await expect(setup.service.checkOut('RW-CHECKOUT-1', {}, { id: 'admin-1', role: 'RESERVATION' })).resolves.toEqual(expect.objectContaining({ stayStatus: 'CHECKED_OUT' }));
+  });
+
+  it('rejects a reservation user attempting an outstanding-balance override', async () => {
+    const setup = checkoutSetup({ totalAmount: new Prisma.Decimal(1000), advanceAmount: new Prisma.Decimal(0), balanceAmount: new Prisma.Decimal(1000), payments: [], folioCharges: [] }, 'RESERVATION');
+    await expect(setup.service.checkOut('RW-CHECKOUT-1', { allowOutstanding: true, overrideReason: 'MANAGEMENT_APPROVAL', authorizedBy: 'General Manager' } as any, { id: 'admin-1', role: 'RESERVATION' })).rejects.toThrow('Only Admin or Super Admin');
+  });
+
+  it.each(['ADMIN', 'SUPER_ADMIN'])('stores authenticated %s identity for an outstanding override and ignores spoofed text', async (role) => {
+    const setup = checkoutSetup({ totalAmount: new Prisma.Decimal(1000), advanceAmount: new Prisma.Decimal(0), balanceAmount: new Prisma.Decimal(1000), payments: [], folioCharges: [] }, role);
+    const result: any = await setup.service.checkOut('RW-CHECKOUT-1', { allowOutstanding: true, overrideReason: 'MANAGEMENT_APPROVAL', authorizedBy: 'General Manager' } as any, { id: 'admin-1', role, name: 'Spoofed Name' });
+    expect(result.stayStatus).toBe('CHECKED_OUT');
+    expect(setup.tx.reservationSettlement.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ overrideAuthorizedById: 'admin-1', overrideAuthorizedBy: 'Authenticated Admin' }) }));
+    expect(result.snapshot.override).toEqual({ reason: 'MANAGEMENT_APPROVAL', authorizedBy: { id: 'admin-1', name: 'Authenticated Admin' } });
+    expect(setup.tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'GUEST_SETTLED', after: expect.objectContaining({ overrideAuthorizedById: 'admin-1' }) }) }));
+  });
+
+  it('requires an override reason even for an authorized Admin', async () => {
+    const setup = checkoutSetup({ totalAmount: new Prisma.Decimal(1000), advanceAmount: new Prisma.Decimal(0), balanceAmount: new Prisma.Decimal(1000), payments: [], folioCharges: [] });
+    await expect(setup.service.checkOut('RW-CHECKOUT-1', { allowOutstanding: true } as any, { id: 'admin-1', role: 'ADMIN' })).rejects.toThrow('override reason');
   });
 
   function setupSettlement() { return { id: 'settlement-1', status: 'SETTLED', reservationAmount: new Prisma.Decimal(1000), incidentalAmount: new Prisma.Decimal(50), grossAmount: new Prisma.Decimal(1050), paidAmount: new Prisma.Decimal(1050), balanceAmount: new Prisma.Decimal(0), finalFolioNumber: 'RW-FOLIO-2026-DEMO1', settledAt: new Date(), snapshot: { finalFolioNumber: 'RW-FOLIO-2026-DEMO1' } }; }

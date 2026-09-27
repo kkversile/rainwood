@@ -238,6 +238,7 @@ export class CheckOutDto {
   @IsIn(['COMPANY_CREDIT', 'AGENT_CREDIT', 'MANAGEMENT_APPROVAL', 'WRITE_OFF', 'OTHER'])
   overrideReason?: string;
 
+  /** @deprecated Accepted for older clients but ignored. Authorization is derived from the authenticated user. */
   @IsOptional()
   @IsString()
   @MinLength(2)

@@ -9,6 +9,7 @@ function serviceSetup() {
   const room = { id: 'room-203', hotelId: 'hotel-1', roomTypeId: 'type-1', roomNumber: '203', floor: '2', wing: null, status: 'AVAILABLE', active: true, assignments: [] };
   const updated = { reference: reservation.reference, stayStatus: 'CHECKED_IN', checkedInAt: new Date(), checkedInBy: { id: 'admin-1', name: 'Front Desk' }, roomAssignments: [{ room }] };
   const tx: any = {
+    user: { findUnique: jest.fn().mockResolvedValue({ id: 'admin-1', name: 'Front Desk', role: 'ADMIN' }) },
     reservation: { findUnique: jest.fn().mockResolvedValue(reservation), update: jest.fn().mockResolvedValue(updated) },
     room: { findMany: jest.fn().mockResolvedValue([room]), update: jest.fn().mockResolvedValue(room), findUnique: jest.fn() },
     reservationRoomAssignment: { create: jest.fn(), update: jest.fn(), updateMany: jest.fn() },

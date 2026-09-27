@@ -16,6 +16,7 @@ type CheckoutResult = { reference: string; stayStatus: string; status: string; f
 function money(value: number | string) { return `INR ${Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
 function dateLabel(value?: string | null) { return value ? new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—'; }
 function label(value: string) { return value.replace(/_/g, ' ').toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase()); }
+export function escapeHtml(value: unknown) { return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character)); }
 
 export function CheckoutSettlementDialog({ reference, onClose }: { reference: string; onClose: () => void }) {
   const [preview, setPreview] = useState<CheckoutPreview | null>(null);
@@ -28,7 +29,7 @@ export function CheckoutSettlementDialog({ reference, onClose }: { reference: st
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('CASH');
   const [paymentReference, setPaymentReference] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
-  const [authorizedBy, setAuthorizedBy] = useState('');
+  const [currentRole, setCurrentRole] = useState('');
   const [note, setNote] = useState('');
 
   async function loadPreview() {
@@ -42,12 +43,13 @@ export function CheckoutSettlementDialog({ reference, onClose }: { reference: st
     finally { setLoading(false); }
   }
 
-  useEffect(() => { void loadPreview(); }, [reference]);
+  useEffect(() => { void loadPreview(); void apiRequest<{ user: { role: string } }>('/auth/me').then((body) => setCurrentRole(body.user.role)).catch(() => setCurrentRole('')); }, [reference]);
 
   const outstanding = Number(preview?.settlement.outstandingAmount ?? 0);
   const amount = Number(paymentAmount);
   const canPay = Number.isFinite(amount) && amount > 0 && amount <= outstanding + 0.005;
-  const overrideReady = Boolean(overrideReason && authorizedBy.trim());
+  const canAuthorizeOverride = ['ADMIN', 'SUPER_ADMIN'].includes(currentRole);
+  const overrideReady = Boolean(canAuthorizeOverride && overrideReason);
   const canCheckout = outstanding <= 0.005 || overrideReady;
   const totalLabel = useMemo(() => preview ? `${money(preview.settlement.grossAmount)} gross · ${money(preview.settlement.paidAmount)} paid` : '', [preview]);
 
@@ -63,10 +65,10 @@ export function CheckoutSettlementDialog({ reference, onClose }: { reference: st
   }
 
   async function completeCheckout() {
-    if (!canCheckout) { setError('Record the outstanding balance or provide an authorized override reason and approver.'); return; }
+    if (!canCheckout) { setError('Record the outstanding balance or select an authorized override reason.'); return; }
     setBusy(true); setError(''); setSuccess('');
     try {
-      const body = await apiRequest<CheckoutResult>(`/reservations/${encodeURIComponent(reference)}/check-out`, { method: 'POST', body: JSON.stringify({ allowOutstanding: outstanding > 0.005, overrideReason: outstanding > 0.005 ? overrideReason : undefined, authorizedBy: outstanding > 0.005 ? authorizedBy.trim() : undefined, note: note.trim() || undefined }) });
+      const body = await apiRequest<CheckoutResult>(`/reservations/${encodeURIComponent(reference)}/check-out`, { method: 'POST', body: JSON.stringify({ allowOutstanding: outstanding > 0.005, overrideReason: outstanding > 0.005 ? overrideReason : undefined, note: note.trim() || undefined }) });
       setResult(body); setSuccess('Checkout finalized. The final folio is now immutable.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not finalize checkout.'); }
     finally { setBusy(false); }
@@ -78,8 +80,9 @@ export function CheckoutSettlementDialog({ reference, onClose }: { reference: st
     const snapshot = folio.snapshot;
     const popup = window.open('', '_blank', 'noopener,noreferrer,width=900,height=720');
     if (!popup) { setError('Allow pop-ups to print the final folio.'); return; }
-    const charges = (snapshot?.charges?.incidentals ?? []).map((charge: any) => `<tr><td>${charge.description}</td><td>${label(charge.category)}</td><td>${money(charge.totalAmount)}</td></tr>`).join('');
+    const charges = (snapshot?.charges?.incidentals ?? []).map((charge: any) => `<tr><td>${escapeHtml(charge.description)}</td><td>${escapeHtml(label(charge.category))}</td><td>${money(charge.totalAmount)}</td></tr>`).join('');
     popup.document.write(`<html><head><title>${folio.finalFolioNumber}</title><style>body{font:14px Arial;color:#12344d;padding:32px}h1{margin:0 0 6px}h2{border-bottom:1px solid #d6e3e8;padding-bottom:6px}table{width:100%;border-collapse:collapse;margin-top:16px}td,th{padding:9px;border-bottom:1px solid #d6e3e8;text-align:left}.total{font-size:18px;font-weight:700}</style></head><body><h1>RainWood Hotels</h1><p>Final Folio: <strong>${folio.finalFolioNumber}</strong></p><p>Reservation: ${folio.reference} · Guest: ${snapshot?.guest?.name ?? ''}</p><h2>Charges</h2><table><thead><tr><th>Description</th><th>Category</th><th>Total</th></tr></thead><tbody><tr><td>Reservation stay</td><td>Room</td><td>${money(folio.settlement.grossAmount - folio.settlement.incidentalAmount)}</td></tr>${charges}</tbody></table><p class="total">Gross: ${money(folio.settlement.grossAmount)} · Paid: ${money(folio.settlement.paidAmount)} · Balance: ${money(folio.settlement.balanceAmount)}</p><p>Settled at: ${new Date(folio.settlement.settledAt).toLocaleString('en-IN')}</p></body></html>`);
+    popup.document.write(`<html><head><title>${escapeHtml(folio.finalFolioNumber)}</title><style>body{font:14px Arial;color:#12344d;padding:32px}h1{margin:0 0 6px}h2{border-bottom:1px solid #d6e3e8;padding-bottom:6px}table{width:100%;border-collapse:collapse;margin-top:16px}td,th{padding:9px;border-bottom:1px solid #d6e3e8;text-align:left}.total{font-size:18px;font-weight:700}</style></head><body><h1>RainWood Hotels</h1><p>Final Folio: <strong>${escapeHtml(folio.finalFolioNumber)}</strong></p><p>Reservation: ${escapeHtml(folio.reference)} · Guest: ${escapeHtml(snapshot?.guest?.name)}</p><h2>Charges</h2><table><thead><tr><th>Description</th><th>Category</th><th>Total</th></tr></thead><tbody><tr><td>Reservation stay</td><td>Room</td><td>${money(folio.settlement.grossAmount - folio.settlement.incidentalAmount)}</td></tr>${charges}</tbody></table><p class="total">Gross: ${money(folio.settlement.grossAmount)} · Paid: ${money(folio.settlement.paidAmount)} · Balance: ${money(folio.settlement.balanceAmount)}</p><p>Settled at: ${escapeHtml(new Date(folio.settlement.settledAt).toLocaleString('en-IN'))}</p></body></html>`);
     popup.document.close(); popup.focus(); popup.print();
   }
 
@@ -94,7 +97,7 @@ export function CheckoutSettlementDialog({ reference, onClose }: { reference: st
           <p className="checkoutHint">{totalLabel}. Incidentals remain separate from the original reservation amount and are included only in the final folio.</p>
           {preview.folio.incidentals.length > 0 && <div className="arrivalFolioTableWrap"><table className="arrivalDetailTable arrivalFolioTable"><thead><tr><th>Charge</th><th>Category</th><th>Total</th><th>Date</th></tr></thead><tbody>{preview.folio.incidentals.map((charge) => <tr key={charge.id}><td>{charge.description}</td><td>{label(charge.category)}</td><td>{money(charge.totalAmount)}</td><td>{dateLabel(charge.postingDate)}</td></tr>)}</tbody></table></div>}
           {outstanding > 0.005 && <form className="checkoutPaymentForm" onSubmit={(event) => void recordPayment(event)}><h4>Record checkout payment</h4><div className="arrivalFolioFormGrid"><label>Amount<input type="number" min="0.01" max={outstanding.toFixed(2)} step="0.01" value={paymentAmount} onChange={(event) => setPaymentAmount(event.target.value)} /></label><label>Mode<select value={paymentMode} onChange={(event) => setPaymentMode(event.target.value as PaymentMode)}><option value="CASH">Cash</option><option value="BANK_TRANSFER">Bank transfer</option><option value="UPI">UPI</option><option value="WALLET">Wallet</option><option value="GATEWAY">Gateway</option><option value="COMPANY_CREDIT">Company credit</option></select></label><label>Reference<input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Optional receipt/reference" /></label></div><button className="smallBtn" type="submit" disabled={busy || !canPay}>{busy ? 'Recording…' : 'Record payment'}</button></form>}
-          {outstanding > 0.005 && <div className="checkoutOverride"><h4>Authorized outstanding override</h4><p>Use only when the balance is approved as credit or written off. The reason and approver are stored in the immutable settlement snapshot and audit log.</p><div className="arrivalFolioFormGrid"><label>Reason<select value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)}><option value="">Select reason</option><option value="COMPANY_CREDIT">Company credit</option><option value="AGENT_CREDIT">Agent credit</option><option value="MANAGEMENT_APPROVAL">Management approval</option><option value="WRITE_OFF">Write-off</option><option value="OTHER">Other</option></select></label><label>Authorized by<input value={authorizedBy} onChange={(event) => setAuthorizedBy(event.target.value)} placeholder="Approver name or staff ID" /></label><label>Checkout note<input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Optional operational note" /></label></div></div>}
+          {outstanding > 0.005 && <div className="checkoutOverride"><h4>Authorized outstanding override</h4><p>Use only when the balance is approved as credit or written off. The signed-in Admin or Super Admin is recorded as the approver in the immutable settlement snapshot and audit log.</p>{canAuthorizeOverride ? <div className="arrivalFolioFormGrid"><label>Reason<select value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)}><option value="">Select reason</option><option value="COMPANY_CREDIT">Company credit</option><option value="AGENT_CREDIT">Agent credit</option><option value="MANAGEMENT_APPROVAL">Management approval</option><option value="WRITE_OFF">Write-off</option><option value="OTHER">Other</option></select></label><label>Checkout note<input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Optional operational note" /></label></div> : <p className="checkoutPaidMessage">Only Admin or Super Admin users can authorize an outstanding-balance checkout.</p>}</div>}
           {outstanding <= 0.005 && <p className="checkoutPaidMessage">The folio is fully settled. Checkout can be finalized.</p>}
           {success && <p className="arrivalDetailsSuccess" role="status">{success}</p>}
         </>}
