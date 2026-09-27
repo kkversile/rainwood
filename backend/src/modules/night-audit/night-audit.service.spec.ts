@@ -82,6 +82,30 @@ describe('NightAuditService', () => {
     expect(paymentWhere.OR[1].createdAt).toEqual(paymentWhere.OR[0].paidAt);
   });
 
+  it('separates sold room nights from current physical room state', async () => {
+    const { service } = setup({
+      room: { findMany: jest.fn().mockResolvedValue([{ id: 'room-101', roomNumber: '101', status: 'DIRTY' }, { id: 'room-102', roomNumber: '102', status: 'AVAILABLE' }, { id: 'room-103', roomNumber: '103', status: 'OUT_OF_ORDER' }]) },
+      reservationRoomNight: { findMany: jest.fn().mockResolvedValue([{ amount: new Prisma.Decimal(5000), totalAmount: new Prisma.Decimal(10000), rooms: 2 }]) },
+      reservationRoomAssignment: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    const result: any = await service.preview('admin-1', { hotelId: 'hotel-1', date: toDateOnly(currentDate()) });
+    expect(result.summary.occupancy.occupiedRooms).toBe(0);
+    expect(result.summary.occupancy.occupiedRoomNights).toBe(2);
+    expect(result.summary.occupancy.sellableRoomNights).toBe(2);
+    expect(result.summary.occupancy.occupancyPercent).toBe(100);
+    expect(result.summary.revenue.roomRevenue).toBe(10000);
+  });
+
+  it('stores source and room-type performance from nightly rows in a close snapshot', async () => {
+    const { service, p } = setup({
+      reservationRoomNight: { findMany: jest.fn().mockResolvedValue([{ amount: new Prisma.Decimal(5000), totalAmount: new Prisma.Decimal(10000), rooms: 2, reservationLine: { roomType: { id: 'type-deluxe', name: 'Deluxe' }, reservation: { id: 'reservation-agent', source: 'AGENT' } } }]) },
+    });
+    const result: any = await service.close('admin-1', { hotelId: 'hotel-1', businessDate: toDateOnly(currentDate()) });
+    expect(result.summary.sourcePerformance).toEqual([{ source: 'AGENT', reservationIds: ['reservation-agent'], reservations: 1, roomNights: 2, roomRevenue: 10000 }]);
+    expect(result.summary.roomTypePerformance).toEqual([{ roomTypeId: 'type-deluxe', roomTypeName: 'Deluxe', roomNights: 2, roomRevenue: 10000, adr: 5000 }]);
+    expect(p.hotelBusinessDay.create.mock.calls[0][0].data.summary.occupancy.occupiedRoomNights).toBe(2);
+  });
+
   it('serves a closed snapshot without recalculating mutable live data', async () => {
     const { service, p } = setup();
     const closedDate = toDateOnly(addDays(currentDate(), -1));

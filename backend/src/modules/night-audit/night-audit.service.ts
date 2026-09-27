@@ -50,7 +50,7 @@ export class NightAuditService {
       client.reservation.findMany({ where: { ...reservationWhere, checkOut: range }, select: { id: true, stayStatus: true } }),
       client.reservation.findMany({ where: { ...reservationWhere, stayStatus: StayStatus.CHECKED_IN }, select: { id: true, reference: true, guestName: true, checkIn: true, checkOut: true, roomAssignments: { where: { unassignedAt: null }, select: { roomId: true } }, totalAmount: true, folioCharges: { where: { status: 'POSTED' }, select: { totalAmount: true } }, payments: { where: { verified: true }, select: { amount: true } } } }),
       client.reservation.count({ where: { ...reservationWhere, OR: [{ status: ReservationStatus.NO_SHOW }, { stayStatus: StayStatus.NO_SHOW }], checkIn: range } }),
-      client.reservationRoomNight.findMany({ where: { date: businessDate, reservationLine: { reservation: reservationWhere } }, select: { amount: true, totalAmount: true, rooms: true } }),
+      client.reservationRoomNight.findMany({ where: { date: businessDate, reservationLine: { reservation: reservationWhere } }, select: { amount: true, totalAmount: true, rooms: true, reservationLine: { select: { roomType: { select: { id: true, name: true } }, reservation: { select: { id: true, source: true } } } } } }),
       client.reservationFolioCharge.findMany({ where: { postingDate: range, status: 'POSTED', reservation: reservationWhere }, select: { totalAmount: true } }),
       client.payment.findMany({ where: { verified: true, reservation: reservationWhere, OR: [{ paidAt: { gte: timestampRange.startUtc, lt: timestampRange.endUtc } }, { paidAt: null, createdAt: { gte: timestampRange.startUtc, lt: timestampRange.endUtc } }] }, select: { amount: true, mode: true, paidAt: true, createdAt: true } }),
       client.reservation.findMany({ where: { ...reservationWhere, stayStatus: { not: StayStatus.CHECKED_OUT } }, select: { id: true, reference: true, guestName: true, stayStatus: true, totalAmount: true, folioCharges: { where: { status: 'POSTED' }, select: { totalAmount: true } }, payments: { where: { verified: true }, select: { amount: true } } } }),
@@ -100,18 +100,36 @@ export class NightAuditService {
     const availableRooms = rooms.filter((room: any) => room.status === RoomOperationalStatus.AVAILABLE).length;
     const outOfOrderCount = outOfOrderRooms.length;
     const sellableRooms = Math.max(totalRooms - outOfOrderCount, 0);
+    const occupiedRoomNights = nights.reduce((sum: number, night: any) => sum + this.number(night.rooms), 0);
     const roomRevenue = nights.reduce((sum: number, night: any) => sum + this.number(night.totalAmount ?? night.amount), 0);
+    const sourcePerformance = new Map<string, { source: string; reservationIds: Set<string>; roomNights: number; roomRevenue: number }>();
+    const roomTypePerformance = new Map<string, { roomTypeId: string; roomTypeName: string; roomNights: number; roomRevenue: number }>();
+    for (const night of nights as any[]) {
+      const reservation = night.reservationLine?.reservation;
+      const roomType = night.reservationLine?.roomType;
+      if (reservation) {
+        const sourceRow = sourcePerformance.get(String(reservation.source)) ?? { source: String(reservation.source), reservationIds: new Set<string>(), roomNights: 0, roomRevenue: 0 };
+        sourceRow.reservationIds.add(reservation.id); sourceRow.roomNights += this.number(night.rooms); sourceRow.roomRevenue += this.number(night.totalAmount ?? night.amount); sourcePerformance.set(sourceRow.source, sourceRow);
+      }
+      if (roomType) {
+        const roomTypeRow = roomTypePerformance.get(roomType.id) ?? { roomTypeId: roomType.id, roomTypeName: roomType.name, roomNights: 0, roomRevenue: 0 };
+        roomTypeRow.roomNights += this.number(night.rooms); roomTypeRow.roomRevenue += this.number(night.totalAmount ?? night.amount); roomTypePerformance.set(roomType.id, roomTypeRow);
+      }
+    }
     const incidentalRevenue = charges.reduce((sum: number, charge: any) => sum + this.number(charge.totalAmount), 0);
     const paymentsByMode: Record<string, number> = { CASH: 0, UPI: 0, BANK_TRANSFER: 0, GATEWAY: 0, WALLET: 0, COMPANY_CREDIT: 0 };
     for (const payment of payments) paymentsByMode[payment.mode] = (paymentsByMode[payment.mode] ?? 0) + this.number(payment.amount);
     const totalPayments = Object.values(paymentsByMode).reduce((sum, amount) => sum + amount, 0);
     const summary = {
-      occupancy: { totalRooms, occupiedRooms, availableRooms, dirtyRooms: dirtyRooms.length, cleaningRooms: cleaningRooms.length, outOfOrderRooms: outOfOrderCount, sellableRooms, occupancyPercent: sellableRooms ? Number(((occupiedRooms / sellableRooms) * 100).toFixed(2)) : 0 },
+      // Physical room state is retained for operations. Daily occupancy uses authoritative nightly rows; historical room-state event sourcing is not available in V1, so sellableRoomNights uses the close-time sellable-room snapshot.
+      occupancy: { totalRooms, occupiedRooms, availableRooms, dirtyRooms: dirtyRooms.length, cleaningRooms: cleaningRooms.length, outOfOrderRooms: outOfOrderCount, sellableRooms, occupiedRoomNights, sellableRoomNights: sellableRooms, occupancyPercent: sellableRooms ? Number(((occupiedRoomNights / sellableRooms) * 100).toFixed(2)) : 0 },
       stays: { arrivals: arrivalRows.length, checkedIn: arrivalRows.filter((row: any) => row.stayStatus === StayStatus.CHECKED_IN).length, departures: departureRows.length, checkedOut: departureRows.filter((row: any) => row.stayStatus === StayStatus.CHECKED_OUT).length, inHouse: inHouseRows.length, noShows: noShowRows },
       revenue: { roomRevenue, incidentalRevenue, grossRevenue: roomRevenue + incidentalRevenue },
       payments: { cash: paymentsByMode.CASH, upi: paymentsByMode.UPI, bankTransfer: paymentsByMode.BANK_TRANSFER, gateway: paymentsByMode.GATEWAY, wallet: paymentsByMode.WALLET, companyCredit: paymentsByMode.COMPANY_CREDIT, total: totalPayments },
       balances: { outstandingGuestBalance, unsettledCheckoutCount },
       operations: { dirtyRooms: dirtyRooms.length, cleaningRooms: cleaningRooms.length, outOfOrderRooms: outOfOrderCount, openMaintenanceTickets: maintenanceTickets.length, openHousekeepingTasks: housekeepingTasks.length },
+      sourcePerformance: [...sourcePerformance.values()].map((row) => ({ source: row.source, reservationIds: [...row.reservationIds], reservations: row.reservationIds.size, roomNights: row.roomNights, roomRevenue: row.roomRevenue })),
+      roomTypePerformance: [...roomTypePerformance.values()].map((row) => ({ roomTypeId: row.roomTypeId, roomTypeName: row.roomTypeName, roomNights: row.roomNights, roomRevenue: row.roomRevenue, adr: row.roomNights ? row.roomRevenue / row.roomNights : 0 })),
     };
     return { summary, blockers, warnings };
   }

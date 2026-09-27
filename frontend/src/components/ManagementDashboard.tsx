@@ -7,10 +7,11 @@ type Hotel = { id: string; name: string; timezoneName?: string };
 type Dashboard = {
   period: { hotel: { id: string; name: string; timezoneName: string }; from: string; to: string; days: number };
   kpis: Record<string, number>;
-  daily: { date: string; occupancy: number; adr: number; revpar: number; roomRevenue: number; incidentalRevenue: number; grossRevenue: number }[];
+  daily: { date: string; occupancy: number; adr: number; revpar: number; roomRevenue: number; incidentalRevenue: number; grossRevenue: number; legacyOccupancySemantics?: boolean }[];
   sources: { source: string; reservations: number; roomNights: number; roomRevenue: number }[];
   roomTypes: { roomTypeId: string; roomType: string; roomNights: number; roomRevenue: number; adr: number }[];
   operations: { roomsAvailable: number; dirtyRooms: number; cleaningRooms: number; outOfOrderRooms: number; openMaintenanceTickets: number };
+  sourceReservationSemantics?: string;
 };
 
 const dateInZone = (timezone: string, value = new Date()) => {
@@ -22,13 +23,65 @@ const shiftDate = (value: string, days: number) => { const date = new Date(`${va
 const money = (value: number) => `INR ${Number(value ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function ManagementDashboard() {
-  const [hotels, setHotels] = useState<Hotel[]>([]); const [hotelId, setHotelId] = useState(''); const [from, setFrom] = useState(''); const [to, setTo] = useState(''); const [preset, setPreset] = useState('today');
-  const [data, setData] = useState<Dashboard | null>(null); const [error, setError] = useState(''); const [loading, setLoading] = useState(false);
-  useEffect(() => { apiRequest<Hotel[]>('/hotels').then((items) => { setHotels(items); if (items[0]) { const today = dateInZone(items[0].timezoneName ?? 'UTC'); setHotelId(items[0].id); setFrom(today); setTo(today); } }).catch((reason: Error) => setError(reason.message)); }, []);
+  const [hotels, setHotels] = useState<Hotel[]>([]);
+  const [hotelId, setHotelId] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [preset, setPreset] = useState('today');
+  const [data, setData] = useState<Dashboard | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    apiRequest<Hotel[]>('/hotels').then((items) => {
+      setHotels(items);
+      if (items[0]) {
+        const today = dateInZone(items[0].timezoneName ?? 'UTC');
+        setHotelId(items[0].id); setFrom(today); setTo(today);
+      }
+    }).catch((reason: Error) => setError(reason.message));
+  }, []);
+
   const query = useMemo(() => new URLSearchParams({ ...(hotelId ? { hotelId } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) }).toString(), [hotelId, from, to]);
-  useEffect(() => { if (!hotelId || !from || !to) return; setLoading(true); setError(''); apiRequest<Dashboard>(`/management/dashboard?${query}`).then(setData).catch((reason: Error) => { setData(null); setError(reason.message); }).finally(() => setLoading(false)); }, [hotelId, from, to, query]);
-  function selectPreset(value: string) { setPreset(value); const hotel = hotels.find((item) => item.id === hotelId) ?? hotels[0]; if (!hotel) return; const today = dateInZone(hotel.timezoneName ?? 'UTC'); if (value === 'yesterday') { setFrom(shiftDate(today, -1)); setTo(shiftDate(today, -1)); } else if (value === 'last7') { setFrom(shiftDate(today, -6)); setTo(today); } else if (value === 'month') { setFrom(`${today.slice(0, 7)}-01`); setTo(today); } else { setFrom(today); setTo(today); } }
-  function changeHotel(value: string) { setHotelId(value); const hotel = hotels.find((item) => item.id === value); if (hotel) { const today = dateInZone(hotel.timezoneName ?? 'UTC'); setFrom(today); setTo(today); setPreset('today'); } }
+  useEffect(() => {
+    if (!hotelId || !from || !to) return;
+    setLoading(true); setError('');
+    apiRequest<Dashboard>(`/management/dashboard?${query}`).then(setData).catch((reason: Error) => { setData(null); setError(reason.message); }).finally(() => setLoading(false));
+  }, [hotelId, from, to, query]);
+
+  function selectPreset(value: string) {
+    setPreset(value);
+    const hotel = hotels.find((item) => item.id === hotelId) ?? hotels[0]; if (!hotel) return;
+    const today = dateInZone(hotel.timezoneName ?? 'UTC');
+    if (value === 'yesterday') { setFrom(shiftDate(today, -1)); setTo(shiftDate(today, -1)); }
+    else if (value === 'last7') { setFrom(shiftDate(today, -6)); setTo(today); }
+    else if (value === 'month') { setFrom(`${today.slice(0, 7)}-01`); setTo(today); }
+    else { setFrom(today); setTo(today); }
+  }
+
+  function changeHotel(value: string) {
+    setHotelId(value); const hotel = hotels.find((item) => item.id === value); if (!hotel) return;
+    const today = dateInZone(hotel.timezoneName ?? 'UTC'); setFrom(today); setTo(today); setPreset('today');
+  }
+
   const k = data?.kpis; const op = data?.operations;
-  return <section className="managementDashboard"><section className="formCard managementFilters"><div><span className="eyebrow">Hotel management</span><h1>Daily KPI dashboard</h1><p>Hotel-local operating metrics from nightly room revenue, posted folios, verified payments, and closed business-day snapshots.</p></div><div className="managementFilterGrid"><label>Hotel<select value={hotelId} onChange={(event) => changeHotel(event.target.value)}>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label><label>From date<input type="date" value={from} onChange={(event) => { setFrom(event.target.value); setPreset('custom'); }} /></label><label>To date<input type="date" value={to} onChange={(event) => { setTo(event.target.value); setPreset('custom'); }} /></label></div><div className="managementPresets">{[['today', 'Today'], ['yesterday', 'Yesterday'], ['last7', 'Last 7 days'], ['month', 'This month']].map(([value, label]) => <button key={value} type="button" className={`smallBtn ${preset === value ? '' : 'secondary'}`} onClick={() => selectPreset(value)}>{label}</button>)}</div></section>{loading && <p className="loading">Loading hotel dashboard…</p>}{error && <p className="error" role="alert">{error}</p>}{data && k && op && <><section className="managementKpis">{[['occupancy', `${k.occupancy}%`, 'Occupancy'], ['adr', money(k.adr), 'ADR'], ['revpar', money(k.revpar), 'RevPAR'], ['roomRevenue', money(k.roomRevenue), 'Room revenue'], ['incidentalRevenue', money(k.incidentalRevenue), 'Incidentals'], ['grossRevenue', money(k.grossRevenue), 'Gross revenue'], ['paymentsReceived', money(k.paymentsReceived), 'Payments received'], ['outstandingBalance', money(k.outstandingBalance), 'Outstanding']].map(([key, value, label]) => <div key={key}><strong>{value}</strong><span>{label}</span></div>)}</section><section className="managementSplit"><div className="panel"><h2>Revenue & occupancy trend</h2><div className="managementTrend">{data.daily.map((day) => <div key={day.date} className="managementTrendRow"><b>{day.date}</b><span><i style={{ width: `${Math.min(100, day.occupancy)}%` }} />{day.occupancy}%</span><em>{money(day.roomRevenue)} · RevPAR {money(day.revpar)}</em></div>)}</div></div><div className="panel"><h2>Operational exceptions</h2><div className="managementOps">{[['roomsAvailable', 'Rooms available'], ['dirtyRooms', 'Dirty rooms'], ['cleaningRooms', 'Cleaning rooms'], ['outOfOrderRooms', 'Out of order'], ['openMaintenanceTickets', 'Open maintenance']].map(([key, label]) => <div key={key}><span>{label}</span><strong>{op[key as keyof typeof op]}</strong></div>)}</div><p className="hint">Occupancy = occupied room nights ÷ sellable room nights. ADR = room revenue ÷ occupied room nights. RevPAR = room revenue ÷ sellable room nights.</p></div></section><section className="managementSplit"><div className="panel"><h2>Booking source performance</h2><div className="tableScroll"><table><thead><tr><th>Source</th><th>Reservations</th><th>Room nights</th><th>Room revenue</th></tr></thead><tbody>{data.sources.map((row) => <tr key={row.source}><td>{row.source}</td><td>{row.reservations}</td><td>{row.roomNights}</td><td>{money(row.roomRevenue)}</td></tr>)}{!data.sources.length && <tr><td colSpan={4} className="empty">No live source activity for this period.</td></tr>}</tbody></table></div></div><div className="panel"><h2>Room type performance</h2><div className="tableScroll"><table><thead><tr><th>Room type</th><th>Room nights</th><th>Revenue</th><th>ADR</th></tr></thead><tbody>{data.roomTypes.map((row) => <tr key={row.roomTypeId}><td>{row.roomType}</td><td>{row.roomNights}</td><td>{money(row.roomRevenue)}</td><td>{money(row.adr)}</td></tr>)}{!data.roomTypes.length && <tr><td colSpan={4} className="empty">No live room-type activity for this period.</td></tr>}</tbody></table></div></div></section><section className="managementStayStrip"><div><strong>{k.arrivals}</strong><span>Arrivals</span></div><div><strong>{k.departures}</strong><span>Departures</span></div><div><strong>{k.inHouse}</strong><span>In house</span></div><div><strong>{k.occupiedRoomNights}</strong><span>Occupied room nights</span></div><div><strong>{k.sellableRoomNights}</strong><span>Sellable room nights</span></div><div><small>{data.period.from} → {data.period.to}</small><span>{data.period.hotel.name} · {data.period.hotel.timezoneName}</span></div></section></>}</section>;
+  const periodKpis = k ? [['occupancy', `${k.occupancy}%`, 'Occupancy'], ['adr', money(k.adr), 'ADR'], ['revpar', money(k.revpar), 'RevPAR'], ['roomRevenue', money(k.roomRevenue), 'Room revenue'], ['incidentalRevenue', money(k.incidentalRevenue), 'Incidental revenue'], ['grossRevenue', money(k.grossRevenue), 'Gross revenue'], ['paymentsReceived', money(k.paymentsReceived), 'Payments received']] : [];
+  const periodEnd = k && op ? [['inHouse', k.inHouse, 'In house'], ['outstanding', money(k.outstandingBalance), 'Outstanding'], ['roomsAvailable', op.roomsAvailable, 'Available rooms'], ['dirtyRooms', op.dirtyRooms, 'Dirty'], ['cleaningRooms', op.cleaningRooms, 'Cleaning'], ['outOfOrderRooms', op.outOfOrderRooms, 'OOO'], ['maintenance', op.openMaintenanceTickets, 'Maintenance']] : [];
+
+  return <section className="managementDashboard">
+    <section className="formCard managementFilters">
+      <div><span className="eyebrow">Hotel management</span><h1>Daily KPI dashboard</h1><p>Hotel-local operating metrics from nightly room revenue, posted folios, verified payments, and closed business-day snapshots.</p></div>
+      <div className="managementFilterGrid"><label>Hotel<select value={hotelId} onChange={(event) => changeHotel(event.target.value)}>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label><label>From date<input type="date" value={from} onChange={(event) => { setFrom(event.target.value); setPreset('custom'); }} /></label><label>To date<input type="date" value={to} onChange={(event) => { setTo(event.target.value); setPreset('custom'); }} /></label></div>
+      <div className="managementPresets">{[['today', 'Today'], ['yesterday', 'Yesterday'], ['last7', 'Last 7 days'], ['month', 'This month']].map(([value, label]) => <button key={value} type="button" className={`smallBtn ${preset === value ? '' : 'secondary'}`} onClick={() => selectPreset(value)}>{label}</button>)}</div>
+    </section>
+    {loading && <p className="loading">Loading hotel dashboard…</p>}
+    {error && <p className="error" role="alert">{error}</p>}
+    {data && k && op && <>
+      <section className="managementKpiGroup"><h2>Period performance</h2><div className="managementKpis">{periodKpis.map(([key, value, label]) => <div key={key}><strong>{value}</strong><span>{label}</span></div>)}</div></section>
+      <section className="managementPointInTime"><h2>Period-end status</h2><p>Point-in-time operational state at the end of the selected period; these values are not summed across days.</p><div className="managementStayStrip">{periodEnd.map(([key, value, label]) => <div key={key}><strong>{value}</strong><span>{label}</span></div>)}</div></section>
+      <section className="managementSplit"><div className="panel"><h2>Revenue & occupancy trend</h2><div className="managementTrend">{data.daily.map((day) => <div key={day.date} className="managementTrendRow"><b>{day.date}</b><span><i style={{ width: `${Math.min(100, day.occupancy)}%` }} />{day.occupancy}%</span><em>{money(day.roomRevenue)} · RevPAR {money(day.revpar)}{day.legacyOccupancySemantics ? ' · legacy occupancy' : ''}</em></div>)}</div></div><div className="panel"><h2>KPI definitions</h2><p className="hint">Occupancy = occupied room nights ÷ sellable room nights. ADR = room revenue ÷ occupied room nights. RevPAR = room revenue ÷ sellable room nights. Historical sellable room nights use the Night Audit close-time snapshot.</p><p className="metric">{k.occupiedRoomNights} occupied room nights · {k.sellableRoomNights} sellable room nights</p></div></section>
+      <section className="managementSplit"><div className="panel"><h2>Booking source performance</h2><p className="mutedText">{data.sourceReservationSemantics === 'MIXED_UNIQUE_AND_LEGACY_DAILY_RESERVATIONS' ? 'Includes legacy daily reservation counts for older snapshots.' : 'Unique reservations represented by the selected room-night period.'}</p><div className="tableScroll"><table><thead><tr><th>Source</th><th>Reservations</th><th>Room nights</th><th>Room revenue</th></tr></thead><tbody>{data.sources.map((row) => <tr key={row.source}><td>{row.source}</td><td>{row.reservations}</td><td>{row.roomNights}</td><td>{money(row.roomRevenue)}</td></tr>)}{!data.sources.length && <tr><td colSpan={4} className="empty">No source activity for this period.</td></tr>}</tbody></table></div></div><div className="panel"><h2>Room type performance</h2><p className="mutedText">Occupancy is not fabricated without reliable room-type inventory denominators.</p><div className="tableScroll"><table><thead><tr><th>Room type</th><th>Room nights</th><th>Revenue</th><th>ADR</th></tr></thead><tbody>{data.roomTypes.map((row) => <tr key={row.roomTypeId}><td>{row.roomType}</td><td>{row.roomNights}</td><td>{money(row.roomRevenue)}</td><td>{money(row.adr)}</td></tr>)}{!data.roomTypes.length && <tr><td colSpan={4} className="empty">No room-type activity for this period.</td></tr>}</tbody></table></div></div></section>
+      <section className="managementFooterMeta"><small>{data.period.from} → {data.period.to}</small><span>{data.period.hotel.name} · {data.period.hotel.timezoneName}</span><span>{k.arrivals} arrivals · {k.departures} departures · {k.occupiedRoomNights} occupied room nights</span></section>
+    </>}
+  </section>;
 }
