@@ -1,4 +1,6 @@
 import { Prisma } from '@prisma/client';
+import { addDays, toDateOnly } from '../../common/dates';
+import { getHotelOperationalDate } from '../../common/hotel-dates';
 import { NightAuditService } from './night-audit.service';
 
 function setup(overrides: Record<string, any> = {}) {
@@ -31,10 +33,13 @@ function setup(overrides: Record<string, any> = {}) {
 }
 
 describe('NightAuditService', () => {
+  const currentDate = () => getHotelOperationalDate('Asia/Kolkata');
+
   it('previews local business date, selected-night revenue, posted incidentals and verified payments', async () => {
     const { service } = setup();
-    const result: any = await service.preview('admin-1', { hotelId: 'hotel-1', date: '2026-09-28' });
-    expect(result.businessDate).toBe('2026-09-28');
+    const date = toDateOnly(currentDate());
+    const result: any = await service.preview('admin-1', { hotelId: 'hotel-1', date });
+    expect(result.businessDate).toBe(date);
     expect(result.summary.revenue.roomRevenue).toBe(5500);
     expect(result.summary.revenue.incidentalRevenue).toBe(250);
     expect(result.summary.payments).toEqual(expect.objectContaining({ upi: 300, total: 300 }));
@@ -45,19 +50,20 @@ describe('NightAuditService', () => {
 
   it('blocks close on invalid occupied-room integrity but does not mutate stays', async () => {
     const { service, p } = setup({ room: { findMany: jest.fn().mockResolvedValue([{ id: 'room-102', roomNumber: '102', status: 'OCCUPIED' }]) }, reservationRoomAssignment: { findMany: jest.fn().mockResolvedValue([]) } });
-    await expect(service.close('admin-1', { hotelId: 'hotel-1', businessDate: '2026-09-28' })).rejects.toThrow('blockers');
+    await expect(service.close('admin-1', { hotelId: 'hotel-1', businessDate: toDateOnly(currentDate()) })).rejects.toThrow('blockers');
     expect(p.hotelBusinessDay.create).not.toHaveBeenCalled();
     expect(p.reservation.update).toBeUndefined();
   });
 
   it('creates a closed snapshot and returns the same closed record on retry', async () => {
     const { service, p } = setup();
-    const first: any = await service.close('admin-1', { hotelId: 'hotel-1', businessDate: '2026-09-28' });
+    const date = toDateOnly(currentDate());
+    const first: any = await service.close('admin-1', { hotelId: 'hotel-1', businessDate: date });
     expect(first.alreadyClosed).toBe(true);
     expect(first.closed.closedBy.name).toBe('RainWood Admin');
     expect(p.hotelBusinessDay.create).toHaveBeenCalledTimes(1);
     p.hotelBusinessDay.findUnique.mockResolvedValue({ id: 'day-1', status: 'CLOSED', summary: first.summary, exceptions: { warnings: first.warnings }, closedAt: new Date(), closedBy: p.user.findUnique.mock.results[0]?.value ?? { id: 'admin-1', name: 'RainWood Admin' } });
-    const second: any = await service.close('admin-1', { hotelId: 'hotel-1', businessDate: '2026-09-28' });
+    const second: any = await service.close('admin-1', { hotelId: 'hotel-1', businessDate: date });
     expect(second.alreadyClosed).toBe(true);
     expect(p.hotelBusinessDay.create).toHaveBeenCalledTimes(1);
   });
@@ -65,5 +71,33 @@ describe('NightAuditService', () => {
   it('forces a scoped Admin to its assigned hotel', async () => {
     const { service } = setup({ user: { findUnique: jest.fn().mockResolvedValue({ id: 'admin-1', name: 'Hotel Admin', role: 'ADMIN', staffHotelId: 'hotel-own' }) } });
     await expect(service.preview('admin-1', { hotelId: 'hotel-other', date: '2026-09-28' })).rejects.toThrow('Hotel not found');
+  });
+
+  it('uses the hotel-local UTC range for verified payment timestamps', async () => {
+    const { service, p } = setup();
+    await service.preview('admin-1', { hotelId: 'hotel-1', date: toDateOnly(currentDate()) });
+    const paymentWhere = p.payment.findMany.mock.calls[0][0].where;
+    expect(paymentWhere.OR[0].paidAt.gte.toISOString()).toBe(`${toDateOnly(addDays(currentDate(), -1))}T18:30:00.000Z`);
+    expect(paymentWhere.OR[0].paidAt.lt.toISOString()).toBe(`${toDateOnly(currentDate())}T18:30:00.000Z`);
+    expect(paymentWhere.OR[1].createdAt).toEqual(paymentWhere.OR[0].paidAt);
+  });
+
+  it('serves a closed snapshot without recalculating mutable live data', async () => {
+    const { service, p } = setup();
+    const closedDate = toDateOnly(addDays(currentDate(), -1));
+    const snapshot = { occupancy: { occupiedRooms: 1 }, revenue: { roomRevenue: 10000 } };
+    p.hotelBusinessDay.findUnique.mockResolvedValue({ id: 'day-closed', status: 'CLOSED', summary: snapshot, exceptions: { blockers: [], warnings: [{ code: 'SAVED_WARNING' }] }, closedAt: new Date(), closedBy: { id: 'admin-1', name: 'RainWood Admin' } });
+    const calculate = jest.spyOn(service as any, 'calculate');
+    const result: any = await service.preview('admin-1', { hotelId: 'hotel-1', date: closedDate });
+    expect(result.summary).toEqual(snapshot);
+    expect(result.snapshot).toEqual(snapshot);
+    expect(result.warnings).toEqual([{ code: 'SAVED_WARNING' }]);
+    expect(calculate).not.toHaveBeenCalled();
+  });
+
+  it('rejects future and unclosed historical dates', async () => {
+    const { service } = setup();
+    await expect(service.preview('admin-1', { hotelId: 'hotel-1', date: toDateOnly(addDays(currentDate(), 1)) })).rejects.toThrow('Future Night Audit dates are not available');
+    await expect(service.preview('admin-1', { hotelId: 'hotel-1', date: toDateOnly(addDays(currentDate(), -1)) })).rejects.toThrow('Historical Night Audit cannot be reconstructed');
   });
 });

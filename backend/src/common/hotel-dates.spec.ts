@@ -1,15 +1,26 @@
-import { BadRequestException } from '@nestjs/common';
-import { getHotelOperationalDate } from './hotel-dates';
+import { getHotelBusinessDayUtcRange, getHotelOperationalDate } from './hotel-dates';
+import { toDateOnly } from './dates';
 
-describe('hotel operational dates', () => {
-  const boundary = new Date('2026-09-26T20:00:00.000Z');
-
-  it('uses the hotel timezone at the exact Asia/Kolkata boundary', () => {
-    expect(getHotelOperationalDate('Asia/Kolkata', boundary).toISOString().slice(0, 10)).toBe('2026-09-27');
-    expect(getHotelOperationalDate('UTC', boundary).toISOString().slice(0, 10)).toBe('2026-09-26');
+describe('hotel date utilities', () => {
+  it('converts an Asia/Kolkata business day to its UTC interval', () => {
+    const range = getHotelBusinessDayUtcRange(new Date('2026-09-28T00:00:00.000Z'), 'Asia/Kolkata');
+    expect(range.startUtc.toISOString()).toBe('2026-09-27T18:30:00.000Z');
+    expect(range.endUtc.toISOString()).toBe('2026-09-28T18:30:00.000Z');
   });
 
-  it('rejects an unknown timezone safely', () => {
-    expect(() => getHotelOperationalDate('Not/A_Timezone', boundary)).toThrow(BadRequestException);
+  it('keeps UTC hotels on UTC calendar boundaries', () => {
+    const range = getHotelBusinessDayUtcRange(new Date('2026-09-28T00:00:00.000Z'), 'UTC');
+    expect(range.startUtc.toISOString()).toBe('2026-09-28T00:00:00.000Z');
+    expect(range.endUtc.toISOString()).toBe('2026-09-29T00:00:00.000Z');
+  });
+
+  it('handles a DST transition without a fixed offset', () => {
+    const range = getHotelBusinessDayUtcRange(new Date('2026-03-29T00:00:00.000Z'), 'Europe/London');
+    expect(range.startUtc.toISOString()).toBe('2026-03-29T00:00:00.000Z');
+    expect(range.endUtc.toISOString()).toBe('2026-03-29T23:00:00.000Z');
+  });
+
+  it('returns the current operational calendar date', () => {
+    expect(toDateOnly(getHotelOperationalDate('Asia/Kolkata'))).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { HotelBusinessDayStatus, MaintenanceTicketStatus, Prisma, ReservationStatus, RoomOperationalStatus, StayStatus, UserRole } from '@prisma/client';
 import { parseDateOnly, toDateOnly } from '../../common/dates';
-import { getHotelOperationalDate } from '../../common/hotel-dates';
+import { getHotelBusinessDayUtcRange, getHotelOperationalDate } from '../../common/hotel-dates';
 import { PrismaService } from '../../common/prisma.service';
 import { serializable } from '../../common/transactions';
 import { NightAuditCloseDto, NightAuditPreviewQueryDto } from './night-audit.dto';
@@ -42,6 +42,7 @@ export class NightAuditService {
 
   private async calculate(client: any, hotel: { id: string; name: string; timezoneName: string }, businessDate: Date) {
     const range = this.dateRange(businessDate);
+    const timestampRange = getHotelBusinessDayUtcRange(businessDate, hotel.timezoneName);
     const reservationWhere = { hotelId: hotel.id, status: { notIn: EXCLUDED_RESERVATION_STATUSES } };
     const [rooms, arrivalRows, departureRows, inHouseRows, noShowRows, nights, charges, payments, activeReservations, assignments, housekeepingTasks, maintenanceTickets] = await Promise.all([
       client.room.findMany({ where: { hotelId: hotel.id, active: true }, select: { id: true, roomNumber: true, status: true }, orderBy: { roomNumber: 'asc' } }),
@@ -51,7 +52,7 @@ export class NightAuditService {
       client.reservation.count({ where: { ...reservationWhere, OR: [{ status: ReservationStatus.NO_SHOW }, { stayStatus: StayStatus.NO_SHOW }], checkIn: range } }),
       client.reservationRoomNight.findMany({ where: { date: businessDate, reservationLine: { reservation: reservationWhere } }, select: { amount: true, totalAmount: true, rooms: true } }),
       client.reservationFolioCharge.findMany({ where: { postingDate: range, status: 'POSTED', reservation: reservationWhere }, select: { totalAmount: true } }),
-      client.payment.findMany({ where: { verified: true, reservation: reservationWhere, OR: [{ paidAt: range }, { paidAt: null, createdAt: range }] }, select: { amount: true, mode: true, paidAt: true, createdAt: true } }),
+      client.payment.findMany({ where: { verified: true, reservation: reservationWhere, OR: [{ paidAt: { gte: timestampRange.startUtc, lt: timestampRange.endUtc } }, { paidAt: null, createdAt: { gte: timestampRange.startUtc, lt: timestampRange.endUtc } }] }, select: { amount: true, mode: true, paidAt: true, createdAt: true } }),
       client.reservation.findMany({ where: { ...reservationWhere, stayStatus: { not: StayStatus.CHECKED_OUT } }, select: { id: true, reference: true, guestName: true, stayStatus: true, totalAmount: true, folioCharges: { where: { status: 'POSTED' }, select: { totalAmount: true } }, payments: { where: { verified: true }, select: { amount: true } } } }),
       client.reservationRoomAssignment.findMany({ where: { reservation: reservationWhere, unassignedAt: null }, select: { id: true, roomId: true, reservationId: true, room: { select: { id: true, roomNumber: true, hotelId: true, active: true, status: true } }, reservation: { select: { id: true, stayStatus: true } } } }),
       client.housekeepingTask.findMany({ where: { hotelId: hotel.id, status: { in: ACTIVE_HOUSEKEEPING as any } }, select: { id: true, roomId: true, status: true, room: { select: { roomNumber: true, status: true } } } }),
@@ -122,7 +123,12 @@ export class NightAuditService {
   async preview(userId: string, query: NightAuditPreviewQueryDto) {
     const { hotel } = await this.hotelFor(userId, query.hotelId);
     const businessDate = this.businessDate(hotel, query.date);
-    const [calculated, day] = await Promise.all([this.calculate(this.p, hotel, businessDate), this.p.hotelBusinessDay.findUnique({ where: { hotelId_businessDate: { hotelId: hotel.id, businessDate } }, include: { closedBy: { select: { id: true, name: true } } } })]);
+    const day = await this.p.hotelBusinessDay.findUnique({ where: { hotelId_businessDate: { hotelId: hotel.id, businessDate } }, include: { closedBy: { select: { id: true, name: true } } } });
+    if (day?.status === HotelBusinessDayStatus.CLOSED) return this.result(hotel, businessDate, { summary: day.summary, blockers: (day.exceptions as any)?.blockers ?? [], warnings: (day.exceptions as any)?.warnings ?? [] }, day);
+    const currentDate = getHotelOperationalDate(hotel.timezoneName);
+    if (toDateOnly(businessDate) > toDateOnly(currentDate)) throw new BadRequestException('Future Night Audit dates are not available.');
+    if (toDateOnly(businessDate) < toDateOnly(currentDate)) throw new BadRequestException('Historical Night Audit cannot be reconstructed because this business day was not closed.');
+    const calculated = await this.calculate(this.p, hotel, businessDate);
     return this.result(hotel, businessDate, calculated, day);
   }
 
@@ -133,6 +139,9 @@ export class NightAuditService {
       return await serializable(this.p, async (tx) => {
         const existing = await tx.hotelBusinessDay.findUnique({ where: { hotelId_businessDate: { hotelId: hotel.id, businessDate } }, include: { closedBy: { select: { id: true, name: true } } } });
         if (existing?.status === HotelBusinessDayStatus.CLOSED) return this.result(hotel, businessDate, { summary: existing.summary, blockers: [], warnings: (existing.exceptions as any)?.warnings ?? [] }, existing);
+        const currentDate = getHotelOperationalDate(hotel.timezoneName);
+        if (toDateOnly(businessDate) > toDateOnly(currentDate)) throw new BadRequestException('Future Night Audit dates are not available.');
+        if (toDateOnly(businessDate) < toDateOnly(currentDate)) throw new BadRequestException('Historical Night Audit cannot be reconstructed because this business day was not closed.');
         const calculated = await this.calculate(tx, hotel, businessDate);
         if (calculated.blockers.length) throw new ConflictException({ code: 'NIGHT_AUDIT_BLOCKED', message: 'Night Audit cannot close while blockers remain.', businessDate: toDateOnly(businessDate), blockers: calculated.blockers, warnings: calculated.warnings, summary: calculated.summary });
         const closedAt = new Date();
