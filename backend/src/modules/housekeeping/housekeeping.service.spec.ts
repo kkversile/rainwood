@@ -21,7 +21,7 @@ function setup() {
     user: { findUnique: jest.fn().mockResolvedValue(staff()) },
     room: { findUnique: jest.fn().mockResolvedValue({ id: 'room-203', hotelId: 'hotel-1', roomNumber: '203', status: RoomOperationalStatus.DIRTY }), findMany: jest.fn().mockResolvedValue([]), groupBy: jest.fn().mockResolvedValue([]), update: jest.fn() },
     housekeepingTask: { findFirst: jest.fn().mockResolvedValue(null), findUnique: jest.fn().mockResolvedValue(task()), findUniqueOrThrow: jest.fn().mockResolvedValue(task()), update: jest.fn().mockResolvedValue(task()), updateMany: jest.fn().mockResolvedValue({ count: 1 }), findMany: jest.fn() },
-    maintenanceTicket: { upsert: jest.fn().mockResolvedValue({ id: 'maintenance-1' }) },
+    maintenanceTicket: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'maintenance-1' }), update: jest.fn().mockResolvedValue({ id: 'maintenance-1' }) },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
   };
   const audit = { log: jest.fn().mockResolvedValue({}) } as any;
@@ -76,11 +76,33 @@ describe('housekeeping workflow', () => {
 
   it('reports an issue without changing room status', async () => {
     const { service, prisma, audit } = setup();
-    prisma.housekeepingTask.findUnique.mockResolvedValue(task({ status: HousekeepingTaskStatus.CLEANING, assignedToId: 'staff-1', room: { roomNumber: '203' } }));
+    prisma.housekeepingTask.findUnique.mockResolvedValue(task({ status: HousekeepingTaskStatus.CLEANING, assignedToId: 'staff-1', room: { id: 'room-203', roomNumber: '203' } }));
     await service.reportIssue('staff-1', 'task-1', { note: 'AC leaking' });
+    expect(prisma.maintenanceTicket.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ housekeepingTaskId: 'task-1', description: 'AC leaking' }) }));
     expect(prisma.housekeepingTask.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ issueNote: 'AC leaking' }) }));
     expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'HOUSEKEEPING_ISSUE_REPORTED' }) }));
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'MAINTENANCE_TICKET_CREATED' }) }));
     expect(prisma.room.update).not.toHaveBeenCalled();
+  });
+
+  it('updates an active maintenance ticket on a repeated housekeeping report', async () => {
+    const { service, prisma } = setup();
+    prisma.housekeepingTask.findUnique.mockResolvedValue(task({ status: HousekeepingTaskStatus.CLEANING, assignedToId: 'staff-1', room: { id: 'room-203', roomNumber: '203' } }));
+    prisma.maintenanceTicket.findUnique.mockResolvedValue({ id: 'maintenance-1', status: 'OPEN' });
+    await service.reportIssue('staff-1', 'task-1', { note: 'AC still leaking' });
+    expect(prisma.maintenanceTicket.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'maintenance-1' }, data: expect.objectContaining({ description: 'AC still leaking' }) }));
+    expect(prisma.maintenanceTicket.create).not.toHaveBeenCalled();
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'MAINTENANCE_TICKET_UPDATED_FROM_HOUSEKEEPING' }) }));
+  });
+
+  it.each(['RESOLVED', 'CANCELLED'])('rejects a new report when the task has a %s maintenance ticket', async (status) => {
+    const { service, prisma } = setup();
+    prisma.housekeepingTask.findUnique.mockResolvedValue(task({ status: HousekeepingTaskStatus.CLEANING, assignedToId: 'staff-1', room: { id: 'room-203', roomNumber: '203' } }));
+    prisma.maintenanceTicket.findUnique.mockResolvedValue({ id: 'maintenance-1', status });
+    await expect(service.reportIssue('staff-1', 'task-1', { note: 'Another issue' })).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.maintenanceTicket.create).not.toHaveBeenCalled();
+    expect(prisma.maintenanceTicket.update).not.toHaveBeenCalled();
+    expect(prisma.housekeepingTask.update).not.toHaveBeenCalled();
   });
 
   it('allows same-hotel assignment and normal reassignment', async () => {

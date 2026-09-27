@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { HousekeepingTaskStatus, Prisma, RoomOperationalStatus, StaffDepartment, UserRole } from '@prisma/client';
+import { HousekeepingTaskStatus, MaintenanceTicketStatus, Prisma, RoomOperationalStatus, StaffDepartment, UserRole } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { AuditService } from '../../common/audit.service';
 import { PrismaService } from '../../common/prisma.service';
@@ -153,14 +153,18 @@ export class HousekeepingService {
       if (!task || task.hotelId !== user.staffHotelId) throw new NotFoundException('Housekeeping task not found.');
       if (task.assignedToId !== user.id || (task.status !== HousekeepingTaskStatus.ACCEPTED && task.status !== HousekeepingTaskStatus.CLEANING)) throw new ConflictException('Only the assigned housekeeper can report an issue for an active task.');
       const note = body.note.trim();
-      const ticket = await tx.maintenanceTicket.upsert({
-        where: { housekeepingTaskId: task.id },
-        update: { description: note, updatedAt: new Date() },
-        create: { hotelId: task.hotelId, roomId: task.roomId, housekeepingTaskId: task.id, source: 'HOUSEKEEPING', category: 'GENERAL', priority: 'NORMAL', status: 'OPEN', title: `Housekeeping issue · Room ${task.room.roomNumber}`, description: note, reportedById: user.id },
-      });
+      // V1 keeps one maintenance ticket per housekeeping task: active repeats update it,
+      // while closed tickets reject new reports so the maintenance history is preserved.
+      const existing = await tx.maintenanceTicket.findUnique({ where: { housekeepingTaskId: task.id }, select: { id: true, status: true } });
+      if (existing && (existing.status === MaintenanceTicketStatus.RESOLVED || existing.status === MaintenanceTicketStatus.CANCELLED)) {
+        throw new ConflictException('This housekeeping task already has a closed maintenance ticket. Create a new housekeeping task before reporting another issue.');
+      }
+      const ticket = existing
+        ? await tx.maintenanceTicket.update({ where: { id: existing.id }, data: { description: note, updatedAt: new Date() }, select: { id: true } })
+        : await tx.maintenanceTicket.create({ data: { hotelId: task.hotelId, roomId: task.roomId, housekeepingTaskId: task.id, source: 'HOUSEKEEPING', category: 'GENERAL', priority: 'NORMAL', status: 'OPEN', title: `Housekeeping issue · Room ${task.room.roomNumber}`, description: note, reportedById: user.id }, select: { id: true } });
       const updated = await tx.housekeepingTask.update({ where: { id: taskId }, data: { issueNote: note, issueReportedAt: new Date(), issueReportedById: user.id }, include: taskInclude });
       await tx.auditLog.create({ data: { actorUserId: user.id, action: 'HOUSEKEEPING_ISSUE_REPORTED', entityType: 'HousekeepingTask', entityId: taskId, after: { hotelId: task.hotelId, roomId: task.roomId, roomNumber: task.room.roomNumber, note, maintenanceTicketId: ticket.id } } });
-      await tx.auditLog.create({ data: { actorUserId: user.id, action: 'MAINTENANCE_TICKET_CREATED', entityType: 'MaintenanceTicket', entityId: ticket.id, after: { ticketId: ticket.id, hotelId: task.hotelId, roomId: task.roomId, source: 'HOUSEKEEPING', housekeepingTaskId: task.id } } });
+      await tx.auditLog.create({ data: { actorUserId: user.id, action: existing ? 'MAINTENANCE_TICKET_UPDATED_FROM_HOUSEKEEPING' : 'MAINTENANCE_TICKET_CREATED', entityType: 'MaintenanceTicket', entityId: ticket.id, after: { ticketId: ticket.id, hotelId: task.hotelId, roomId: task.roomId, source: 'HOUSEKEEPING', housekeepingTaskId: task.id } } });
       return { ...this.taskView(updated), maintenanceTicketId: ticket.id };
     });
   }

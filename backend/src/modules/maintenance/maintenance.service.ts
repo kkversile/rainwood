@@ -186,16 +186,34 @@ export class MaintenanceService {
   }
 
   async cancel(adminUserId: string, ticketId: string) {
-    const { ticket } = await this.adminTicket(adminUserId, ticketId);
-    if (ticket.status === MaintenanceTicketStatus.IN_PROGRESS) throw new ConflictException('In-progress maintenance tickets cannot be cancelled.');
-    if (ticket.status !== MaintenanceTicketStatus.OPEN && ticket.status !== MaintenanceTicketStatus.ASSIGNED) throw new ConflictException('Only open or assigned maintenance tickets can be cancelled.');
-    const updated = await this.p.maintenanceTicket.update({ where: { id: ticketId }, data: { status: MaintenanceTicketStatus.CANCELLED }, include: ticketInclude });
-    await this.audit.log({ actorUserId: adminUserId, action: 'MAINTENANCE_TICKET_CANCELLED', entityType: 'MaintenanceTicket', entityId: ticketId, after: { ticketId, hotelId: ticket.hotelId, roomId: ticket.roomId, priorStatus: ticket.status } });
-    return this.view(updated);
+    const admin = await this.managementUser(adminUserId);
+    return serializable(this.p, async (tx) => {
+      const ticket = await tx.maintenanceTicket.findUnique({ where: { id: ticketId }, include: ticketInclude });
+      if (!ticket) throw new NotFoundException('Maintenance ticket not found.');
+      this.assertScope(admin, ticket.hotelId);
+      if (ticket.status !== MaintenanceTicketStatus.OPEN && ticket.status !== MaintenanceTicketStatus.ASSIGNED) throw new ConflictException('Only open or assigned maintenance tickets can be cancelled.');
+
+      const now = new Date();
+      let released = false;
+      if (ticket.requiresOutOfOrder && ticket.room?.status === RoomOperationalStatus.OUT_OF_ORDER) {
+        const otherBlocking = await tx.maintenanceTicket.count({ where: { roomId: ticket.room.id, id: { not: ticket.id }, requiresOutOfOrder: true, status: { in: ACTIVE_STATUSES } } });
+        if (!otherBlocking) {
+          await tx.room.update({ where: { id: ticket.room.id }, data: { status: RoomOperationalStatus.DIRTY } });
+          await this.housekeeping.ensureTaskForDirtyRoom(tx, ticket.room.id, adminUserId);
+          released = true;
+        }
+      }
+
+      const updated = await tx.maintenanceTicket.update({ where: { id: ticket.id }, data: { status: MaintenanceTicketStatus.CANCELLED, outOfOrderClearedAt: released ? now : undefined }, include: ticketInclude });
+      await tx.auditLog.create({ data: { actorUserId: adminUserId, action: 'MAINTENANCE_TICKET_CANCELLED', entityType: 'MaintenanceTicket', entityId: ticket.id, before: { ticketId: ticket.id, hotelId: ticket.hotelId, roomId: ticket.roomId, priorStatus: ticket.status }, after: { ticketId: ticket.id, hotelId: ticket.hotelId, roomId: ticket.roomId, status: MaintenanceTicketStatus.CANCELLED, roomReleased: released } } });
+      if (released && ticket.room) await tx.auditLog.create({ data: { actorUserId: adminUserId, action: 'ROOM_RELEASED_FROM_MAINTENANCE', entityType: 'Room', entityId: ticket.room.id, after: { ticketId: ticket.id, hotelId: ticket.hotelId, roomId: ticket.room.id, status: RoomOperationalStatus.DIRTY, reason: 'cancellation' } } });
+      return this.view(updated);
+    });
   }
 
   async takeRoomOutOfOrder(adminUserId: string, ticketId: string, body: MaintenanceImpactDto) {
     const { ticket } = await this.adminTicket(adminUserId, ticketId);
+    if (!ACTIVE_STATUSES.includes(ticket.status)) throw new ConflictException('Only active maintenance tickets can place a room out of order.');
     if (!body.requiresOutOfOrder) throw new BadRequestException('This action must request an out-of-order room impact.');
     if (!ticket.room) throw new BadRequestException('A room is required before applying out-of-order impact.');
     if (ticket.room.status === RoomOperationalStatus.OCCUPIED) throw new ConflictException('Occupied rooms cannot be taken out of order before the guest is moved.');

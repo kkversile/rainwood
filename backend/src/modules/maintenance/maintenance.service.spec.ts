@@ -52,6 +52,21 @@ describe('maintenance workflow', () => {
     await expect(service.takeRoomOutOfOrder('admin-1', 'ticket-1', { requiresOutOfOrder: true })).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it.each([MaintenanceTicketStatus.OPEN, MaintenanceTicketStatus.ASSIGNED, MaintenanceTicketStatus.IN_PROGRESS])('allows %s tickets to request out-of-order impact', async (status) => {
+    const { service, p, ticket, housekeeping } = setup();
+    p.maintenanceTicket.findUnique.mockResolvedValue({ ...ticket, status });
+    await expect(service.takeRoomOutOfOrder('admin-1', 'ticket-1', { requiresOutOfOrder: true })).resolves.toBeDefined();
+    expect(housekeeping.setManagementRoomStatus).toHaveBeenCalledWith('admin-1', 'room-203', { status: RoomOperationalStatus.OUT_OF_ORDER });
+  });
+
+  it.each([MaintenanceTicketStatus.RESOLVED, MaintenanceTicketStatus.CANCELLED])('rejects %s tickets from requesting out-of-order impact', async (status) => {
+    const { service, p, ticket, housekeeping } = setup();
+    p.maintenanceTicket.findUnique.mockResolvedValue({ ...ticket, status });
+    await expect(service.takeRoomOutOfOrder('admin-1', 'ticket-1', { requiresOutOfOrder: true })).rejects.toBeInstanceOf(ConflictException);
+    expect(housekeeping.setManagementRoomStatus).not.toHaveBeenCalled();
+    expect(p.maintenanceTicket.update).not.toHaveBeenCalled();
+  });
+
   it('resolves an out-of-order room through dirty and housekeeping handoff', async () => {
     const { service, p, ticket, housekeeping, audit } = setup();
     p.maintenanceTicket.findUnique.mockResolvedValue({ ...ticket, status: MaintenanceTicketStatus.IN_PROGRESS, requiresOutOfOrder: true, room: { ...ticket.room, status: RoomOperationalStatus.OUT_OF_ORDER } });
@@ -59,5 +74,50 @@ describe('maintenance workflow', () => {
     expect(p.room.update).toHaveBeenCalledWith({ where: { id: 'room-203' }, data: { status: RoomOperationalStatus.DIRTY } });
     expect(housekeeping.ensureTaskForDirtyRoom).toHaveBeenCalled();
     expect(audit.log).not.toHaveBeenCalled();
+  });
+
+  it('keeps an out-of-order room blocked while another active ticket remains', async () => {
+    const { service, p, ticket, housekeeping } = setup();
+    p.maintenanceTicket.findUnique.mockResolvedValue({ ...ticket, status: MaintenanceTicketStatus.IN_PROGRESS, requiresOutOfOrder: true, room: { ...ticket.room, status: RoomOperationalStatus.OUT_OF_ORDER } });
+    p.maintenanceTicket.count.mockResolvedValue(1);
+    await expect(service.resolveAsAdmin('admin-1', 'ticket-1', { resolutionNote: 'One issue repaired' })).resolves.toBeDefined();
+    expect(p.room.update).not.toHaveBeenCalled();
+    expect(housekeeping.ensureTaskForDirtyRoom).not.toHaveBeenCalled();
+  });
+
+  it.each([MaintenanceTicketStatus.OPEN, MaintenanceTicketStatus.ASSIGNED])('cancels %s tickets without changing a room', async (status) => {
+    const { service, p, ticket } = setup();
+    p.maintenanceTicket.findUnique.mockResolvedValue({ ...ticket, status });
+    await expect(service.cancel('admin-1', 'ticket-1')).resolves.toBeDefined();
+    expect(p.room.update).not.toHaveBeenCalled();
+    expect(p.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'MAINTENANCE_TICKET_CANCELLED' }) }));
+  });
+
+  it.each([MaintenanceTicketStatus.IN_PROGRESS, MaintenanceTicketStatus.RESOLVED, MaintenanceTicketStatus.CANCELLED])('rejects cancelling %s tickets', async (status) => {
+    const { service, p, ticket } = setup();
+    p.maintenanceTicket.findUnique.mockResolvedValue({ ...ticket, status });
+    await expect(service.cancel('admin-1', 'ticket-1')).rejects.toBeInstanceOf(ConflictException);
+    expect(p.maintenanceTicket.update).not.toHaveBeenCalled();
+  });
+
+  it('releases an out-of-order room on cancellation when no active blocker remains', async () => {
+    const { service, p, ticket, housekeeping } = setup();
+    p.maintenanceTicket.findUnique.mockResolvedValue({ ...ticket, status: MaintenanceTicketStatus.ASSIGNED, requiresOutOfOrder: true, room: { ...ticket.room, status: RoomOperationalStatus.OUT_OF_ORDER } });
+    p.maintenanceTicket.count.mockResolvedValue(0);
+    await expect(service.cancel('admin-1', 'ticket-1')).resolves.toBeDefined();
+    expect(p.room.update).toHaveBeenCalledWith({ where: { id: 'room-203' }, data: { status: RoomOperationalStatus.DIRTY } });
+    expect(housekeeping.ensureTaskForDirtyRoom).toHaveBeenCalledWith(p, 'room-203', 'admin-1');
+    expect(p.maintenanceTicket.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: MaintenanceTicketStatus.CANCELLED, outOfOrderClearedAt: expect.any(Date) }) }));
+    expect(p.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'ROOM_RELEASED_FROM_MAINTENANCE', after: expect.objectContaining({ reason: 'cancellation' }) }) }));
+  });
+
+  it('keeps an out-of-order room blocked when another active ticket requires it', async () => {
+    const { service, p, ticket, housekeeping } = setup();
+    p.maintenanceTicket.findUnique.mockResolvedValue({ ...ticket, status: MaintenanceTicketStatus.OPEN, requiresOutOfOrder: true, room: { ...ticket.room, status: RoomOperationalStatus.OUT_OF_ORDER } });
+    p.maintenanceTicket.count.mockResolvedValue(1);
+    await expect(service.cancel('admin-1', 'ticket-1')).resolves.toBeDefined();
+    expect(p.room.update).not.toHaveBeenCalled();
+    expect(housekeeping.ensureTaskForDirtyRoom).not.toHaveBeenCalled();
+    expect(p.auditLog.create).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'ROOM_RELEASED_FROM_MAINTENANCE' }) }));
   });
 });
