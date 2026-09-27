@@ -339,6 +339,7 @@ model Hotel {
   canonicalPath        String?
   ogImageUrl           String?
   virtualTourUrl       String?
+  timezoneName         String                     @default("Asia/Kolkata")
   axisPropertyId       String?                    @unique
   rooms                RoomType[]
   physicalRooms        Room[]

@@ -8,6 +8,7 @@ import { FilesService } from '../files/files.service';
 import ExcelJS from 'exceljs';
 import { canonicalMealPlan, canonicalRatePlanCode } from './rate-plan.utils';
 import { mapImportedRateFields } from '../../common/excel-rate-fields';
+import { assertAdminRoomStatusTransition } from './room-operational-status';
 
 function existingSupportedOccupancyPrices(value: unknown): Record<string, number> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -37,8 +38,16 @@ export class HotelsService {
   }
 
   async updatePhysicalRoom(id: string, body: Partial<PhysicalRoomDto>) {
-    const current = await this.prisma.room.findUnique({ where: { id } });
+    const current = await this.prisma.room.findUnique({ where: { id }, include: { assignments: { where: { unassignedAt: null }, select: { id: true } } } });
     if (!current) throw new NotFoundException('Physical room not found.');
+    const hasActiveAssignment = current.assignments.length > 0;
+    const incompatibleEdit = (body.roomTypeId !== undefined && body.roomTypeId !== current.roomTypeId)
+      || body.active === false
+      || (body.status !== undefined && body.status !== current.status);
+    if (hasActiveAssignment && incompatibleEdit) {
+      throw new ConflictException(`Room ${current.roomNumber} is currently assigned to an in-house guest and cannot be modified.`);
+    }
+    if (body.status !== undefined) assertAdminRoomStatusTransition(current.status, body.status, current.roomNumber);
     if (body.roomTypeId) {
       const roomType = await this.prisma.roomType.findFirst({ where: { id: body.roomTypeId, hotelId: current.hotelId } });
       if (!roomType) throw new BadRequestException('Room type does not belong to this hotel.');

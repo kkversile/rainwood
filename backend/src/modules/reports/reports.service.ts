@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { BookingSource, Prisma, ReservationStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { addDays, parseDateOnly, todayUtc } from '../../common/dates';
+import { getHotelOperationalDate } from '../../common/hotel-dates';
 import { ReportQueryDto } from './reports.dto';
 
 function flag(value: unknown) {
@@ -18,7 +19,7 @@ export class ReportsService {
       this.prisma.reservation.count({ where: { syncStatus: { in: ['PENDING', 'RETRY', 'FAILED', 'MANUAL_ACTION_REQUIRED', 'DEAD_LETTER'] } } }),
       this.prisma.reservation.aggregate({ _sum: { balanceAmount: true }, where: { balanceAmount: { gt: 0 }, status: { not: 'CANCELLED' } } }),
       this.prisma.reservation.aggregate({ _sum: { totalAmount: true }, where: { status: { in: ['CONFIRMED', 'COMPLETED', 'MODIFIED'] } } }),
-      this.prisma.reservation.count({ where: { status: 'CONFIRMED', checkIn: todayUtc() } }),
+      this.dashboardArrivals(),
       this.prisma.outboxJob.count({ where: { status: { in: ['FAILED', 'DEAD_LETTER'] } } }),
     ]);
     return { bookings, pendingSync, balancePending: Number(pendingPayments._sum.balanceAmount ?? 0), revenue: Number(revenue._sum.totalAmount ?? 0), arrivals, failedJobs };
@@ -69,7 +70,7 @@ export class ReportsService {
   }
 
   async expectedArrivals(query: ReportQueryDto, user?: { role?: string }) {
-    const from = query.from ? parseDateOnly(query.from, 'from') : todayUtc();
+    const from = query.from ? parseDateOnly(query.from, 'from') : await this.defaultOperationalDate(query);
     const to = query.to ? addDays(parseDateOnly(query.to, 'to'), 1) : addDays(from, 1);
     const hotelIds = query.hotelIds?.length ? query.hotelIds : query.hotelId ? [query.hotelId] : undefined;
     const statuses: ReservationStatus[] = query.statuses?.length ? query.statuses : query.status ? [query.status] : [ReservationStatus.CONFIRMED, ReservationStatus.TENTATIVE];
@@ -183,10 +184,23 @@ export class ReportsService {
     return { hotelId: hotelIds?.length ? { in: hotelIds } : undefined, source: query.sources?.length ? { in: query.sources } : query.source, status: statuses, checkIn: query.from || query.to ? { gte: query.from ? parseDateOnly(query.from, 'from') : undefined, lt: to } : undefined };
   }
 
-  private dateReport(query: ReportQueryDto, field: 'checkIn' | 'checkOut') {
-    const from = query.from ? parseDateOnly(query.from, 'from') : todayUtc();
+  private async dateReport(query: ReportQueryDto, field: 'checkIn' | 'checkOut') {
+    const from = query.from ? parseDateOnly(query.from, 'from') : await this.defaultOperationalDate(query);
     const to = query.to ? parseDateOnly(query.to, 'to') : addDays(from, 1);
     const where: any = { ...this.where({ ...query, from: undefined, to: undefined }), [field]: { gte: from, lt: to } };
     return this.prisma.reservation.findMany({ where, include: { hotel: true, lines: { include: { roomType: true } }, payments: true }, orderBy: { [field]: 'asc' } });
+  }
+
+  private async defaultOperationalDate(query: ReportQueryDto) {
+    const hotelId = query.hotelId ?? (query.hotelIds?.length === 1 ? query.hotelIds[0] : undefined);
+    if (!hotelId) return todayUtc();
+    const hotel = await this.prisma.hotel.findUnique({ where: { id: hotelId }, select: { timezoneName: true } });
+    return hotel ? getHotelOperationalDate(hotel.timezoneName) : todayUtc();
+  }
+
+  private async dashboardArrivals() {
+    const hotels = await this.prisma.hotel.findMany({ where: { active: true }, select: { id: true, timezoneName: true } });
+    const counts = await Promise.all(hotels.map((hotel) => this.prisma.reservation.count({ where: { hotelId: hotel.id, status: 'CONFIRMED', checkIn: getHotelOperationalDate(hotel.timezoneName) } })));
+    return counts.reduce((sum, count) => sum + count, 0);
   }
 }

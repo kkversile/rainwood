@@ -3,7 +3,9 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: true } });
+const connectionString = process.env.DATABASE_URL ?? '';
+const requiresTls = /(?:\?|&)sslmode=require(?:&|$)/i.test(connectionString);
+const pool = new Pool({ connectionString, ...(requiresTls ? { ssl: { rejectUnauthorized: true } } : {}) });
 const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
 async function main() {

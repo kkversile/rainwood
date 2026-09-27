@@ -42,7 +42,8 @@ export class FilesController {
   }
 
   @Post('agent-document')
-  @UseGuards(JwtAuthGuard, ActiveAgentGuard)
+  // Pending agents must be able to upload KYC before activation; commercial file routes remain active-agent protected.
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (_request, file, callback) => callback(null, ['image/jpeg', 'image/png', 'application/pdf'].includes(file.mimetype)) }))
   uploadAgentDocument(@UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: any) {
     if (!file) throw new BadRequestException('A PDF, PNG, or JPEG agent document is required');

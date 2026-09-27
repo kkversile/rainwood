@@ -1,7 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { FolioChargeCategory, StaffDepartment, StayStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
-import { todayUtc, toDateOnly } from '../../common/dates';
+import { toDateOnly } from '../../common/dates';
+import { getHotelOperationalDate } from '../../common/hotel-dates';
 import { ReservationsService } from '../reservations/reservations.service';
 import { StaffFolioChargeDto, StaffStaysQueryDto } from './staff.dto';
 import { allowedStaffFolioCategories } from './staff-rules';
@@ -11,7 +12,7 @@ export class StaffService {
   constructor(private p: PrismaService, private reservations: ReservationsService) {}
 
   private async profile(userId: string) {
-    const user = await this.p.user.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotelId: true, staffHotel: { select: { id: true, name: true, active: true } } } });
+    const user = await this.p.user.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotelId: true, staffHotel: { select: { id: true, name: true, active: true, timezoneName: true } } } });
     if (!user || user.role !== UserRole.SERVICE_STAFF || !user.active || !user.staffHotelId || !user.staffHotel?.active) throw new ForbiddenException('Service staff must have an active assigned hotel.');
     return user;
   }
@@ -77,7 +78,8 @@ export class StaffService {
     const department = user.staffDepartment as StaffDepartment | null;
     const allowed = allowedStaffFolioCategories(department);
     if (!allowed.includes(body.category as FolioChargeCategory)) throw new ForbiddenException('Your department cannot post this folio category.');
-    await this.reservations.postFolioCharge(reference, { category: body.category, description: body.description, quantity: body.quantity, unitAmount: body.unitAmount, note: body.note, postingDate: toDateOnly(todayUtc()) }, { id: user.id }, { allowedCategories: allowed, staffOnly: true, postingDate: todayUtc(), idempotencyKey: body.idempotencyKey });
+    const postingDate = getHotelOperationalDate(user.staffHotel?.timezoneName ?? 'Asia/Kolkata');
+    await this.reservations.postFolioCharge(reference, { category: body.category, description: body.description, quantity: body.quantity, unitAmount: body.unitAmount, note: body.note, postingDate: toDateOnly(postingDate) }, { id: user.id }, { allowedCategories: allowed, staffOnly: true, postingDate, idempotencyKey: body.idempotencyKey });
     return this.staffFolio(await this.reservations.getFolio(reference));
   }
 }

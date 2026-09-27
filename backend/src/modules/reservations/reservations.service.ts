@@ -5,7 +5,8 @@ import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/audit.service';
 import { HoldsService } from '../holds/holds.service';
 import { CancellationDto, CheckInDto, CheckOutDto, CreateReservationDto, FolioChargeDto, ModificationDto, ReservationListQueryDto, RoomChangeDto, VoidFolioChargeDto } from './reservations.dto';
-import { parseDateOnly, todayUtc, toDateOnly } from '../../common/dates';
+import { parseDateOnly, toDateOnly } from '../../common/dates';
+import { getHotelOperationalDate } from '../../common/hotel-dates';
 import { sha256 } from '../../common/security';
 import { serializable } from '../../common/transactions';
 import { assertReservationTransition } from './reservation-state';
@@ -38,11 +39,11 @@ export class ReservationsService {
   async checkIn(reference: string, body: CheckInDto, user: { id: string; role?: string }) {
     this.assertOperationalRole(user.role);
     return serializable(this.p, async (tx) => {
-      const reservation = await tx.reservation.findUnique({ where: { reference }, include: { hotel: { select: { id: true, name: true } }, lines: { include: { roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, include: { room: true } } } });
+      const reservation = await tx.reservation.findUnique({ where: { reference }, include: { hotel: { select: { id: true, name: true, timezoneName: true } }, lines: { include: { roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, include: { room: true } } } });
       if (!reservation) throw new NotFoundException('Reservation not found');
       if (!([ReservationStatus.CONFIRMED, ReservationStatus.MODIFIED] as ReservationStatus[]).includes(reservation.status)) throw new BadRequestException('Only confirmed or modified reservations can be checked in.');
       if (reservation.stayStatus !== StayStatus.EXPECTED) throw new ConflictException('This stay has already been checked in or completed.');
-      if (toDateOnly(reservation.checkIn) !== toDateOnly(todayUtc())) throw new BadRequestException('Check-in is allowed on the scheduled arrival date only.');
+      if (toDateOnly(reservation.checkIn) !== toDateOnly(getHotelOperationalDate(reservation.hotel.timezoneName))) throw new BadRequestException('Check-in is allowed on the scheduled arrival date only.');
       const expected = new Map(reservation.lines.map((line) => [line.id, line.rooms]));
       if (!Array.isArray(body.assignments) || body.assignments.length !== reservation.lines.reduce((sum, line) => sum + line.rooms, 0)) throw new BadRequestException('Assign exactly one physical room for each booked room.');
       const roomIds = body.assignments.map((item) => item.roomId);
