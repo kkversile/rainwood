@@ -10,7 +10,7 @@ type Hotel = { id: string; name: string };
 type Room = { id: string; hotelId: string; roomNumber: string; floor: string | null; wing: string | null; status: string; roomType: { name: string } };
 const statuses = ['ALL', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CANCELLED'];
 const priorities = ['ALL', 'URGENT', 'HIGH', 'NORMAL', 'LOW'];
-const categories = ['ALL', 'PLUMBING', 'ELECTRICAL', 'HVAC', 'FURNITURE', 'APPLIANCE', 'SAFETY', 'GENERAL', 'OTHER'];
+const categories = ['ALL', 'ELECTRICAL', 'PLUMBING', 'HVAC', 'TV_ELECTRONICS', 'FURNITURE', 'BATHROOM', 'DOOR_LOCK', 'INTERNET', 'GENERAL', 'OTHER'];
 function pretty(value: string) { return value.replace(/_/g, ' '); }
 
 export function MaintenanceBoard() {
