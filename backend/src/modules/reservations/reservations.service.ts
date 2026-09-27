@@ -15,7 +15,7 @@ import { calculateAgentBookingPaymentTerms, calculateReservationPaymentSchedule 
 import { HousekeepingService } from '../housekeeping/housekeeping.service';
 
 const checkoutInclude = {
-  hotel: { select: { id: true, name: true } },
+  hotel: { select: { id: true, name: true, timezoneName: true } },
   lines: { include: { roomType: { select: { id: true, name: true } }, ratePlan: { select: { id: true, name: true } } } },
   roomAssignments: { where: { unassignedAt: null }, include: { room: { include: { roomType: { select: { name: true } } } } } },
   folioCharges: { where: { status: 'POSTED' }, include: { postedBy: { select: { id: true, name: true } } }, orderBy: [{ postingDate: 'asc' }, { createdAt: 'asc' }] },
@@ -132,7 +132,7 @@ export class ReservationsService {
         await this.housekeeping?.ensureTaskForDirtyRoom(tx, assignment.roomId, user.id);
       }
       await tx.reservationRoomAssignment.updateMany({ where: { reservationId: reservation.id, unassignedAt: null }, data: { unassignedAt: now, unassignedById: user.id, reason: body.note?.trim() || 'Guest checked out' } });
-      const finalFolioNumber = this.finalFolioNumber();
+      const finalFolioNumber = this.finalFolioNumber(reservation.hotel.timezoneName, now);
       const status = totals.outstandingAmount <= 0.005 ? ReservationSettlementStatus.SETTLED : body.overrideReason === 'WRITE_OFF' ? ReservationSettlementStatus.WRITTEN_OFF : ReservationSettlementStatus.PARTIAL;
       const overrideAuthorized = totals.outstandingAmount > 0.005 ? actor : null;
       const snapshot = this.settlementSnapshot(reservation, totals, finalFolioNumber, status, body, now, overrideAuthorized);
@@ -183,7 +183,7 @@ export class ReservationsService {
     return { reservationAmount, incidentalAmount, taxAmount: 0, paidAmount, grossAmount, outstandingAmount: Math.max(grossAmount - paidAmount, 0) };
   }
 
-  private finalFolioNumber() { return `RW-FOLIO-${new Date().getUTCFullYear()}-${randomUUID().slice(0, 10).toUpperCase()}`; }
+  private finalFolioNumber(hotelTimezone = 'Asia/Kolkata', now = new Date()) { return `RW-FOLIO-${getHotelOperationalDate(hotelTimezone, now).getUTCFullYear()}-${randomUUID().slice(0, 10).toUpperCase()}`; }
 
   private settlementSnapshot(reservation: any, totals: any, finalFolioNumber: string, status: string, body: CheckOutDto, settledAt: Date, overrideAuthorized: { id: string; name: string } | null) {
     return { finalFolioNumber, hotel: { id: reservation.hotel.id, name: reservation.hotel.name }, reservation: reservation.reference, guest: { name: reservation.guestName, email: reservation.email, mobile: reservation.mobile, gstin: reservation.gstin ?? null }, stay: { checkIn: reservation.checkIn, checkOut: reservation.checkOut, rooms: reservation.roomAssignments.map((assignment: any) => ({ roomNumber: assignment.room.roomNumber, roomType: assignment.room.roomType?.name ?? null })) }, charges: { reservationAmount: totals.reservationAmount, incidentals: reservation.folioCharges.map((charge: any) => ({ description: charge.description, category: charge.category, quantity: Number(charge.quantity), totalAmount: Number(charge.totalAmount), postingDate: charge.postingDate })), incidentalAmount: totals.incidentalAmount, grossAmount: totals.grossAmount }, payments: reservation.payments.map((payment: any) => ({ amount: Number(payment.amount), mode: payment.mode, reference: payment.reference, paidAt: payment.paidAt })), paidAmount: totals.paidAmount, balanceAmount: totals.outstandingAmount, status, overrideReason: body.overrideReason ?? null, authorizedBy: overrideAuthorized?.name ?? null, override: { reason: body.overrideReason ?? null, authorizedBy: overrideAuthorized ? { id: overrideAuthorized.id, name: overrideAuthorized.name } : null }, settledAt };

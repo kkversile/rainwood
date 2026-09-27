@@ -171,7 +171,7 @@ describe('checkout settlement', () => {
       guestName: 'Demo Guest', email: 'guest@example.com', mobile: '9999999999', gstin: null,
       totalAmount: new Prisma.Decimal(1000), advanceAmount: new Prisma.Decimal(1000), balanceAmount: new Prisma.Decimal(0),
       checkIn: new Date('2026-09-28T00:00:00.000Z'), checkOut: new Date('2026-09-30T00:00:00.000Z'),
-      hotel: { id: 'hotel-1', name: 'RainWood Demo' }, lines: [],
+      hotel: { id: 'hotel-1', name: 'RainWood Demo', timezoneName: 'Asia/Kolkata' }, lines: [],
       roomAssignments: [{ id: 'assignment-1', roomId: 'room-1', room: { roomNumber: '101', roomType: { name: 'Deluxe' } } }],
       folioCharges: [{ id: 'charge-1', description: 'Minibar', category: 'MINIBAR', quantity: new Prisma.Decimal(1), totalAmount: new Prisma.Decimal(50), postingDate: new Date('2026-09-28T00:00:00.000Z'), postedBy: { id: 'admin-1', name: 'Admin' } }],
       payments: [{ id: 'payment-1', amount: new Prisma.Decimal(1050), mode: 'CASH', reference: 'receipt-1', paidAt: new Date('2026-09-28T00:00:00.000Z'), verified: true }],
@@ -271,4 +271,27 @@ describe('checkout settlement', () => {
   });
 
   function setupSettlement() { return { id: 'settlement-1', status: 'SETTLED', reservationAmount: new Prisma.Decimal(1000), incidentalAmount: new Prisma.Decimal(50), grossAmount: new Prisma.Decimal(1050), paidAmount: new Prisma.Decimal(1050), balanceAmount: new Prisma.Decimal(0), finalFolioNumber: 'RW-FOLIO-2026-DEMO1', settledAt: new Date(), snapshot: { finalFolioNumber: 'RW-FOLIO-2026-DEMO1' } }; }
+});
+
+describe('hotel-local final folio year', () => {
+  it('uses the Asia/Kolkata operational year at the UTC midnight boundary', () => {
+    const service = new ReservationsService({} as any, {} as any, {} as any, {} as any);
+    const folio = (service as any).finalFolioNumber('Asia/Kolkata', new Date('2026-12-31T20:00:00.000Z'));
+    expect(folio).toMatch(/^RW-FOLIO-2027-[A-F0-9-]+$/);
+  });
+
+  it('uses the UTC hotel year for the same instant', () => {
+    const service = new ReservationsService({} as any, {} as any, {} as any, {} as any);
+    const folio = (service as any).finalFolioNumber('UTC', new Date('2026-12-31T20:00:00.000Z'));
+    expect(folio).toMatch(/^RW-FOLIO-2026-[A-F0-9-]+$/);
+  });
+
+  it('keeps the unique final folio pattern', () => {
+    const service = new ReservationsService({} as any, {} as any, {} as any, {} as any);
+    const first = (service as any).finalFolioNumber('Asia/Kolkata', new Date('2026-09-28T10:00:00.000Z'));
+    const second = (service as any).finalFolioNumber('Asia/Kolkata', new Date('2026-09-28T10:00:00.000Z'));
+    expect(first).toMatch(/^RW-FOLIO-2026-[A-F0-9-]+$/);
+    expect(second).toMatch(/^RW-FOLIO-2026-[A-F0-9-]+$/);
+    expect(first).not.toBe(second);
+  });
 });

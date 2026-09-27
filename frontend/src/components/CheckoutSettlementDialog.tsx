@@ -18,6 +18,17 @@ function dateLabel(value?: string | null) { return value ? new Date(value).toLoc
 function label(value: string) { return value.replace(/_/g, ' ').toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase()); }
 export function escapeHtml(value: unknown) { return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character)); }
 
+export function buildFinalFolioPrintHtml(folio: CheckoutResult) {
+  const snapshot = folio.snapshot ?? {};
+  const hotelName = snapshot.hotel?.name ?? 'RainWood Hotels';
+  const guest = snapshot.guest ?? {};
+  const rooms = (snapshot.stay?.rooms ?? []).map((room: any) => `<li>Room ${escapeHtml(room.roomNumber)}${room.roomType ? ` · ${escapeHtml(room.roomType)}` : ''}</li>`).join('');
+  const charges = (snapshot.charges?.incidentals ?? []).map((charge: any) => `<tr><td>${escapeHtml(charge.description)}</td><td>${escapeHtml(label(charge.category))}</td><td>${money(charge.totalAmount)}</td></tr>`).join('');
+  const payments = (snapshot.payments ?? []).map((payment: any) => `<tr><td>${escapeHtml(label(payment.mode))}</td><td>${escapeHtml(payment.reference)}</td><td>${money(payment.amount)}</td></tr>`).join('');
+  const override = snapshot.override?.authorizedBy?.name ?? snapshot.authorizedBy;
+  return `<html><head><title>${escapeHtml(folio.finalFolioNumber)}</title><style>body{font:14px Arial;color:#12344d;padding:32px}h1{margin:0 0 6px}h2{border-bottom:1px solid #d6e3e8;padding-bottom:6px}table{width:100%;border-collapse:collapse;margin-top:16px}td,th{padding:9px;border-bottom:1px solid #d6e3e8;text-align:left}.total{font-size:18px;font-weight:700}</style></head><body><h1>${escapeHtml(hotelName)}</h1><p>Final Folio: <strong>${escapeHtml(folio.finalFolioNumber)}</strong></p><p>Reservation: ${escapeHtml(folio.reference)} · Guest: ${escapeHtml(guest.name)} · Email: ${escapeHtml(guest.email)} · Mobile: ${escapeHtml(guest.mobile)} · GSTIN: ${escapeHtml(guest.gstin)}</p><h2>Stay</h2><ul>${rooms}</ul><h2>Charges</h2><table><thead><tr><th>Description</th><th>Category</th><th>Total</th></tr></thead><tbody><tr><td>Reservation stay</td><td>Room</td><td>${money(folio.settlement.grossAmount - folio.settlement.incidentalAmount)}</td></tr>${charges}</tbody></table><h2>Payments</h2><table><thead><tr><th>Mode</th><th>Reference</th><th>Amount</th></tr></thead><tbody>${payments}</tbody></table><p class="total">Gross: ${money(folio.settlement.grossAmount)} · Paid: ${money(folio.settlement.paidAmount)} · Balance: ${money(folio.settlement.balanceAmount)}</p>${snapshot.overrideReason ? `<p>Override reason: ${escapeHtml(snapshot.overrideReason)}</p>` : ''}${override ? `<p>Authorized by: ${escapeHtml(override)}</p>` : ''}${snapshot.notes ? `<p>Note: ${escapeHtml(snapshot.notes)}</p>` : ''}<p>Settled at: ${escapeHtml(new Date(folio.settlement.settledAt).toLocaleString('en-IN'))}</p></body></html>`;
+}
+
 export function CheckoutSettlementDialog({ reference, onClose }: { reference: string; onClose: () => void }) {
   const [preview, setPreview] = useState<CheckoutPreview | null>(null);
   const [result, setResult] = useState<CheckoutResult | null>(null);
@@ -77,12 +88,10 @@ export function CheckoutSettlementDialog({ reference, onClose }: { reference: st
   async function printFolio() {
     if (!result) return;
     const folio = await apiRequest<CheckoutResult>(`/reservations/${encodeURIComponent(reference)}/final-folio`);
-    const snapshot = folio.snapshot;
     const popup = window.open('', '_blank', 'noopener,noreferrer,width=900,height=720');
     if (!popup) { setError('Allow pop-ups to print the final folio.'); return; }
-    const charges = (snapshot?.charges?.incidentals ?? []).map((charge: any) => `<tr><td>${escapeHtml(charge.description)}</td><td>${escapeHtml(label(charge.category))}</td><td>${money(charge.totalAmount)}</td></tr>`).join('');
-    popup.document.write(`<html><head><title>${folio.finalFolioNumber}</title><style>body{font:14px Arial;color:#12344d;padding:32px}h1{margin:0 0 6px}h2{border-bottom:1px solid #d6e3e8;padding-bottom:6px}table{width:100%;border-collapse:collapse;margin-top:16px}td,th{padding:9px;border-bottom:1px solid #d6e3e8;text-align:left}.total{font-size:18px;font-weight:700}</style></head><body><h1>RainWood Hotels</h1><p>Final Folio: <strong>${folio.finalFolioNumber}</strong></p><p>Reservation: ${folio.reference} · Guest: ${snapshot?.guest?.name ?? ''}</p><h2>Charges</h2><table><thead><tr><th>Description</th><th>Category</th><th>Total</th></tr></thead><tbody><tr><td>Reservation stay</td><td>Room</td><td>${money(folio.settlement.grossAmount - folio.settlement.incidentalAmount)}</td></tr>${charges}</tbody></table><p class="total">Gross: ${money(folio.settlement.grossAmount)} · Paid: ${money(folio.settlement.paidAmount)} · Balance: ${money(folio.settlement.balanceAmount)}</p><p>Settled at: ${new Date(folio.settlement.settledAt).toLocaleString('en-IN')}</p></body></html>`);
-    popup.document.write(`<html><head><title>${escapeHtml(folio.finalFolioNumber)}</title><style>body{font:14px Arial;color:#12344d;padding:32px}h1{margin:0 0 6px}h2{border-bottom:1px solid #d6e3e8;padding-bottom:6px}table{width:100%;border-collapse:collapse;margin-top:16px}td,th{padding:9px;border-bottom:1px solid #d6e3e8;text-align:left}.total{font-size:18px;font-weight:700}</style></head><body><h1>RainWood Hotels</h1><p>Final Folio: <strong>${escapeHtml(folio.finalFolioNumber)}</strong></p><p>Reservation: ${escapeHtml(folio.reference)} · Guest: ${escapeHtml(snapshot?.guest?.name)}</p><h2>Charges</h2><table><thead><tr><th>Description</th><th>Category</th><th>Total</th></tr></thead><tbody><tr><td>Reservation stay</td><td>Room</td><td>${money(folio.settlement.grossAmount - folio.settlement.incidentalAmount)}</td></tr>${charges}</tbody></table><p class="total">Gross: ${money(folio.settlement.grossAmount)} · Paid: ${money(folio.settlement.paidAmount)} · Balance: ${money(folio.settlement.balanceAmount)}</p><p>Settled at: ${escapeHtml(new Date(folio.settlement.settledAt).toLocaleString('en-IN'))}</p></body></html>`);
+    popup.document.open();
+    popup.document.write(buildFinalFolioPrintHtml(folio));
     popup.document.close(); popup.focus(); popup.print();
   }
 

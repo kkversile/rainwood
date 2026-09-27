@@ -67,6 +67,11 @@ enum ReservationSettlementStatus {
   VOIDED
 }
 
+enum HotelBusinessDayStatus {
+  OPEN
+  CLOSED
+}
+
 enum RoomOperationalStatus {
   AVAILABLE
   OCCUPIED
@@ -312,6 +317,7 @@ model User {
   checkedOutReservations     Reservation[]               @relation("ReservationCheckedOutBy")
   reservationSettlements     ReservationSettlement[]     @relation("SettlementActor")
   settlementOverrides        ReservationSettlement[]     @relation("SettlementOverrideAuthorizer")
+  closedBusinessDays         HotelBusinessDay[]          @relation("BusinessDayCloser")
   uploadedFiles              StoredFile[]                @relation("FileUploader")
   agentDocuments             AgentDocument[]
   profileImageFileId         String?                     @unique
@@ -426,10 +432,30 @@ model Hotel {
   maintenanceTickets   MaintenanceTicket[]
   holds                InventoryHold[]
   waitlist             WaitlistEntry[]
+  businessDays         HotelBusinessDay[]
   createdAt            DateTime                   @default(now())
   updatedAt            DateTime                   @updatedAt
 
   @@index([active, slug])
+}
+
+model HotelBusinessDay {
+  id           String                 @id @default(cuid())
+  hotelId      String
+  hotel        Hotel                  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  businessDate DateTime               @db.Date
+  status       HotelBusinessDayStatus @default(OPEN)
+  openedAt     DateTime               @default(now())
+  closedAt     DateTime?
+  closedById   String?
+  closedBy     User?                  @relation("BusinessDayCloser", fields: [closedById], references: [id], onDelete: SetNull)
+  summary      Json?
+  exceptions   Json?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  @@unique([hotelId, businessDate])
+  @@index([hotelId, status, businessDate])
 }
 
 model RatePlanMaster {

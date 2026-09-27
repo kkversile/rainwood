@@ -26,6 +26,7 @@ import { SupplementaryChargesModule } from './modules/supplementary-charges/supp
 import { StaffModule } from './modules/staff/staff.module';
 import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { NightAuditModule } from './modules/night-audit/night-audit.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { MaintenanceModule } from './modules/maintenance/maintenance.module';
     StaffModule,
     HousekeepingModule,
     MaintenanceModule,
+    NightAuditModule,
   ],
 })
 export class AppModule {}
