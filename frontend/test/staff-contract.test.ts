@@ -56,7 +56,8 @@ test('admin and staff login pages expose non-submitting demo prefill shortcuts',
   assert.match(admin, /Prefill Admin login/);
   assert.match(admin, /staff\/login\?demo=staff/);
   assert.match(staff, /URLSearchParams\(window\.location\.search\).*demo.*staff/);
-  assert.match(staff, /Prefill Staff login/);
+  assert.match(staff, /Prefill Housekeeping/);
+  assert.match(staff, /Prefill Maintenance/);
   assert.match(credentials, /staffEmail/);
   assert.match(credentials, /staffPassword/);
 });
