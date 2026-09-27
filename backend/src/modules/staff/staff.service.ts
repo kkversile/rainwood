@@ -30,12 +30,20 @@ export class StaffService {
     if (user.staffDepartment === StaffDepartment.HOUSEKEEPING) throw new ForbiddenException('Housekeeping staff must use the housekeeping room board.');
   }
 
-  private summarize(row: any) {
+  private operationalPreferences(row: any, department: StaffDepartment | null) {
+    const preferences = row.guestProfile?.preferences && typeof row.guestProfile.preferences === 'object' ? row.guestProfile.preferences as Record<string, unknown> : {};
+    const allowed = department === StaffDepartment.FOOD_BEVERAGE ? ['vegetarian', 'vegan', 'allergyNote', 'dietaryNote'] : ['extraPillow', 'quietRoom', 'babyCot'];
+    const scoped = Object.fromEntries(allowed.filter((key) => preferences[key] !== undefined && preferences[key] !== null && preferences[key] !== '').map((key) => [key, preferences[key]]));
+    const notes = (row.guestProfile?.notes ?? []).map((note: any) => ({ category: note.category, note: note.note }));
+    return { ...scoped, notes };
+  }
+
+  private summarize(row: any, department: StaffDepartment | null = null) {
     const roomTypes = [...new Map(row.lines.map((line: any) => [line.roomType.id, line.roomType.name])).values()];
     const rooms = row.lines.reduce((sum: number, line: any) => sum + line.rooms, 0);
     const adults = row.lines.reduce((sum: number, line: any) => sum + line.adults, 0);
     const children = row.lines.reduce((sum: number, line: any) => sum + line.children, 0);
-    return { reference: row.reference, guestName: row.guestName, checkIn: row.checkIn, checkOut: row.checkOut, status: row.status, stayStatus: row.stayStatus, rooms, roomTypes, adults, children, pax: adults + children, hotel: row.hotel, assignedRooms: (row.roomAssignments ?? []).map((assignment: any) => ({ id: assignment.id, roomNumber: assignment.room.roomNumber, floor: assignment.room.floor, wing: assignment.room.wing, roomType: assignment.room.roomType?.name ?? null })) };
+    return { reference: row.reference, guestName: row.guestName, checkIn: row.checkIn, checkOut: row.checkOut, status: row.status, stayStatus: row.stayStatus, rooms, roomTypes, adults, children, pax: adults + children, hotel: row.hotel, assignedRooms: (row.roomAssignments ?? []).map((assignment: any) => ({ id: assignment.id, roomNumber: assignment.room.roomNumber, floor: assignment.room.floor, wing: assignment.room.wing, roomType: assignment.room.roomType?.name ?? null })), operationalPreferences: this.operationalPreferences(row, department) };
   }
 
   async getMe(userId: string) {
@@ -47,22 +55,22 @@ export class StaffService {
   async listStays(userId: string, query: StaffStaysQueryDto) {
     const user = await this.profile(userId);
     this.assertGuestOperationsAllowed(user);
-    const rows = await this.p.reservation.findMany({ where: this.operationalWhere(user.staffHotelId!, query.q), orderBy: [{ checkIn: 'asc' }, { guestName: 'asc' }], select: { reference: true, guestName: true, checkIn: true, checkOut: true, status: true, stayStatus: true, hotel: { select: { id: true, name: true } }, lines: { select: { rooms: true, adults: true, children: true, roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, select: { id: true, room: { select: { roomNumber: true, floor: true, wing: true, roomType: { select: { name: true } } } } } } } });
-    return rows.map((row) => this.summarize(row));
+    const rows = await this.p.reservation.findMany({ where: this.operationalWhere(user.staffHotelId!, query.q), orderBy: [{ checkIn: 'asc' }, { guestName: 'asc' }], select: { reference: true, guestName: true, checkIn: true, checkOut: true, status: true, stayStatus: true, hotel: { select: { id: true, name: true } }, guestProfile: { select: { preferences: true, notes: { where: { visibility: 'SERVICE_STAFF' }, select: { category: true, note: true } } } }, lines: { select: { rooms: true, adults: true, children: true, roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, select: { id: true, room: { select: { roomNumber: true, floor: true, wing: true, roomType: { select: { name: true } } } } } } } });
+    return rows.map((row) => this.summarize(row, user.staffDepartment));
   }
 
   private async staffStay(userId: string, reference: string) {
     const user = await this.profile(userId);
     this.assertGuestOperationsAllowed(user);
-    const row = await this.p.reservation.findUnique({ where: { reference }, select: { reference: true, guestName: true, checkIn: true, checkOut: true, status: true, stayStatus: true, hotelId: true, hotel: { select: { id: true, name: true } }, lines: { select: { rooms: true, adults: true, children: true, roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, select: { id: true, room: { select: { roomNumber: true, floor: true, wing: true, roomType: { select: { name: true } } } } } } } });
+    const row = await this.p.reservation.findUnique({ where: { reference }, select: { reference: true, guestName: true, checkIn: true, checkOut: true, status: true, stayStatus: true, hotelId: true, hotel: { select: { id: true, name: true } }, guestProfile: { select: { preferences: true, notes: { where: { visibility: 'SERVICE_STAFF' }, select: { category: true, note: true } } } }, lines: { select: { rooms: true, adults: true, children: true, roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, select: { id: true, room: { select: { roomNumber: true, floor: true, wing: true, roomType: { select: { name: true } } } } } } } });
     if (!row || row.hotelId !== user.staffHotelId) throw new NotFoundException('Operational stay not found');
     if (row.stayStatus !== StayStatus.CHECKED_IN) throw new NotFoundException('Operational stay not found');
     return { user, row };
   }
 
   async getStay(userId: string, reference: string) {
-    const { row } = await this.staffStay(userId, reference);
-    return this.summarize(row);
+    const { user, row } = await this.staffStay(userId, reference);
+    return this.summarize(row, user.staffDepartment);
   }
 
   private staffFolio(folio: any) {

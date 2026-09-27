@@ -81,4 +81,26 @@ describe('ManagementDashboardService', () => {
     const global = setup();
     await expect(global.service.dashboard('admin-1', { hotelId: 'hotel-1', from: '2025-01-01', to: '2026-12-31' })).rejects.toThrow('cannot exceed 366 days');
   });
+
+  it('keeps mixed legacy and unique source counts independent of row order', () => {
+    const { service } = setup();
+    const aggregate = (service as any).aggregateSourceRows.bind(service);
+    const legacy = { source: 'AGENT', reservationIds: new Set<string>(), legacyReservationCount: 2, roomNights: 2, roomRevenue: 200 };
+    const modern = { source: 'AGENT', reservationIds: new Set(['A', 'B']), legacyReservationCount: 0, roomNights: 2, roomRevenue: 300 };
+    for (const rows of [[legacy, modern], [modern, legacy]]) {
+      const row = aggregate(rows).get('AGENT');
+      expect(row.reservationIds.size + row.legacyReservationCount).toBe(4);
+      expect(row.roomNights).toBe(4);
+    }
+  });
+
+  it('deduplicates modern reservation IDs across source rows', () => {
+    const { service } = setup();
+    const row = (service as any).aggregateSourceRows([
+      { source: 'WEBSITE', reservationIds: new Set(['A', 'B']), legacyReservationCount: 0, roomNights: 2, roomRevenue: 200 },
+      { source: 'WEBSITE', reservationIds: new Set(['B', 'C']), legacyReservationCount: 0, roomNights: 2, roomRevenue: 300 },
+    ]).get('WEBSITE');
+    expect(row.reservationIds.size).toBe(3);
+    expect(row.legacyReservationCount).toBe(0);
+  });
 });

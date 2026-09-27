@@ -13,6 +13,7 @@ import { assertReservationTransition } from './reservation-state';
 import { RateResolverService } from '../availability/rate-resolver';
 import { calculateAgentBookingPaymentTerms, calculateReservationPaymentSchedule } from '../../common/agent-payment-terms';
 import { HousekeepingService } from '../housekeeping/housekeeping.service';
+import { GuestsService } from '../guests/guests.service';
 
 const checkoutInclude = {
   hotel: { select: { id: true, name: true, timezoneName: true } },
@@ -25,7 +26,7 @@ const checkoutInclude = {
 
 @Injectable()
 export class ReservationsService {
-  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, private readonly housekeeping?: HousekeepingService) {}
+  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService) {}
 
   private operationalRoles = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION'];
 
@@ -209,6 +210,9 @@ export class ReservationsService {
   private reference() { return `RW-${new Date().getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`; }
 
   async createFromHold(token: string, body: CreateReservationDto, user?: { id: string; role?: string }) {
+    const holdPreview = await this.p.inventoryHold.findUnique({ where: { tokenHash: sha256(token) }, select: { hotelId: true } });
+    if (!holdPreview) throw new BadRequestException('Hold expired or invalid');
+    const guestResolution = this.guests ? await this.guests.resolveForReservation({ hotelId: holdPreview.hotelId, guestName: body.guestName, mobile: body.mobile, email: body.email }) : { guestProfileId: null, conflict: false };
     return serializable(this.p, async (tx) => {
       const hold = await tx.inventoryHold.findUnique({ where: { tokenHash: sha256(token) }, include: { lines: { include: { nights: true } } } });
       if (!hold) throw new BadRequestException('Hold expired or invalid');
@@ -247,6 +251,7 @@ export class ReservationsService {
           paymentStatus: walletBooking ? agentPaymentStatus : 'UNPAID',
           syncStatus: 'PENDING',
           guestName: body.guestName,
+          guestProfileId: guestResolution.guestProfileId ?? undefined,
           email: body.email.toLowerCase(),
           mobile: body.mobile,
           address: body.address,

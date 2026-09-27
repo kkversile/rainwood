@@ -27,6 +27,20 @@ enum StaffDepartment {
   OTHER
 }
 
+enum GuestNoteCategory {
+  PREFERENCE
+  SERVICE
+  COMPLAINT
+  COMPLIMENT
+  MANAGEMENT
+}
+
+enum GuestNoteVisibility {
+  FRONT_OFFICE
+  SERVICE_STAFF
+  MANAGEMENT_ONLY
+}
+
 enum BookingSource {
   WEBSITE
   DIRECT
@@ -329,6 +343,7 @@ model User {
   postedFolioCharges         ReservationFolioCharge[]    @relation("FolioChargePostedBy")
   voidedFolioCharges         ReservationFolioCharge[]    @relation("FolioChargeVoidedBy")
   assignedRatePlans          AgentRatePlan[]
+  guestNotes                 GuestNote[]
   paymentMilestones          AgentPaymentMilestone[]
   agentHolds                 InventoryHold[]             @relation("AgentHolds")
   assignedRoomStays          ReservationRoomAssignment[] @relation("RoomAssignmentAssignedBy")
@@ -427,6 +442,8 @@ model Hotel {
   locationAttractions  HotelLocationAttraction[]
   locationTransports   HotelLocationTransport[]
   reservations         Reservation[]
+  guestProfiles        GuestProfile[]             @relation("GuestPreferredHotel")
+  guestNotes           GuestNote[]                @relation("GuestNoteHotel")
   staffUsers           User[]                     @relation("StaffHotel")
   housekeepingTasks    HousekeepingTask[]
   maintenanceTickets   MaintenanceTicket[]
@@ -678,6 +695,7 @@ model RoomType {
   holdLines         InventoryHoldLine[]
   waitlist          WaitlistEntry[]
   physicalRooms     Room[]
+  guestPreferredProfiles GuestProfile[] @relation("GuestPreferredRoomType")
 
   @@unique([hotelId, code])
   @@unique([hotelId, axisRoomId])
@@ -954,6 +972,8 @@ model Reservation {
   syncStatus           SyncStatus                  @default(PENDING)
   version              Int                         @default(1)
   guestName            String
+  guestProfileId       String?
+  guestProfile         GuestProfile?                @relation(fields: [guestProfileId], references: [id], onDelete: SetNull)
   email                String
   mobile               String
   address              String?
@@ -999,6 +1019,51 @@ model Reservation {
   @@index([status, paymentStatus, syncStatus])
   @@index([stayStatus, checkIn, checkOut])
   @@index([email, createdAt])
+  @@index([guestProfileId, createdAt])
+}
+
+model GuestProfile {
+  id                    String          @id @default(cuid())
+  displayName           String
+  mobile                String?
+  email                 String?
+  normalizedMobile      String?
+  normalizedEmail       String?
+  gstin                 String?
+  preferredLanguage     String?
+  preferredRoomTypeId   String?
+  preferredRoomType     RoomType?       @relation("GuestPreferredRoomType", fields: [preferredRoomTypeId], references: [id], onDelete: SetNull)
+  preferredHotelId      String?
+  preferredHotel        Hotel?          @relation("GuestPreferredHotel", fields: [preferredHotelId], references: [id], onDelete: SetNull)
+  preferences           Json?
+  vipLevel              String?
+  blacklisted           Boolean         @default(false)
+  reservations          Reservation[]
+  notes                 GuestNote[]
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@index([normalizedMobile])
+  @@index([normalizedEmail])
+  @@index([preferredHotelId])
+}
+
+model GuestNote {
+  id             String              @id @default(cuid())
+  guestProfileId String
+  guestProfile   GuestProfile        @relation(fields: [guestProfileId], references: [id], onDelete: Cascade)
+  category       GuestNoteCategory
+  visibility     GuestNoteVisibility @default(FRONT_OFFICE)
+  note           String
+  hotelId        String?
+  hotel          Hotel?              @relation("GuestNoteHotel", fields: [hotelId], references: [id], onDelete: SetNull)
+  createdById    String
+  createdBy      User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([guestProfileId, createdAt])
+  @@index([hotelId, visibility])
 }
 
 model ReservationSettlement {

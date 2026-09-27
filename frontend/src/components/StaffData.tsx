@@ -9,7 +9,7 @@ import { HousekeepingData, type HousekeepingProfile } from './HousekeepingData';
 import { MaintenanceData } from './MaintenanceData';
 
 export type StaffProfile = HousekeepingProfile & { allowedCategories: string[] };
-type Stay = { reference: string; guestName: string; checkIn: string; checkOut: string; status: string; stayStatus: string; rooms: number; roomTypes: string[]; adults: number; children: number; pax: number; hotel: { id: string; name: string }; assignedRooms: { id: string; roomNumber: string; floor?: string | null; wing?: string | null; roomType?: string | null }[] };
+type Stay = { reference: string; guestName: string; checkIn: string; checkOut: string; status: string; stayStatus: string; rooms: number; roomTypes: string[]; adults: number; children: number; pax: number; hotel: { id: string; name: string }; assignedRooms: { id: string; roomNumber: string; floor?: string | null; wing?: string | null; roomType?: string | null }[]; operationalPreferences?: Record<string, unknown> };
 type StaffCharge = { id: string; category: string; description: string; quantity: number | string; unitAmount: number | string; totalAmount: number | string; postingDate: string; note?: string | null; status: string; postedBy: string; voidedAt?: string | null; voidedBy?: string | null; voidReason?: string | null; createdAt: string };
 type StaffFolio = { reference: string; charges: StaffCharge[]; totals: { incidentalCharges: number | string; incidentalBalance: number | string; totalOutstanding: number | string } };
 

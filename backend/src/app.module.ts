@@ -28,6 +28,7 @@ import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { NightAuditModule } from './modules/night-audit/night-audit.module';
 import { ManagementDashboardModule } from './modules/management-dashboard/management-dashboard.module';
+import { GuestsModule } from './modules/guests/guests.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { ManagementDashboardModule } from './modules/management-dashboard/manage
     MaintenanceModule,
     NightAuditModule,
     ManagementDashboardModule,
+    GuestsModule,
   ],
 })
 export class AppModule {}
