@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { BookingSource, Prisma, ReservationStatus } from '@prisma/client';
+import { BookingSource, Prisma, ReservationStatus, StayStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { addDays, parseDateOnly, todayUtc } from '../../common/dates';
 import { getHotelOperationalDate } from '../../common/hotel-dates';
 import { ReportQueryDto } from './reports.dto';
+import { guestArrivalContext } from '../guests/guests.service';
 
 function flag(value: unknown) {
   return value === true || ['true', '1', 'yes', 'on'].includes(String(value ?? '').toLowerCase());
@@ -90,6 +91,7 @@ export class ReportsService {
           id: true, reference: true, hotel: { select: { id: true, name: true } }, guestName: true, checkIn: true, checkOut: true, stayStatus: true, checkedInAt: true, checkedInBy: { select: { id: true, name: true } },
           source: true, sourceName: true, status: true, paymentStatus: true, totalAmount: true, advanceAmount: true, balanceAmount: true,
           mobile: true, gstin: true, specialRequest: true, billingInstruction: true, internalRemark: true,
+          guestProfile: { select: { id: true, preferences: true, reservations: { where: { status: { notIn: [ReservationStatus.CANCELLED, ReservationStatus.EXPIRED] }, OR: [{ stayStatus: StayStatus.CHECKED_OUT }, { status: ReservationStatus.COMPLETED }] }, select: { status: true, stayStatus: true, checkOut: true }, orderBy: { checkOut: 'desc' } } } },
           createdBy: { select: { id: true, name: true } }, reconfirmedAt: true, reconfirmedBy: { select: { id: true, name: true } },
           lines: { select: { rooms: true, adults: true, children: true, roomType: { select: { id: true, name: true } } } },
           payments: { select: { mode: true, verified: true, paidAt: true, createdAt: true }, orderBy: { createdAt: 'desc' } },
@@ -134,6 +136,7 @@ export class ReportsService {
         specialRequest, billingInstruction, internalRemark, instruction: [specialRequest, billingInstruction].filter(Boolean).join(' | '),
         reconfirmed: Boolean(reservation.reconfirmedAt), reconfirmedAt: dateValue(reservation.reconfirmedAt), reconfirmedBy: reservation.reconfirmedBy,
         stayStatus: reservation.stayStatus, checkedInAt: reservation.checkedInAt, checkedInBy: reservation.checkedInBy,
+        guestProfile: guestArrivalContext(reservation.guestProfile),
         assignedRooms: (reservation.roomAssignments ?? []).map((assignment) => assignment.room),
         confirmed: ['CONFIRMED', 'COMPLETED'].includes(reservation.status), amount: Number(reservation.totalAmount),
         roomType: [...roomTypes.values()].map((roomType) => `${roomType.name} × ${roomType.rooms}`).join(', '),

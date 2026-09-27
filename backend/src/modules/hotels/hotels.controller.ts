@@ -1,7 +1,7 @@
 import { Body, ConflictException, Controller, Delete, Get, Header, Param, Patch, Post, Put, Query, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { HotelsService } from './hotels.service';
-import { AmenityDto, CopyRatePlanDto, HotelContactDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelUpdateDto, HotelVideoDto, InventoryBatchDto, PhysicalRoomDto, RateBatchDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
+import { AmenityDto, CopyRatePlanDto, HotelContactDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelUpdateDto, HotelVideoDto, InventoryBatchDto, PhysicalRoomDto, PromotionDto, RateBatchDto, RateBulkUpdateDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -71,6 +71,31 @@ export class HotelsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   deleteRatePlanAssignment(@Param('id') id: string) { return this.service.deleteRatePlanAssignment(id); }
+
+  @Post(':hotelId/rates/bulk/preview')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  previewBulkRates(@Param('hotelId') hotelId: string, @Body() body: RateBulkUpdateDto) { return this.service.previewBulkRates(hotelId, body); }
+
+  @Post(':hotelId/rates/bulk')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  updateBulkRates(@Param('hotelId') hotelId: string, @Body() body: RateBulkUpdateDto, @CurrentUser() user: any) { return this.service.updateBulkRates(hotelId, body, user.id); }
+
+  @Get(':hotelId/promotions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  promotions(@Param('hotelId') hotelId: string) { return this.service.promotions(hotelId); }
+
+  @Post(':hotelId/promotions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  createPromotion(@Param('hotelId') hotelId: string, @Body() body: PromotionDto, @CurrentUser() user: any) { return this.service.createPromotion(hotelId, body, user.id); }
+
+  @Patch('promotions/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  updatePromotion(@Param('id') id: string, @Body() body: Partial<PromotionDto>, @CurrentUser() user: any) { return this.service.updatePromotion(id, body, user.id); }
 
   @Get(':slug')
   @UseGuards(OptionalJwtAuthGuard, ActiveAgentGuard)

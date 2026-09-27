@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsInt, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import { BookingSource } from '@prisma/client';
+import { IsArray, IsDateString, IsEnum, IsInt, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
 
 export class RoomOccupancyDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(100) adults!: number;
@@ -43,4 +44,12 @@ export class AvailabilityQueryDto {
   @ValidateNested({ each: true })
   @Type(() => RoomOccupancyDto)
   occupancies?: RoomOccupancyDto[];
+
+  @IsOptional()
+  @IsEnum(BookingSource)
+  source?: BookingSource;
+
+  @IsOptional()
+  @IsString()
+  promotionCode?: string;
 }

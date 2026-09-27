@@ -1,13 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { Prisma, SupplementaryChargeScope } from '@prisma/client';
+import { BookingSource, Prisma, SupplementaryChargeScope } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { addDays, eachNight, nightsBetween, parseDateOnly, todayUtc, toDateOnly } from '../../common/dates';
 import { AvailabilityQueryDto } from './availability.dto';
 import { RateResolverService } from './rate-resolver';
+import { selectBestPromotion } from './promotion.utils';
 
 type Database = PrismaService | Prisma.TransactionClient;
 export type RoomOccupancy = { adults: number; children: number };
-type Selection = { hotelId: string; roomTypeId: string; ratePlanId: string; checkIn: string; checkOut: string; rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[] };
+type Selection = { hotelId: string; roomTypeId: string; ratePlanId: string; checkIn: string; checkOut: string; rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[]; source?: BookingSource; promotionCode?: string };
 
 export function supplementaryScopeFilter(agentId?: string) {
   return agentId ? { in: [SupplementaryChargeScope.AGENTS, SupplementaryChargeScope.ALL] } : SupplementaryChargeScope.ALL;
@@ -27,6 +28,7 @@ export class AvailabilityService {
       where: query.hotelId ? { id: query.hotelId, active: true } : { active: true },
       include: {
         supplementaryCharges: { where: { active: true, scope: supplementaryScopeFilter(agentId), startDate: { lte: to }, endDate: { gte: from } } },
+        promotions: { where: { active: true }, include: { roomTypes: true, ratePlans: true } },
         rooms: {
           where: { active: true },
           include: {
@@ -37,11 +39,11 @@ export class AvailabilityService {
       },
     });
     if (!hotels.length) throw new BadRequestException('Hotel is unavailable');
-    const options = hotels.flatMap((hotel) => hotel.rooms.flatMap((room) => room.ratePlans.map((plan) => this.calculate(room, plan, normalized, from, to, nights, agentId, hotel.supplementaryCharges))));
+    const options = hotels.flatMap((hotel) => hotel.rooms.flatMap((room) => room.ratePlans.map((plan) => this.calculate(room, plan, normalized, from, to, nights, agentId, hotel.supplementaryCharges, hotel.promotions, query.source, query.promotionCode))));
     return options.filter((option) => option.available).map(({ available, ...option }) => option);
   }
 
-  async quoteSelection(db: Database, input: Selection, options: { checkInventory?: boolean; agentId?: string } = {}) {
+  async quoteSelection(db: Database, input: Selection, options: { checkInventory?: boolean; agentId?: string; channel?: string; promotionCode?: string } = {}) {
     const from = parseDateOnly(input.checkIn, 'checkIn');
     const to = parseDateOnly(input.checkOut, 'checkOut');
     const normalized = this.normalizeOccupancy(input);
@@ -49,14 +51,14 @@ export class AvailabilityService {
     const room = await db.roomType.findFirst({
       where: { id: input.roomTypeId, hotelId: input.hotelId, active: true, hotel: { active: true } },
       include: {
-        hotel: { include: { supplementaryCharges: { where: { active: true, scope: supplementaryScopeFilter(options.agentId), startDate: { lte: to }, endDate: { gte: from } } } } },
+        hotel: { include: { supplementaryCharges: { where: { active: true, scope: supplementaryScopeFilter(options.agentId), startDate: { lte: to }, endDate: { gte: from } } }, promotions: { where: { active: true }, include: { roomTypes: true, ratePlans: true } } } },
         inventory: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } },
           ratePlans: { where: { id: input.ratePlanId, active: true, master: { active: true }, ...(options.agentId ? { assignedAgents: { some: { agentId: options.agentId, active: true } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, ...(options.agentId ? { assignedAgents: { where: { agentId: options.agentId, active: true } } } : {}) } },
       },
     });
     const plan = room?.ratePlans[0];
     if (!room || !plan) throw new BadRequestException('Room or rate plan is unavailable');
-    const quote = this.calculate(room, plan, normalized, from, to, nightsBetween(from, to), options.agentId, room.hotel.supplementaryCharges);
+    const quote = this.calculate(room, plan, normalized, from, to, nightsBetween(from, to), options.agentId, room.hotel.supplementaryCharges, room.hotel.promotions, options.channel, options.promotionCode);
     if (!quote.available && options.checkInventory !== false) throw new BadRequestException('Inventory or restrictions are no longer available');
     const { available: _available, ...result } = quote;
     return result;
@@ -79,7 +81,7 @@ export class AvailabilityService {
     }
   }
 
-  private calculate(room: any, plan: any, input: { rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[] }, from: Date, to: Date, nights: number, agentId?: string, supplementaryCharges: any[] = []) {
+  private calculate(room: any, plan: any, input: { rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[] }, from: Date, to: Date, nights: number, agentId?: string, supplementaryCharges: any[] = [], promotions: any[] = [], channel?: string, promotionCode?: string) {
     const occupiedNights = eachNight(from, to);
     const inventoryByDate = new Map<string, any>(room.inventory.map((day: any) => [toDateOnly(day.date), day]));
     const rateByDate = new Map<string, any>(plan.rates.map((day: any) => [toDateOnly(day.date), day]));
@@ -96,7 +98,7 @@ export class AvailabilityService {
     const maxOccupancy = room.maxOccupancy ?? room.maxAdults + room.maxChildren;
     const occupancies = input.occupancies ?? this.distributeOccupancy(room, input);
     const occupancyValid = occupancies.every((occupancy) => occupancy.adults <= room.maxAdults && occupancy.children <= room.maxChildren && occupancy.adults + occupancy.children <= maxOccupancy);
-    const breakdown = occupiedNights.map((night) => {
+    const breakdown: any[] = occupiedNights.map((night) => {
       const baseRate = rateByDate.get(toDateOnly(night));
       const rate = resolved.get(baseRate);
       const roomBreakdown = occupancies.map((occupancy, index) => {
@@ -116,7 +118,16 @@ export class AvailabilityService {
       const supplementaryAmount = supplementaryChargeLines.reduce((sum, charge) => sum + charge.amount, 0);
       return { date: toDateOnly(night), rooms: roomBreakdown, occupancy: occupancyKeys, baseAmount: base, taxAmount: tax, extrasAmount: extras, supplementaryCharges: supplementaryChargeLines, supplementaryAmount, totalAmount: base + tax + extras + supplementaryAmount, priceSource: rate?.priceSource ?? 'RATE_PLAN', agentRatePlanId: rate?.agentRatePlanId ?? null };
     });
-    const total = breakdown.reduce((sum, item) => sum + item.totalAmount, 0);
+    const subtotal = breakdown.reduce((sum, item) => sum + item.totalAmount, 0);
+    const selectedPromotion = selectBestPromotion(promotions, { bookingDate: new Date(), stayDate: from, nights, subtotal, channel, code: promotionCode, roomTypeId: room.id, ratePlanId: plan.id });
+    const discountAmount = selectedPromotion?.discount ?? 0;
+    const total = Math.max(0, subtotal - discountAmount);
+    if (discountAmount > 0 && subtotal > 0) for (const item of breakdown) {
+      const itemDiscount = Math.round(discountAmount * (item.totalAmount / subtotal) * 100) / 100;
+      item.discountAmount = itemDiscount;
+      item.totalAmount = Math.max(0, item.totalAmount - itemDiscount);
+      item.promotionApplied = { id: selectedPromotion!.promotion.id, code: selectedPromotion!.promotion.code ?? null, name: selectedPromotion!.promotion.name, discountType: selectedPromotion!.promotion.discountType, discountValue: Number(selectedPromotion!.promotion.discountValue) };
+    }
     const taxTotal = breakdown.reduce((sum, item) => sum + item.taxAmount, 0);
     const supplementaryTotal = breakdown.reduce((sum, item) => sum + Number(item.supplementaryAmount ?? 0), 0);
     return {
@@ -135,6 +146,8 @@ export class AvailabilityService {
       total,
       taxTotal,
       supplementaryTotal,
+      discountAmount,
+      promotionApplied: selectedPromotion ? { id: selectedPromotion.promotion.id, code: selectedPromotion.promotion.code ?? null, name: selectedPromotion.promotion.name, discountType: selectedPromotion.promotion.discountType, discountValue: Number(selectedPromotion.promotion.discountValue) } : null,
       available: inventoryAvailable && restrictionsValid && occupancyValid,
       availableRooms: inventoryComplete ? Math.min(...occupiedNights.map((night) => {
         const day = inventoryByDate.get(toDateOnly(night));

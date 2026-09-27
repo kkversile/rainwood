@@ -53,6 +53,11 @@ enum BookingSource {
   OTA
 }
 
+enum PromotionDiscountType {
+  PERCENT
+  FIXED
+}
+
 enum ReservationStatus {
   DRAFT
   HELD
@@ -450,6 +455,7 @@ model Hotel {
   holds                InventoryHold[]
   waitlist             WaitlistEntry[]
   businessDays         HotelBusinessDay[]
+  promotions           Promotion[]
   createdAt            DateTime                   @default(now())
   updatedAt            DateTime                   @updatedAt
 
@@ -665,37 +671,38 @@ model HotelAmenity {
 }
 
 model RoomType {
-  id                String              @id @default(cuid())
-  hotelId           String
-  hotel             Hotel               @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  code              String
-  name              String
-  roomTypeTitle     String?
-  roomsAvailable    Int                 @default(0)
-  preferredFor      String              @default("")
-  acAvailable       Boolean             @default(false)
-  description       String?
-  maxAdults         Int                 @default(2)
-  maxChildren       Int                 @default(1)
-  maxOccupancy      Int                 @default(3)
-  checkInTime       String?
-  checkOutTime      String?
-  gstType           String              @default("Included")
-  gstPercentage     String              @default("GST - 0%")
-  inbuiltAmenities  String              @default("")
-  breakfastIncluded Boolean             @default(false)
-  lunchIncluded     Boolean             @default(false)
-  dinnerIncluded    Boolean             @default(false)
-  active            Boolean             @default(true)
-  axisRoomId        String?
-  images            RoomImage[]
-  ratePlans         RatePlan[]
-  inventory         InventoryDay[]
-  lines             ReservationLine[]
-  holdLines         InventoryHoldLine[]
-  waitlist          WaitlistEntry[]
-  physicalRooms     Room[]
-  guestPreferredProfiles GuestProfile[] @relation("GuestPreferredRoomType")
+  id                     String              @id @default(cuid())
+  hotelId                String
+  hotel                  Hotel               @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  code                   String
+  name                   String
+  roomTypeTitle          String?
+  roomsAvailable         Int                 @default(0)
+  preferredFor           String              @default("")
+  acAvailable            Boolean             @default(false)
+  description            String?
+  maxAdults              Int                 @default(2)
+  maxChildren            Int                 @default(1)
+  maxOccupancy           Int                 @default(3)
+  checkInTime            String?
+  checkOutTime           String?
+  gstType                String              @default("Included")
+  gstPercentage          String              @default("GST - 0%")
+  inbuiltAmenities       String              @default("")
+  breakfastIncluded      Boolean             @default(false)
+  lunchIncluded          Boolean             @default(false)
+  dinnerIncluded         Boolean             @default(false)
+  active                 Boolean             @default(true)
+  axisRoomId             String?
+  images                 RoomImage[]
+  ratePlans              RatePlan[]
+  inventory              InventoryDay[]
+  lines                  ReservationLine[]
+  holdLines              InventoryHoldLine[]
+  waitlist               WaitlistEntry[]
+  physicalRooms          Room[]
+  guestPreferredProfiles GuestProfile[]      @relation("GuestPreferredRoomType")
+  promotionRooms         PromotionRoomType[]
 
   @@unique([hotelId, code])
   @@unique([hotelId, axisRoomId])
@@ -731,6 +738,7 @@ model RatePlan {
   holdLines         InventoryHoldLine[]
   cancellationRules CancellationRule[]
   assignedAgents    AgentRatePlan[]
+  promotionRates    PromotionRatePlan[]
 
   @@unique([roomTypeId, code])
   @@unique([roomTypeId, masterId])
@@ -898,6 +906,8 @@ model RateDay {
   ratePlan          RatePlan  @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
   date              DateTime  @db.Date
   amount            Decimal   @db.Decimal(12, 2)
+  baseAmount        Decimal?  @db.Decimal(12, 2)
+  overrideAmount    Decimal?  @db.Decimal(12, 2)
   taxAmount         Decimal   @default(0) @db.Decimal(12, 2)
   childAmount       Decimal   @default(0) @db.Decimal(12, 2)
   extraAdultAmount  Decimal   @default(0) @db.Decimal(12, 2)
@@ -910,6 +920,52 @@ model RateDay {
 
   @@unique([ratePlanId, date])
   @@index([date, ratePlanId])
+}
+
+model Promotion {
+  id            String                @id @default(cuid())
+  hotelId       String
+  hotel         Hotel                 @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  code          String?
+  name          String
+  discountType  PromotionDiscountType
+  discountValue Decimal               @db.Decimal(12, 2)
+  bookingStart  DateTime?             @db.Date
+  bookingEnd    DateTime?             @db.Date
+  stayStart     DateTime?             @db.Date
+  stayEnd       DateTime?             @db.Date
+  minNights     Int?
+  maxNights     Int?
+  channels      Json?
+  active        Boolean               @default(true)
+  roomTypes     PromotionRoomType[]
+  ratePlans     PromotionRatePlan[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@unique([hotelId, code])
+  @@index([hotelId, active])
+  @@index([bookingStart, bookingEnd, stayStart, stayEnd])
+}
+
+model PromotionRoomType {
+  promotionId String
+  roomTypeId  String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  roomType    RoomType  @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, roomTypeId])
+  @@index([roomTypeId])
+}
+
+model PromotionRatePlan {
+  promotionId String
+  ratePlanId  String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  ratePlan    RatePlan  @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, ratePlanId])
+  @@index([ratePlanId])
 }
 
 model InventoryHold {
@@ -973,7 +1029,7 @@ model Reservation {
   version              Int                         @default(1)
   guestName            String
   guestProfileId       String?
-  guestProfile         GuestProfile?                @relation(fields: [guestProfileId], references: [id], onDelete: SetNull)
+  guestProfile         GuestProfile?               @relation(fields: [guestProfileId], references: [id], onDelete: SetNull)
   email                String
   mobile               String
   address              String?
@@ -1023,25 +1079,25 @@ model Reservation {
 }
 
 model GuestProfile {
-  id                    String          @id @default(cuid())
-  displayName           String
-  mobile                String?
-  email                 String?
-  normalizedMobile      String?
-  normalizedEmail       String?
-  gstin                 String?
-  preferredLanguage     String?
-  preferredRoomTypeId   String?
-  preferredRoomType     RoomType?       @relation("GuestPreferredRoomType", fields: [preferredRoomTypeId], references: [id], onDelete: SetNull)
-  preferredHotelId      String?
-  preferredHotel        Hotel?          @relation("GuestPreferredHotel", fields: [preferredHotelId], references: [id], onDelete: SetNull)
-  preferences           Json?
-  vipLevel              String?
-  blacklisted           Boolean         @default(false)
-  reservations          Reservation[]
-  notes                 GuestNote[]
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  id                  String        @id @default(cuid())
+  displayName         String
+  mobile              String?
+  email               String?
+  normalizedMobile    String?
+  normalizedEmail     String?
+  gstin               String?
+  preferredLanguage   String?
+  preferredRoomTypeId String?
+  preferredRoomType   RoomType?     @relation("GuestPreferredRoomType", fields: [preferredRoomTypeId], references: [id], onDelete: SetNull)
+  preferredHotelId    String?
+  preferredHotel      Hotel?        @relation("GuestPreferredHotel", fields: [preferredHotelId], references: [id], onDelete: SetNull)
+  preferences         Json?
+  vipLevel            String?
+  blacklisted         Boolean       @default(false)
+  reservations        Reservation[]
+  notes               GuestNote[]
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   @@index([normalizedMobile])
   @@index([normalizedEmail])

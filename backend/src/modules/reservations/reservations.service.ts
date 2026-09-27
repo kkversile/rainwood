@@ -13,7 +13,7 @@ import { assertReservationTransition } from './reservation-state';
 import { RateResolverService } from '../availability/rate-resolver';
 import { calculateAgentBookingPaymentTerms, calculateReservationPaymentSchedule } from '../../common/agent-payment-terms';
 import { HousekeepingService } from '../housekeeping/housekeeping.service';
-import { GuestsService } from '../guests/guests.service';
+import { GuestsService, guestArrivalContext } from '../guests/guests.service';
 
 const checkoutInclude = {
   hotel: { select: { id: true, name: true, timezoneName: true } },
@@ -346,6 +346,7 @@ export class ReservationsService {
         roomAssignments: { include: { room: { select: { id: true, roomNumber: true, floor: true, wing: true, status: true, roomType: { select: { id: true, name: true } } } }, assignedBy: { select: { id: true, name: true } }, unassignedBy: { select: { id: true, name: true } } }, orderBy: { assignedAt: 'asc' } },
         lines: { include: { roomType: true, ratePlan: true, nights: { orderBy: { date: 'asc' } } } },
         payments: { select: { id: true, amount: true, mode: true, verified: true, paidAt: true, createdAt: true }, orderBy: { createdAt: 'desc' } },
+        guestProfile: { select: { id: true, preferences: true, reservations: { where: { status: { notIn: ['CANCELLED', 'EXPIRED'] }, OR: [{ stayStatus: 'CHECKED_OUT' }, { status: 'COMPLETED' }] }, select: { status: true, stayStatus: true, checkOut: true }, orderBy: { checkOut: 'desc' } } } },
       },
     });
     if (!reservation) throw new NotFoundException('Reservation not found');
@@ -402,6 +403,7 @@ export class ReservationsService {
           nights: line.nights.map((night) => ({ date: night.date, rooms: night.rooms, amount: night.amount, taxAmount: night.taxAmount, totalAmount: night.totalAmount })),
         })),
         payments: reservation.payments.map((payment) => ({ id: payment.id, amount: payment.amount, mode: payment.mode, verified: payment.verified, paidAt: payment.paidAt, createdAt: payment.createdAt })),
+        ...(canSeeInternalRemark ? { guestProfile: guestArrivalContext(reservation.guestProfile, true) } : {}),
         paymentSchedule,
       };
     }

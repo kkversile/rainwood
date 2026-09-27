@@ -3,7 +3,7 @@ import { Prisma, RoomOperationalStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { normalizeOccupancyPrices, SUPPORTED_OCCUPANCY_KEYS } from '../../common/rate-pricing';
 import { parseDateOnly, parseExcelDateOnly } from '../../common/dates';
-import { AmenityDto, CopyRatePlanDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, PhysicalRoomDto, RateBatchDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
+import { AmenityDto, CopyRatePlanDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, PhysicalRoomDto, PromotionDto, RateBatchDto, RateBulkUpdateDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
 import { FilesService } from '../files/files.service';
 import ExcelJS from 'exceljs';
 import { canonicalMealPlan, canonicalRatePlanCode } from './rate-plan.utils';
@@ -195,7 +195,7 @@ export class HotelsService {
     const validRange = from && to && !Number.isNaN(from.getTime()) && !Number.isNaN(to.getTime()) && from <= to;
     const hotel = await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId }, include: { images: { where: { published: true, url: { not: '/rainwood-placeholder.svg' } }, orderBy: [{ isMain: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }] }, videos: { orderBy: { createdAt: 'desc' } }, amenities: { include: { amenity: true } }, rooms: { orderBy: { name: 'asc' }, include: { images: { where: { published: true }, orderBy: { sortOrder: 'asc' } }, ratePlans: { orderBy: { name: 'asc' }, include: { master: true, rates: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } }, inventory: { where: validRange ? { date: { gte: from, lte: to } } : undefined, orderBy: { date: 'asc' }, take: 370 } } } } });
     const today = new Date().toISOString().slice(0, 10);
-    return { ...hotel, rooms: hotel.rooms.map((room) => ({ ...room, totalRooms: room.roomsAvailable, todayAvailable: room.inventory.find((day) => day.date.toISOString().slice(0, 10) === today)?.available ?? null })) };
+    return { ...hotel, rooms: hotel.rooms.map((room) => ({ ...room, totalRooms: room.roomsAvailable, todayAvailable: room.inventory.find((day) => day.date.toISOString().slice(0, 10) === today)?.available ?? null, ratePlans: room.ratePlans.map((plan) => ({ ...plan, rates: plan.rates.map((rate) => ({ ...rate, baseAmount: rate.baseAmount ?? rate.amount, overrideAmount: rate.overrideAmount ?? null, effectiveAmount: rate.overrideAmount ?? rate.baseAmount ?? rate.amount })) })) })) };
   }
 
   async pricebookExport(hotelId: string) {
@@ -643,7 +643,7 @@ export class HotelsService {
     const source = await this.prisma.ratePlan.findUnique({ where: { id }, include: { master: true, rates: { where: { date: { gte: new Date() } } } } });
     if (!source) throw new NotFoundException('Rate-plan assignment not found');
     const assigned = await this.assignRatePlanMaster(source.masterId, { roomTypeId: body.targetRoomTypeId });
-    if (body.copyRates && source.rates.length) await this.prisma.rateDay.createMany({ data: source.rates.map((rate) => ({ ratePlanId: assigned.id, date: rate.date, amount: rate.amount, taxAmount: rate.taxAmount, childAmount: rate.childAmount, extraAdultAmount: rate.extraAdultAmount, occupancyPrices: rate.occupancyPrices ?? undefined, cta: rate.cta, ctd: rate.ctd, minLos: rate.minLos, maxLos: rate.maxLos })) });
+    if (body.copyRates && source.rates.length) await this.prisma.rateDay.createMany({ data: source.rates.map((rate) => ({ ratePlanId: assigned.id, date: rate.date, amount: rate.amount, baseAmount: rate.baseAmount, overrideAmount: rate.overrideAmount, taxAmount: rate.taxAmount, childAmount: rate.childAmount, extraAdultAmount: rate.extraAdultAmount, occupancyPrices: rate.occupancyPrices ?? undefined, cta: rate.cta, ctd: rate.ctd, minLos: rate.minLos, maxLos: rate.maxLos })) });
     return this.prisma.ratePlan.findUniqueOrThrow({ where: { id: assigned.id }, include: { roomType: true, master: true, rates: true } });
   }
 
@@ -653,6 +653,102 @@ export class HotelsService {
 
   deleteRatePlan(id: string) {
     return this.deleteRatePlanAssignment(id);
+  }
+
+  private rateBulkDates(body: RateBulkUpdateDto) {
+    const from = parseDateOnly(body.fromDate, 'fromDate');
+    const to = parseDateOnly(body.toDate, 'toDate');
+    if (from > to) throw new BadRequestException('fromDate must be on or before toDate.');
+    const days = new Set(body.daysOfWeek?.length ? body.daysOfWeek : [0, 1, 2, 3, 4, 5, 6]);
+    const dates: Date[] = [];
+    for (const cursor = new Date(from); cursor <= to; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+      if (days.has(cursor.getUTCDay())) dates.push(new Date(cursor));
+    }
+    if (!dates.length) throw new BadRequestException('The selected date and weekday range has no dates.');
+    if (dates.length > 366) throw new BadRequestException('Bulk rate updates cannot cover more than 366 dates.');
+    return dates;
+  }
+
+  private bulkRatePreview(change: any, body: RateBulkUpdateDto) {
+    const base = Number(change.rate?.baseAmount ?? change.rate?.amount ?? 0);
+    const override = change.rate?.overrideAmount == null ? null : Number(change.rate.overrideAmount);
+    const effective = override ?? base;
+    const next: any = { baseAmount: base, overrideAmount: override, amount: effective, cta: Boolean(change.rate?.cta), ctd: Boolean(change.rate?.ctd), minLos: change.rate?.minLos ?? 1, maxLos: change.rate?.maxLos ?? null };
+    if (body.action === 'SET_RATE') { if (body.value === undefined || body.value < 0) throw new BadRequestException('value is required for SET_RATE.'); next.baseAmount = body.value; next.overrideAmount = null; next.amount = body.value; }
+    if (body.action === 'INCREASE_PERCENT' || body.action === 'DECREASE_PERCENT') {
+      if (body.value === undefined || body.value < 0 || body.value > 1000) throw new BadRequestException('value must be between 0 and 1000 for percentage updates.');
+      const multiplier = body.action === 'INCREASE_PERCENT' ? 1 + body.value / 100 : 1 - body.value / 100;
+      if (multiplier < 0) throw new BadRequestException('A decrease cannot make a rate negative.');
+      next.overrideAmount = Math.round(effective * multiplier * 100) / 100; next.amount = next.overrideAmount;
+    }
+    if (body.action === 'SET_MLOS') { if (body.value === undefined || !Number.isInteger(body.value) || body.value < 1) throw new BadRequestException('value must be a positive integer for SET_MLOS.'); next.minLos = body.value; if (next.maxLos !== null && next.maxLos < next.minLos) throw new BadRequestException('Minimum LOS cannot exceed Maximum LOS.'); }
+    if (body.action === 'SET_MAXLOS') { if (body.value === undefined || !Number.isInteger(body.value) || body.value < 1) throw new BadRequestException('value must be a positive integer for SET_MAXLOS.'); next.maxLos = body.value; if (next.maxLos < next.minLos) throw new BadRequestException('Maximum LOS cannot be lower than Minimum LOS.'); }
+    if (body.action === 'CLOSE_ARRIVAL') next.cta = true;
+    if (body.action === 'CLOSE_DEPARTURE') next.ctd = true;
+    if (body.action === 'REMOVE_OVERRIDE') { next.overrideAmount = null; next.amount = next.baseAmount; }
+    return next;
+  }
+
+  async previewBulkRates(hotelId: string, body: RateBulkUpdateDto) {
+    return this.bulkRates(hotelId, body, undefined, false);
+  }
+
+  async updateBulkRates(hotelId: string, body: RateBulkUpdateDto, actorUserId: string) {
+    return this.bulkRates(hotelId, body, actorUserId, true);
+  }
+
+  private async bulkRates(hotelId: string, body: RateBulkUpdateDto, actorUserId: string | undefined, commit: boolean) {
+    const dates = this.rateBulkDates(body);
+    const plans = await this.prisma.ratePlan.findMany({ where: { id: body.ratePlanIds?.length ? { in: body.ratePlanIds } : undefined, roomTypeId: body.roomTypeIds?.length ? { in: body.roomTypeIds } : undefined, roomType: { hotelId } }, select: { id: true, code: true, name: true, roomTypeId: true, roomType: { select: { name: true } } }, orderBy: { name: 'asc' } });
+    if (!plans.length) throw new NotFoundException('No matching rate plans were found for this hotel.');
+    const rates = await this.prisma.rateDay.findMany({ where: { ratePlanId: { in: plans.map((plan) => plan.id) }, date: { gte: dates[0], lte: dates[dates.length - 1] } } });
+    const byKey = new Map(rates.map((rate) => [`${rate.ratePlanId}:${rate.date.toISOString().slice(0, 10)}`, rate]));
+    const changes: any[] = [];
+    for (const plan of plans) for (const date of dates) {
+      const dateKey = date.toISOString().slice(0, 10);
+      const rate = byKey.get(`${plan.id}:${dateKey}`);
+      if (!rate && body.action !== 'SET_RATE') continue;
+      const change = { plan, date: dateKey, rate };
+      const next = this.bulkRatePreview(change, body);
+      changes.push({ ratePlanId: plan.id, ratePlan: plan.name, roomTypeId: plan.roomTypeId, roomType: plan.roomType.name, date: dateKey, before: rate ? { baseAmount: rate.baseAmount ?? rate.amount, overrideAmount: rate.overrideAmount, effectiveAmount: rate.overrideAmount ?? rate.baseAmount ?? rate.amount, cta: rate.cta, ctd: rate.ctd, minLos: rate.minLos, maxLos: rate.maxLos } : null, after: next });
+    }
+    if (!commit) return { preview: true, affected: changes.length, changes: changes.slice(0, 500) };
+    await this.prisma.$transaction(async (tx) => {
+      for (const change of changes) {
+        const rate = byKey.get(`${change.ratePlanId}:${change.date}`);
+        const data = { amount: change.after.amount, baseAmount: change.after.baseAmount, overrideAmount: change.after.overrideAmount, cta: change.after.cta, ctd: change.after.ctd, minLos: change.after.minLos, maxLos: change.after.maxLos };
+        if (rate) await tx.rateDay.update({ where: { id: rate.id }, data });
+        else await tx.rateDay.create({ data: { ratePlanId: change.ratePlanId, date: parseDateOnly(change.date, 'rate date'), amount: data.amount, baseAmount: data.baseAmount, overrideAmount: data.overrideAmount, cta: data.cta, ctd: data.ctd, minLos: data.minLos, maxLos: data.maxLos } });
+      }
+      await tx.auditLog.create({ data: { actorUserId, action: 'RATE_BULK_UPDATED', entityType: 'RateDay', after: { hotelId, action: body.action, fromDate: body.fromDate, toDate: body.toDate, affected: changes.length, ratePlanIds: plans.map((plan) => plan.id) } } });
+    });
+    return { preview: false, affected: changes.length, changes: changes.slice(0, 500) };
+  }
+
+  async promotions(hotelId: string) {
+    return this.prisma.promotion.findMany({ where: { hotelId }, orderBy: [{ active: 'desc' }, { name: 'asc' }], include: { roomTypes: { include: { roomType: { select: { id: true, name: true } } } }, ratePlans: { include: { ratePlan: { select: { id: true, name: true } } } } } });
+  }
+
+  async createPromotion(hotelId: string, body: PromotionDto, actorUserId: string) {
+    if (body.bookingStart && body.bookingEnd && body.bookingStart > body.bookingEnd) throw new BadRequestException('Booking window is invalid.');
+    if (body.stayStart && body.stayEnd && body.stayStart > body.stayEnd) throw new BadRequestException('Stay window is invalid.');
+    if (body.maxNights !== undefined && body.minNights !== undefined && body.maxNights !== null && body.minNights !== null && body.maxNights < body.minNights) throw new BadRequestException('maxNights cannot be lower than minNights.');
+    const [roomTypes, ratePlans] = await Promise.all([
+      this.prisma.roomType.findMany({ where: { hotelId, id: body.roomTypeIds?.length ? { in: body.roomTypeIds } : undefined }, select: { id: true } }),
+      this.prisma.ratePlan.findMany({ where: { roomType: { hotelId }, id: body.ratePlanIds?.length ? { in: body.ratePlanIds } : undefined }, select: { id: true } }),
+    ]);
+    if ((body.roomTypeIds?.length ?? 0) !== roomTypes.length || (body.ratePlanIds?.length ?? 0) !== ratePlans.length) throw new BadRequestException('Promotion targets must belong to the selected hotel.');
+    const promotion = await this.prisma.promotion.create({ data: { hotelId, code: body.code?.trim() || null, name: body.name.trim(), discountType: body.discountType, discountValue: body.discountValue, bookingStart: body.bookingStart ? parseDateOnly(body.bookingStart, 'bookingStart') : null, bookingEnd: body.bookingEnd ? parseDateOnly(body.bookingEnd, 'bookingEnd') : null, stayStart: body.stayStart ? parseDateOnly(body.stayStart, 'stayStart') : null, stayEnd: body.stayEnd ? parseDateOnly(body.stayEnd, 'stayEnd') : null, minNights: body.minNights ?? null, maxNights: body.maxNights ?? null, channels: body.channels ?? [], active: body.active ?? true, roomTypes: { create: roomTypes.map((room) => ({ roomTypeId: room.id })) }, ratePlans: { create: ratePlans.map((plan) => ({ ratePlanId: plan.id })) } } });
+    await this.prisma.auditLog.create({ data: { actorUserId, action: 'PROMOTION_CREATED', entityType: 'Promotion', entityId: promotion.id, after: { hotelId, name: promotion.name, discountType: promotion.discountType, discountValue: Number(promotion.discountValue) } } });
+    return promotion;
+  }
+
+  async updatePromotion(id: string, body: Partial<PromotionDto>, actorUserId: string) {
+    const current = await this.prisma.promotion.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException('Promotion not found.');
+    const updated = await this.prisma.promotion.update({ where: { id }, data: { name: body.name?.trim(), code: body.code?.trim(), discountType: body.discountType, discountValue: body.discountValue, active: body.active, bookingStart: body.bookingStart === undefined ? undefined : body.bookingStart ? parseDateOnly(body.bookingStart, 'bookingStart') : null, bookingEnd: body.bookingEnd === undefined ? undefined : body.bookingEnd ? parseDateOnly(body.bookingEnd, 'bookingEnd') : null, stayStart: body.stayStart === undefined ? undefined : body.stayStart ? parseDateOnly(body.stayStart, 'stayStart') : null, stayEnd: body.stayEnd === undefined ? undefined : body.stayEnd ? parseDateOnly(body.stayEnd, 'stayEnd') : null, minNights: body.minNights, maxNights: body.maxNights, channels: body.channels } });
+    await this.prisma.auditLog.create({ data: { actorUserId, action: body.active === false ? 'PROMOTION_DISABLED' : 'PROMOTION_UPDATED', entityType: 'Promotion', entityId: id, before: { active: current.active, discountValue: Number(current.discountValue) }, after: { active: updated.active, discountValue: Number(updated.discountValue) } } });
+    return updated;
   }
 
   async saveInventory(roomTypeId: string, body: InventoryBatchDto) {
@@ -674,9 +770,15 @@ export class HotelsService {
         const existing = await tx.rateDay.findUnique({ where: { ratePlanId_date: { ratePlanId, date } } });
         if (!existing && day.amount === undefined) throw new BadRequestException(`A base amount is required for ${day.date}.`);
         if (existing) {
-          results.push(await tx.rateDay.update({ where: { id: existing.id }, data: { amount: day.amount === undefined ? undefined : day.amount, taxAmount: day.taxAmount === undefined ? undefined : day.taxAmount, childAmount: day.childAmount === undefined ? undefined : day.childAmount, extraAdultAmount: day.extraAdultAmount === undefined ? undefined : day.extraAdultAmount, occupancyPrices: occupancyPrices === null ? Prisma.DbNull : occupancyPrices === undefined ? undefined : occupancyPrices, cta: day.cta === undefined ? undefined : day.cta, ctd: day.ctd === undefined ? undefined : day.ctd, minLos: day.minLos === undefined ? undefined : day.minLos, maxLos: day.maxLos === undefined ? undefined : day.maxLos } }));
+          const baseAmount = day.baseAmount === undefined ? (day.amount === undefined ? undefined : day.amount) : day.baseAmount;
+          const overrideAmount = day.overrideAmount === undefined ? undefined : day.overrideAmount;
+          const effectiveAmount = overrideAmount === null ? baseAmount : overrideAmount ?? baseAmount;
+          results.push(await tx.rateDay.update({ where: { id: existing.id }, data: { amount: effectiveAmount === undefined ? undefined : effectiveAmount, baseAmount, overrideAmount, taxAmount: day.taxAmount === undefined ? undefined : day.taxAmount, childAmount: day.childAmount === undefined ? undefined : day.childAmount, extraAdultAmount: day.extraAdultAmount === undefined ? undefined : day.extraAdultAmount, occupancyPrices: occupancyPrices === null ? Prisma.DbNull : occupancyPrices === undefined ? undefined : occupancyPrices, cta: day.cta === undefined ? undefined : day.cta, ctd: day.ctd === undefined ? undefined : day.ctd, minLos: day.minLos === undefined ? undefined : day.minLos, maxLos: day.maxLos === undefined ? undefined : day.maxLos } }));
         } else {
-          results.push(await tx.rateDay.create({ data: { ratePlanId, date, amount: day.amount!, taxAmount: day.taxAmount ?? 0, childAmount: day.childAmount ?? 0, extraAdultAmount: day.extraAdultAmount ?? 0, occupancyPrices: occupancyPrices ?? undefined, cta: day.cta ?? false, ctd: day.ctd ?? false, minLos: day.minLos ?? 1, maxLos: day.maxLos ?? null } }));
+          const baseAmount = day.baseAmount ?? day.amount;
+          const overrideAmount = day.overrideAmount ?? null;
+          if (baseAmount === undefined && overrideAmount === null) throw new BadRequestException(`A base amount is required for ${day.date}.`);
+          results.push(await tx.rateDay.create({ data: { ratePlanId, date, amount: overrideAmount ?? baseAmount!, baseAmount, overrideAmount, taxAmount: day.taxAmount ?? 0, childAmount: day.childAmount ?? 0, extraAdultAmount: day.extraAdultAmount ?? 0, occupancyPrices: occupancyPrices ?? undefined, cta: day.cta ?? false, ctd: day.ctd ?? false, minLos: day.minLos ?? 1, maxLos: day.maxLos ?? null } }));
         }
       }
       return results;

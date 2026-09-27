@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { apiRequest } from '../lib/api';
 import { CheckInDialog } from './CheckInDialog';
 import { RoomChangeDialog } from './RoomChangeDialog';
@@ -58,6 +59,7 @@ type ArrivalDetail = {
   checkedOutAt: string | null;
   checkedOutBy: Person;
   roomAssignments: { id: string; room: { id: string; roomNumber: string; floor?: string | null; wing?: string | null; status: string; roomType: { id: string; name: string } }; assignedAt: string; assignedBy: Person; unassignedAt: string | null; unassignedBy: Person; reason: string | null }[];
+  guestProfile?: { id: string; repeatGuest: boolean; completedStays: number; lastStay: string | null; operationalPreferences?: Record<string, unknown> } | null;
 };
 type Reconfirmation = { reconfirmed: boolean; reconfirmedAt: string | null; reconfirmedBy: Person };
 type FolioCharge = { id: string; category: string; description: string; quantity: Money; unitAmount: Money; taxableAmount: Money; taxAmount: Money; totalAmount: Money; postingDate: string; note?: string | null; status: 'POSTED' | 'VOIDED'; postedBy: Person; voidedAt?: string | null; voidedBy: Person; voidReason?: string | null; createdAt: string };
@@ -185,6 +187,7 @@ export function ArrivalDetailsModal({ reference, onClose, onReconfirmed }: { ref
 
           <section className="arrivalDetailSection"><h3>Guest Details</h3><div className="arrivalDetailGrid"><DataItem name="Guest Name" value={detail.guestName} /><DataItem name="Mobile" value={detail.mobile ? <a href={`tel:${detail.mobile}`}>{detail.mobile}</a> : '—'} /><DataItem name="Email" value={detail.email ? <a href={`mailto:${detail.email}`}>{detail.email}</a> : '—'} /><DataItem name="Address" value={detail.address || '—'} /><DataItem name="GSTIN" value={detail.gstin || '—'} /></div></section>
 
+          {detail.guestProfile && <section className="arrivalDetailSection"><div className="arrivalFolioHeader"><div><h3>Guest History</h3><p>{detail.guestProfile.repeatGuest ? 'Returning Guest' : 'First-time guest'} · Previous completed stays: {detail.guestProfile.completedStays}{detail.guestProfile.lastStay ? ` · Last stay: ${dateLabel(detail.guestProfile.lastStay)}` : ''}</p></div><Link className="smallBtn secondary" href={`/admin/guests/${encodeURIComponent(detail.guestProfile.id)}`}>View Guest Profile</Link></div>{Object.keys(detail.guestProfile.operationalPreferences ?? {}).length > 0 && <div className="arrivalDetailGrid">{Object.entries(detail.guestProfile.operationalPreferences ?? {}).map(([key, value]) => <DataItem key={key} name={label(key)} value={Array.isArray(value) ? value.join(', ') : String(value)} />)}</div>}</section>}
           <section className="arrivalDetailSection"><h3>Stay / Room Details</h3><div className="arrivalRoomLines">{detail.lines.map((line, index) => <article className="arrivalRoomLine" key={`${line.roomType.id}-${line.ratePlan.id}-${index}`}><div className="arrivalRoomLineHeading"><strong>{line.roomType.name}</strong><span>{line.rooms} room{line.rooms === 1 ? '' : 's'}</span></div><div className="arrivalDetailGrid"><DataItem name="Rooms" value={line.rooms} /><DataItem name="Adults" value={line.adults} /><DataItem name="Children" value={line.children} /><DataItem name="Rate Plan" value={line.ratePlan.name} /><DataItem name="Check-in" value={dateLabel(line.checkIn)} /><DataItem name="Check-out" value={dateLabel(line.checkOut)} /></div>{line.nights.length > 0 && <details className="arrivalNightlyDetails"><summary>Nightly rate breakdown</summary><div>{line.nights.map((night) => <div key={night.date}><span>{dateLabel(night.date)}</span><strong>{money(night.totalAmount)}</strong></div>)}</div></details>}</article>)}</div></section>
 
           <section className="arrivalDetailSection"><h3>Booking Details</h3><div className="arrivalDetailGrid"><DataItem name="Booking Source" value={label(detail.source)} /><DataItem name="Source Name / Agent" value={detail.sourceName || '—'} /><DataItem name="Booked By" value={detail.createdBy?.name || '—'} /><DataItem name="Business Type" value={detail.businessType} /><DataItem name="Created Date" value={dateTimeLabel(detail.createdAt)} /></div></section>

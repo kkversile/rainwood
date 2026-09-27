@@ -85,4 +85,12 @@ describe('expected arrivals report', () => {
     expect(result.summary).toEqual(expect.objectContaining({ reservations: 1, totalAmount: 10000, advance: 2500, waitlist: 1 }));
     expect(result.items.map((item: any) => item.rowType)).toEqual(['RESERVATION', 'WAITLIST']);
   });
+
+  it('adds a lightweight returning-guest summary without exposing CRM notes or spend', async () => {
+    const { service, prisma } = setup();
+    prisma.reservation.findMany.mockResolvedValue([{ ...reservationFixture(), guestProfile: { id: 'guest-1', preferences: { extraPillow: true, blacklisted: true, secretPreference: 'hidden' }, reservations: [{ status: 'COMPLETED', stayStatus: 'EXPECTED', checkOut: new Date('2026-08-14T00:00:00.000Z') }, { status: 'COMPLETED', stayStatus: 'EXPECTED', checkOut: new Date('2026-07-01T00:00:00.000Z') }] } }]);
+    const result: any = await service.expectedArrivals({ from: '2026-09-25', to: '2026-09-25', page: 1, limit: 50 }, { role: 'ADMIN' });
+    expect(result.items[0].guestProfile).toEqual({ id: 'guest-1', repeatGuest: true, completedStays: 2, lastStay: new Date('2026-08-14T00:00:00.000Z') });
+    expect(result.items[0].guestProfile).not.toHaveProperty('preferences');
+  });
 });

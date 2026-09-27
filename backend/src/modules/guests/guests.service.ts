@@ -1,8 +1,18 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { GuestNoteCategory, GuestNoteVisibility, Prisma, ReservationStatus, StayStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { normalizeGuestEmail, normalizeGuestMobile } from './guest-normalization';
 import { CreateGuestNoteDto, GuestListQueryDto, UpdateGuestProfileDto } from './guests.dto';
+
+const OPERATIONAL_PREFERENCE_KEYS = ['extraPillow', 'quietRoom', 'babyCot', 'vegetarian', 'vegan', 'allergyNote', 'dietaryNote'] as const;
+
+export function guestArrivalContext(profile: any, includePreferences = false) {
+  if (!profile) return null;
+  const completed = (profile.reservations ?? []).filter((row: any) => row.status !== ReservationStatus.CANCELLED && row.status !== ReservationStatus.EXPIRED && (row.stayStatus === StayStatus.CHECKED_OUT || row.status === ReservationStatus.COMPLETED)).sort((a: any, b: any) => new Date(b.checkOut).getTime() - new Date(a.checkOut).getTime());
+  const preferences = profile.preferences && typeof profile.preferences === 'object' ? profile.preferences as Record<string, unknown> : {};
+  const operationalPreferences = Object.fromEntries(OPERATIONAL_PREFERENCE_KEYS.filter((key) => preferences[key] !== undefined && preferences[key] !== null && preferences[key] !== '').map((key) => [key, preferences[key]]));
+  return { id: profile.id, repeatGuest: completed.length >= 2, completedStays: completed.length, lastStay: completed[0]?.checkOut ?? null, ...(includePreferences ? { operationalPreferences } : {}) };
+}
 
 @Injectable()
 export class GuestsService {
@@ -21,11 +31,25 @@ export class GuestsService {
     return { guestProfileId: profile.id, conflict: false };
   }
 
-  private async scope(userId: string, requestedHotelId?: string) {
+  private async authorisedUser(userId: string) {
     const user = await this.p.user.findUnique({ where: { id: userId }, select: { role: true, staffHotelId: true } });
     if (!user || !([UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.RESERVATION] as any).includes(user.role)) throw new ForbiddenException('Guest CRM access is restricted to authorised staff.');
+    return user;
+  }
+
+  private async scope(userId: string, requestedHotelId?: string) {
+    const user = await this.authorisedUser(userId);
     if (user.staffHotelId && requestedHotelId && user.staffHotelId !== requestedHotelId) throw new ForbiddenException('Hotel scope does not allow this guest data.');
     return user.staffHotelId ?? requestedHotelId;
+  }
+
+  private async assertGuestAccessibleForHotel(userId: string, guestProfileId: string, operation: 'update' | 'note') {
+    const user = await this.authorisedUser(userId);
+    const guest = user.staffHotelId
+      ? await this.p.guestProfile.findFirst({ where: { id: guestProfileId, reservations: { some: { hotelId: user.staffHotelId } } }, select: { id: true } })
+      : await this.p.guestProfile.findUnique({ where: { id: guestProfileId }, select: { id: true } });
+    if (!guest) throw new NotFoundException('Guest profile not found.');
+    return { user, hotelId: user.staffHotelId, operation };
   }
 
   private profileWhere(scopeHotelId?: string, search?: string): Prisma.GuestProfileWhereInput {
@@ -70,17 +94,19 @@ export class GuestsService {
   }
 
   async update(userId: string, id: string, body: UpdateGuestProfileDto) {
-    const scope = await this.scope(userId);
-    const current = await this.p.guestProfile.findUnique({ where: { id }, select: { id: true } }); if (!current) throw new NotFoundException('Guest profile not found.');
+    const { user, hotelId: scope } = await this.assertGuestAccessibleForHotel(userId, id, 'update');
+    if (user.role === UserRole.RESERVATION && (body.vipLevel !== undefined || body.blacklisted !== undefined)) throw new ForbiddenException('Reservation users cannot change global VIP or blacklist flags.');
     if (body.preferredRoomTypeId) { const roomType = await this.p.roomType.findFirst({ where: { id: body.preferredRoomTypeId, ...(scope ? { hotelId: scope } : {}) }, select: { id: true } }); if (!roomType) throw new BadRequestException('Preferred room type is outside the current hotel scope.'); }
     const data: Prisma.GuestProfileUpdateInput = { ...body, ...(body.preferences !== undefined ? { preferences: body.preferences as Prisma.InputJsonValue } : {}), ...(body.mobile !== undefined ? { mobile: body.mobile || null, normalizedMobile: normalizeGuestMobile(body.mobile) } : {}), ...(body.email !== undefined ? { email: body.email || null, normalizedEmail: normalizeGuestEmail(body.email) } : {}) } as any;
     return this.p.guestProfile.update({ where: { id }, data, select: { id: true, displayName: true, mobile: true, email: true, preferences: true, vipLevel: true, blacklisted: true } });
   }
 
   async addNote(userId: string, id: string, body: CreateGuestNoteDto) {
-    const scope = await this.scope(userId, body.hotelId);
+    const { user, hotelId: scope } = await this.assertGuestAccessibleForHotel(userId, id, 'note');
     if (body.visibility === GuestNoteVisibility.MANAGEMENT_ONLY) { const user = await this.p.user.findUnique({ where: { id: userId }, select: { role: true } }); if (!user || !([UserRole.ADMIN, UserRole.SUPER_ADMIN] as any).includes(user.role)) throw new ForbiddenException('Management notes require Admin access.'); }
     if (!body.note.trim()) throw new BadRequestException('Note cannot be empty.');
-    return this.p.guestNote.create({ data: { guestProfileId: id, category: body.category, visibility: body.visibility, note: body.note.trim(), hotelId: scope ?? body.hotelId ?? null, createdById: userId }, select: { id: true, category: true, visibility: true, note: true, hotelId: true, createdAt: true } });
+    const hotelId = scope ?? body.hotelId ?? null;
+    if (!scope && hotelId && user.role !== UserRole.SUPER_ADMIN && user.role !== UserRole.ADMIN) throw new ForbiddenException('Only global Admin users may choose a note hotel.');
+    return this.p.guestNote.create({ data: { guestProfileId: id, category: body.category, visibility: body.visibility, note: body.note.trim(), hotelId, createdById: userId }, select: { id: true, category: true, visibility: true, note: true, hotelId: true, createdAt: true } });
   }
 }

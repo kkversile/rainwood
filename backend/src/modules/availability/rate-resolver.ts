@@ -25,7 +25,7 @@ function occupancyMap(value: unknown) {
 export class RateResolverService {
   resolve(base: any, agentRatePlanId?: string): RateValue {
     return {
-      amount: numberOr(base?.amount, 0),
+      amount: numberOr(base?.overrideAmount ?? base?.baseAmount ?? base?.amount, 0),
       taxAmount: numberOr(base?.taxAmount, 0),
       childAmount: numberOr(base?.childAmount, 0),
       extraAdultAmount: numberOr(base?.extraAdultAmount, 0),

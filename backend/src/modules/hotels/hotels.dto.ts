@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { RoomOperationalStatus } from '@prisma/client';
+import { PromotionDiscountType, RoomOperationalStatus } from '@prisma/client';
 import { ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 
 export class HotelContentDto {
@@ -169,10 +169,39 @@ export class RateDayDto {
   @IsOptional() @IsBoolean() ctd?: boolean;
   @IsOptional() @IsInt() @Min(1) minLos?: number;
   @IsOptional() @IsInt() @Min(1) maxLos?: number | null;
+  @IsOptional() @IsNumber() @Min(0) baseAmount?: number;
+  @IsOptional() @IsNumber() @Min(0) overrideAmount?: number | null;
 }
 
 export class InventoryBatchDto { @IsArray() @ValidateNested({ each: true }) @Type(() => InventoryDayDto) days!: InventoryDayDto[]; }
 export class RateBatchDto { @IsArray() @ValidateNested({ each: true }) @Type(() => RateDayDto) days!: RateDayDto[]; }
+
+export class RateBulkUpdateDto {
+  @IsDateString() fromDate!: string;
+  @IsDateString() toDate!: string;
+  @IsOptional() @IsArray() @IsInt({ each: true }) @Min(0, { each: true }) @Max(6, { each: true }) daysOfWeek?: number[];
+  @IsOptional() @IsArray() @IsString({ each: true }) roomTypeIds?: string[];
+  @IsOptional() @IsArray() @IsString({ each: true }) ratePlanIds?: string[];
+  @IsIn(['SET_RATE', 'INCREASE_PERCENT', 'DECREASE_PERCENT', 'SET_MLOS', 'SET_MAXLOS', 'CLOSE_ARRIVAL', 'CLOSE_DEPARTURE', 'REMOVE_OVERRIDE']) action!: string;
+  @IsOptional() @IsNumber() value?: number;
+}
+
+export class PromotionDto {
+  @IsOptional() @IsString() @MinLength(2) code?: string;
+  @IsString() @MinLength(2) name!: string;
+  @IsEnum(PromotionDiscountType) discountType!: PromotionDiscountType;
+  @IsNumber() @Min(0) discountValue!: number;
+  @IsOptional() @IsDateString() bookingStart?: string | null;
+  @IsOptional() @IsDateString() bookingEnd?: string | null;
+  @IsOptional() @IsDateString() stayStart?: string | null;
+  @IsOptional() @IsDateString() stayEnd?: string | null;
+  @IsOptional() @IsInt() @Min(1) minNights?: number | null;
+  @IsOptional() @IsInt() @Min(1) maxNights?: number | null;
+  @IsOptional() @IsArray() @IsString({ each: true }) roomTypeIds?: string[];
+  @IsOptional() @IsArray() @IsString({ each: true }) ratePlanIds?: string[];
+  @IsOptional() @IsArray() @IsString({ each: true }) channels?: string[];
+  @IsOptional() @IsBoolean() active?: boolean;
+}
 export class AmenityDto {
   @IsString() @MinLength(2) code!: string;
   @IsString() @MinLength(2) name!: string;

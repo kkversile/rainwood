@@ -23,7 +23,7 @@ export class HoldsService {
       await this.expireStaleHoldsForLockedRows(tx, lockRows);
       const quotes = [] as any[];
       for (const line of sortedLines) {
-        const quote = await this.availability.quoteSelection(tx, line, { checkInventory: true, agentId });
+        const quote = await this.availability.quoteSelection(tx, line, { checkInventory: true, agentId, channel: line.source, promotionCode: line.promotionCode });
         quotes.push(quote);
       }
       for (const line of sortedLines) {

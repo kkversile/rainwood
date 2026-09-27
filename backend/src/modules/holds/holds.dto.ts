@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsEmail, IsInt, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
+import { BookingSource } from '@prisma/client';
+import { IsArray, IsDateString, IsEmail, IsEnum, IsInt, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator';
 
 export class HoldOccupancyDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(100) adults!: number;
@@ -45,6 +46,14 @@ export class HoldLineDto {
   @ValidateNested({ each: true })
   @Type(() => HoldOccupancyDto)
   occupancies?: HoldOccupancyDto[];
+
+  @IsOptional()
+  @IsEnum(BookingSource)
+  source?: BookingSource;
+
+  @IsOptional()
+  @IsString()
+  promotionCode?: string;
 }
 
 export class HoldCreateDto extends HoldLineDto {
