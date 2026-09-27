@@ -1,10 +1,10 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { FolioChargeCategory, StaffDepartment, UserRole } from '@prisma/client';
+import { FolioChargeCategory, StaffDepartment, StayStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
-import { parseDateOnly, todayUtc, toDateOnly } from '../../common/dates';
+import { todayUtc, toDateOnly } from '../../common/dates';
 import { ReservationsService } from '../reservations/reservations.service';
 import { StaffFolioChargeDto, StaffStaysQueryDto } from './staff.dto';
-import { allowedStaffFolioCategories, STAFF_OPERATIONAL_STATUSES } from './staff-rules';
+import { allowedStaffFolioCategories } from './staff-rules';
 
 @Injectable()
 export class StaffService {
@@ -16,14 +16,12 @@ export class StaffService {
     return user;
   }
 
-  private operationalWhere(staffHotelId: string, date: Date, q?: string) {
+  private operationalWhere(staffHotelId: string, q?: string) {
     const search = q?.trim();
     return {
       hotelId: staffHotelId,
-      status: { in: [...STAFF_OPERATIONAL_STATUSES] },
-      checkIn: { lte: date },
-      checkOut: { gt: date },
-      ...(search ? { OR: [{ reference: { contains: search, mode: 'insensitive' as const } }, { guestName: { contains: search, mode: 'insensitive' as const } }, { mobile: { contains: search } }] } : {}),
+      stayStatus: StayStatus.CHECKED_IN,
+      ...(search ? { OR: [{ reference: { contains: search, mode: 'insensitive' as const } }, { guestName: { contains: search, mode: 'insensitive' as const } }, { mobile: { contains: search } }, { roomAssignments: { some: { unassignedAt: null, room: { roomNumber: { contains: search, mode: 'insensitive' as const } } } } }] } : {}),
     };
   }
 
@@ -32,7 +30,7 @@ export class StaffService {
     const rooms = row.lines.reduce((sum: number, line: any) => sum + line.rooms, 0);
     const adults = row.lines.reduce((sum: number, line: any) => sum + line.adults, 0);
     const children = row.lines.reduce((sum: number, line: any) => sum + line.children, 0);
-    return { reference: row.reference, guestName: row.guestName, checkIn: row.checkIn, checkOut: row.checkOut, status: row.status, rooms, roomTypes, adults, children, pax: adults + children, hotel: row.hotel };
+    return { reference: row.reference, guestName: row.guestName, checkIn: row.checkIn, checkOut: row.checkOut, status: row.status, stayStatus: row.stayStatus, rooms, roomTypes, adults, children, pax: adults + children, hotel: row.hotel, assignedRooms: (row.roomAssignments ?? []).map((assignment: any) => ({ id: assignment.id, roomNumber: assignment.room.roomNumber, floor: assignment.room.floor, wing: assignment.room.wing, roomType: assignment.room.roomType?.name ?? null })) };
   }
 
   async getMe(userId: string) {
@@ -43,17 +41,15 @@ export class StaffService {
 
   async listStays(userId: string, query: StaffStaysQueryDto) {
     const user = await this.profile(userId);
-    const date = query.date ? parseDateOnly(query.date, 'date') : todayUtc();
-    const rows = await this.p.reservation.findMany({ where: this.operationalWhere(user.staffHotelId!, date, query.q), orderBy: [{ checkIn: 'asc' }, { guestName: 'asc' }], select: { reference: true, guestName: true, checkIn: true, checkOut: true, status: true, hotel: { select: { id: true, name: true } }, lines: { select: { rooms: true, adults: true, children: true, roomType: { select: { id: true, name: true } } } } } });
+    const rows = await this.p.reservation.findMany({ where: this.operationalWhere(user.staffHotelId!, query.q), orderBy: [{ checkIn: 'asc' }, { guestName: 'asc' }], select: { reference: true, guestName: true, checkIn: true, checkOut: true, status: true, stayStatus: true, hotel: { select: { id: true, name: true } }, lines: { select: { rooms: true, adults: true, children: true, roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, select: { id: true, room: { select: { roomNumber: true, floor: true, wing: true, roomType: { select: { name: true } } } } } } } });
     return rows.map((row) => this.summarize(row));
   }
 
   private async staffStay(userId: string, reference: string) {
     const user = await this.profile(userId);
-    const date = todayUtc();
-    const row = await this.p.reservation.findUnique({ where: { reference }, select: { reference: true, guestName: true, checkIn: true, checkOut: true, status: true, hotelId: true, hotel: { select: { id: true, name: true } }, lines: { select: { rooms: true, adults: true, children: true, roomType: { select: { id: true, name: true } } } } } });
+    const row = await this.p.reservation.findUnique({ where: { reference }, select: { reference: true, guestName: true, checkIn: true, checkOut: true, status: true, stayStatus: true, hotelId: true, hotel: { select: { id: true, name: true } }, lines: { select: { rooms: true, adults: true, children: true, roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, select: { id: true, room: { select: { roomNumber: true, floor: true, wing: true, roomType: { select: { name: true } } } } } } } });
     if (!row || row.hotelId !== user.staffHotelId) throw new NotFoundException('Operational stay not found');
-    if (!STAFF_OPERATIONAL_STATUSES.includes(row.status as typeof STAFF_OPERATIONAL_STATUSES[number]) || row.checkIn > date || row.checkOut <= date) throw new NotFoundException('Operational stay not found');
+    if (row.stayStatus !== StayStatus.CHECKED_IN) throw new NotFoundException('Operational stay not found');
     return { user, row };
   }
 

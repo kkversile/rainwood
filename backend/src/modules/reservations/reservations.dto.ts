@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsDateString, IsEmail, IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { BookingSource, FolioChargeCategory, ModificationType } from '@prisma/client';
 
 export class CreateReservationDto {
@@ -190,4 +190,48 @@ export class VoidFolioChargeDto {
   @MinLength(2)
   @MaxLength(500)
   reason!: string;
+}
+
+export class RoomAssignmentDto {
+  @IsString()
+  reservationLineId!: string;
+
+  @IsString()
+  roomId!: string;
+}
+
+export class CheckInDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RoomAssignmentDto)
+  assignments!: RoomAssignmentDto[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
+}
+
+export class RoomChangeDto {
+  @IsString()
+  assignmentId!: string;
+
+  @IsString()
+  newRoomId!: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(500)
+  reason!: string;
+}
+
+export class CheckOutDto {
+  @IsOptional()
+  @IsBoolean()
+  force?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }

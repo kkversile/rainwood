@@ -51,6 +51,21 @@ enum ReservationStatus {
   EXPIRED
 }
 
+enum StayStatus {
+  EXPECTED
+  CHECKED_IN
+  CHECKED_OUT
+  NO_SHOW
+}
+
+enum RoomOperationalStatus {
+  AVAILABLE
+  OCCUPIED
+  DIRTY
+  CLEANING
+  OUT_OF_ORDER
+}
+
 enum PaymentStatus {
   UNPAID
   PENDING
@@ -211,8 +226,8 @@ enum FolioChargeStatus {
 }
 
 model User {
-  id                      String                    @id @default(cuid())
-  email                   String                    @unique
+  id                      String                      @id @default(cuid())
+  email                   String                      @unique
   passwordHash            String
   name                    String
   companyName             String?
@@ -225,37 +240,41 @@ model User {
   state                   String?
   pinCode                 String?
   additionalInformation   String?
-  role                    UserRole                  @default(RESERVATION)
+  role                    UserRole                    @default(RESERVATION)
   staffDepartment         StaffDepartment?
   jobTitle                String?
   staffHotelId            String?
-  staffHotel              Hotel?                    @relation("StaffHotel", fields: [staffHotelId], references: [id], onDelete: SetNull)
-  active                  Boolean                   @default(true)
+  staffHotel              Hotel?                      @relation("StaffHotel", fields: [staffHotelId], references: [id], onDelete: SetNull)
+  active                  Boolean                     @default(true)
   agentPaymentPolicy      AgentPaymentPolicy?
-  bookingPaymentPercent   Decimal?                  @db.Decimal(5, 2)
-  tokenVersion            Int                       @default(0)
-  failedLoginCount        Int                       @default(0)
+  bookingPaymentPercent   Decimal?                    @db.Decimal(5, 2)
+  tokenVersion            Int                         @default(0)
+  failedLoginCount        Int                         @default(0)
   lockedUntil             DateTime?
   refreshTokens           RefreshToken[]
-  auditLogs               AuditLog[]                @relation("AuditActor")
-  createdReservations     Reservation[]             @relation("ReservationCreator")
-  reconfirmedReservations Reservation[]             @relation("ReservationReconfirmedBy")
-  uploadedFiles           StoredFile[]              @relation("FileUploader")
+  auditLogs               AuditLog[]                  @relation("AuditActor")
+  createdReservations     Reservation[]               @relation("ReservationCreator")
+  reconfirmedReservations Reservation[]               @relation("ReservationReconfirmedBy")
+  checkedInReservations   Reservation[]               @relation("ReservationCheckedInBy")
+  checkedOutReservations  Reservation[]               @relation("ReservationCheckedOutBy")
+  uploadedFiles           StoredFile[]                @relation("FileUploader")
   agentDocuments          AgentDocument[]
-  profileImageFileId      String?                   @unique
-  profileImageFile        StoredFile?               @relation("ProfileImage", fields: [profileImageFileId], references: [id], onDelete: SetNull)
-  verifiedPayments        Payment[]                 @relation("PaymentVerifier")
-  requestedCancellations  CancellationRequest[]     @relation("CancellationRequester")
-  approvedCancellations   CancellationRequest[]     @relation("CancellationApprover")
-  createdModifications    ReservationModification[] @relation("ModificationCreator")
-  postedFolioCharges      ReservationFolioCharge[]  @relation("FolioChargePostedBy")
-  voidedFolioCharges      ReservationFolioCharge[]  @relation("FolioChargeVoidedBy")
+  profileImageFileId      String?                     @unique
+  profileImageFile        StoredFile?                 @relation("ProfileImage", fields: [profileImageFileId], references: [id], onDelete: SetNull)
+  verifiedPayments        Payment[]                   @relation("PaymentVerifier")
+  requestedCancellations  CancellationRequest[]       @relation("CancellationRequester")
+  approvedCancellations   CancellationRequest[]       @relation("CancellationApprover")
+  createdModifications    ReservationModification[]   @relation("ModificationCreator")
+  postedFolioCharges      ReservationFolioCharge[]    @relation("FolioChargePostedBy")
+  voidedFolioCharges      ReservationFolioCharge[]    @relation("FolioChargeVoidedBy")
   assignedRatePlans       AgentRatePlan[]
   paymentMilestones       AgentPaymentMilestone[]
-  agentHolds              InventoryHold[]           @relation("AgentHolds")
+  agentHolds              InventoryHold[]             @relation("AgentHolds")
+  assignedRoomStays       ReservationRoomAssignment[] @relation("RoomAssignmentAssignedBy")
+  unassignedRoomStays     ReservationRoomAssignment[] @relation("RoomAssignmentUnassignedBy")
   wallet                  AgentWallet?
-  createdAt               DateTime                  @default(now())
-  updatedAt               DateTime                  @updatedAt
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
 
   @@index([staffHotelId, role])
 }
@@ -322,6 +341,7 @@ model Hotel {
   virtualTourUrl       String?
   axisPropertyId       String?                    @unique
   rooms                RoomType[]
+  physicalRooms        Room[]
   ratePlanMasters      RatePlanMaster[]
   images               HotelImage[]
   videos               HotelVideo[]
@@ -566,6 +586,7 @@ model RoomType {
   lines             ReservationLine[]
   holdLines         InventoryHoldLine[]
   waitlist          WaitlistEntry[]
+  physicalRooms     Room[]
 
   @@unique([hotelId, code])
   @@unique([hotelId, axisRoomId])
@@ -830,28 +851,29 @@ model InventoryHoldNight {
 }
 
 model Reservation {
-  id                   String                    @id @default(cuid())
-  reference            String                    @unique
+  id                   String                      @id @default(cuid())
+  reference            String                      @unique
   hotelId              String
-  hotel                Hotel                     @relation(fields: [hotelId], references: [id])
+  hotel                Hotel                       @relation(fields: [hotelId], references: [id])
   source               BookingSource
   sourceName           String?
-  status               ReservationStatus         @default(DRAFT)
-  paymentStatus        PaymentStatus             @default(UNPAID)
-  syncStatus           SyncStatus                @default(PENDING)
-  version              Int                       @default(1)
+  status               ReservationStatus           @default(DRAFT)
+  stayStatus           StayStatus                  @default(EXPECTED)
+  paymentStatus        PaymentStatus               @default(UNPAID)
+  syncStatus           SyncStatus                  @default(PENDING)
+  version              Int                         @default(1)
   guestName            String
   email                String
   mobile               String
   address              String?
   gstin                String?
-  checkIn              DateTime                  @db.Date
-  checkOut             DateTime                  @db.Date
-  currency             String                    @default("INR")
-  totalAmount          Decimal                   @db.Decimal(12, 2)
-  taxAmount            Decimal                   @default(0) @db.Decimal(12, 2)
-  advanceAmount        Decimal                   @default(0) @db.Decimal(12, 2)
-  balanceAmount        Decimal                   @db.Decimal(12, 2)
+  checkIn              DateTime                    @db.Date
+  checkOut             DateTime                    @db.Date
+  currency             String                      @default("INR")
+  totalAmount          Decimal                     @db.Decimal(12, 2)
+  taxAmount            Decimal                     @default(0) @db.Decimal(12, 2)
+  advanceAmount        Decimal                     @default(0) @db.Decimal(12, 2)
+  balanceAmount        Decimal                     @db.Decimal(12, 2)
   priceSnapshot        Json
   paymentTermsSnapshot Json?
   policySnapshot       Json
@@ -859,11 +881,18 @@ model Reservation {
   billingInstruction   String?
   internalRemark       String?
   createdById          String?
-  createdBy            User?                     @relation("ReservationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy            User?                       @relation("ReservationCreator", fields: [createdById], references: [id], onDelete: SetNull)
   reconfirmedAt        DateTime?
   reconfirmedById      String?
-  reconfirmedBy        User?                     @relation("ReservationReconfirmedBy", fields: [reconfirmedById], references: [id], onDelete: SetNull)
+  reconfirmedBy        User?                       @relation("ReservationReconfirmedBy", fields: [reconfirmedById], references: [id], onDelete: SetNull)
+  checkedInAt          DateTime?
+  checkedInById        String?
+  checkedInBy          User?                       @relation("ReservationCheckedInBy", fields: [checkedInById], references: [id], onDelete: SetNull)
+  checkedOutAt         DateTime?
+  checkedOutById       String?
+  checkedOutBy         User?                       @relation("ReservationCheckedOutBy", fields: [checkedOutById], references: [id], onDelete: SetNull)
   lines                ReservationLine[]
+  roomAssignments      ReservationRoomAssignment[]
   payments             Payment[]
   folioCharges         ReservationFolioCharge[]
   paymentAttempts      PaymentAttempt[]
@@ -871,12 +900,56 @@ model Reservation {
   vouchers             Voucher[]
   cancellations        CancellationRequest[]
   modifications        ReservationModification[]
-  createdAt            DateTime                  @default(now())
-  updatedAt            DateTime                  @updatedAt
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
 
   @@index([hotelId, checkIn, checkOut])
   @@index([status, paymentStatus, syncStatus])
+  @@index([stayStatus, checkIn, checkOut])
   @@index([email, createdAt])
+}
+
+model Room {
+  id          String                      @id @default(cuid())
+  hotelId     String
+  hotel       Hotel                       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomTypeId  String
+  roomType    RoomType                    @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
+  roomNumber  String
+  floor       String?
+  wing        String?
+  status      RoomOperationalStatus       @default(AVAILABLE)
+  active      Boolean                     @default(true)
+  assignments ReservationRoomAssignment[]
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+
+  @@unique([hotelId, roomNumber])
+  @@index([hotelId, roomTypeId, active])
+  @@index([hotelId, status])
+}
+
+model ReservationRoomAssignment {
+  id                String           @id @default(cuid())
+  reservationId     String
+  reservation       Reservation      @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservationLineId String?
+  reservationLine   ReservationLine? @relation(fields: [reservationLineId], references: [id], onDelete: SetNull)
+  roomId            String
+  room              Room             @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  assignedAt        DateTime         @default(now())
+  assignedById      String
+  assignedBy        User             @relation("RoomAssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: Restrict)
+  unassignedAt      DateTime?
+  unassignedById    String?
+  unassignedBy      User?            @relation("RoomAssignmentUnassignedBy", fields: [unassignedById], references: [id], onDelete: SetNull)
+  reason            String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([reservationId, unassignedAt])
+  @@index([roomId, unassignedAt])
+  @@index([reservationLineId])
 }
 
 model ReservationFolioCharge {
@@ -908,23 +981,24 @@ model ReservationFolioCharge {
 }
 
 model ReservationLine {
-  id            String                 @id @default(cuid())
-  reservationId String
-  reservation   Reservation            @relation(fields: [reservationId], references: [id], onDelete: Cascade)
-  roomTypeId    String
-  roomType      RoomType               @relation(fields: [roomTypeId], references: [id])
-  ratePlanId    String
-  ratePlan      RatePlan               @relation(fields: [ratePlanId], references: [id])
-  checkIn       DateTime               @db.Date
-  checkOut      DateTime               @db.Date
-  rooms         Int
-  adults        Int
-  children      Int                    @default(0)
-  nightlyRate   Decimal                @db.Decimal(12, 2)
-  taxAmount     Decimal                @default(0) @db.Decimal(12, 2)
-  lineTotal     Decimal                @db.Decimal(12, 2)
-  priceSnapshot Json
-  nights        ReservationRoomNight[]
+  id              String                      @id @default(cuid())
+  reservationId   String
+  reservation     Reservation                 @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  roomTypeId      String
+  roomType        RoomType                    @relation(fields: [roomTypeId], references: [id])
+  ratePlanId      String
+  ratePlan        RatePlan                    @relation(fields: [ratePlanId], references: [id])
+  checkIn         DateTime                    @db.Date
+  checkOut        DateTime                    @db.Date
+  rooms           Int
+  adults          Int
+  children        Int                         @default(0)
+  nightlyRate     Decimal                     @db.Decimal(12, 2)
+  taxAmount       Decimal                     @default(0) @db.Decimal(12, 2)
+  lineTotal       Decimal                     @db.Decimal(12, 2)
+  priceSnapshot   Json
+  nights          ReservationRoomNight[]
+  roomAssignments ReservationRoomAssignment[]
 }
 
 model ReservationRoomNight {

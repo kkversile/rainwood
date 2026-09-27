@@ -86,12 +86,13 @@ export class ReportsService {
       this.prisma.reservation.findMany({
         where,
         select: {
-          id: true, reference: true, hotel: { select: { id: true, name: true } }, guestName: true, checkIn: true, checkOut: true,
+          id: true, reference: true, hotel: { select: { id: true, name: true } }, guestName: true, checkIn: true, checkOut: true, stayStatus: true, checkedInAt: true, checkedInBy: { select: { id: true, name: true } },
           source: true, sourceName: true, status: true, paymentStatus: true, totalAmount: true, advanceAmount: true, balanceAmount: true,
           mobile: true, gstin: true, specialRequest: true, billingInstruction: true, internalRemark: true,
           createdBy: { select: { id: true, name: true } }, reconfirmedAt: true, reconfirmedBy: { select: { id: true, name: true } },
           lines: { select: { rooms: true, adults: true, children: true, roomType: { select: { id: true, name: true } } } },
           payments: { select: { mode: true, verified: true, paidAt: true, createdAt: true }, orderBy: { createdAt: 'desc' } },
+          roomAssignments: { where: { unassignedAt: null }, select: { room: { select: { id: true, roomNumber: true, floor: true, wing: true, status: true, roomType: { select: { id: true, name: true } } } } } },
         },
         orderBy: [{ checkIn: 'asc' }, { hotel: { name: 'asc' } }, { reference: 'asc' }],
         take: 5000,
@@ -131,6 +132,8 @@ export class ReportsService {
         creditDate: dateValue(selectedPayment ? (selectedPayment.paidAt ?? selectedPayment.createdAt) : null), bookedBy: reservation.createdBy, mobile: reservation.mobile, gstin: reservation.gstin,
         specialRequest, billingInstruction, internalRemark, instruction: [specialRequest, billingInstruction].filter(Boolean).join(' | '),
         reconfirmed: Boolean(reservation.reconfirmedAt), reconfirmedAt: dateValue(reservation.reconfirmedAt), reconfirmedBy: reservation.reconfirmedBy,
+        stayStatus: reservation.stayStatus, checkedInAt: reservation.checkedInAt, checkedInBy: reservation.checkedInBy,
+        assignedRooms: (reservation.roomAssignments ?? []).map((assignment) => assignment.room),
         confirmed: ['CONFIRMED', 'COMPLETED'].includes(reservation.status), amount: Number(reservation.totalAmount),
         roomType: [...roomTypes.values()].map((roomType) => `${roomType.name} × ${roomType.rooms}`).join(', '),
       };
@@ -141,7 +144,7 @@ export class ReportsService {
       roomTypes: entry.roomType ? [{ id: entry.roomType.id, name: entry.roomType.name, rooms: entry.rooms }] : [], adults: null, children: null, pax: null,
       status: entry.status, source: null, sourceName: null, businessType: null, advance: 0, totalAmount: 0, balance: 0, paymentStatus: null, paymentMode: null, paymentModes: [], creditDate: null,
       bookedBy: null, mobile: null, gstin: null, specialRequest: null, billingInstruction: null, internalRemark: null, instruction: '', reconfirmed: false, reconfirmedAt: null, reconfirmedBy: null,
-      confirmed: false, amount: 0, roomType: entry.roomType ? `${entry.roomType.name} × ${entry.rooms}` : 'Any room type',
+      confirmed: false, amount: 0, stayStatus: 'EXPECTED', checkedInAt: null, checkedInBy: null, assignedRooms: [], roomType: entry.roomType ? `${entry.roomType.name} × ${entry.rooms}` : 'Any room type',
     }));
     const items = [...reservationItems, ...waitlistItems].sort((a, b) => String(a.arrival).localeCompare(String(b.arrival)) || a.hotel.name.localeCompare(b.hotel.name) || a.reference.localeCompare(b.reference));
     const page = Math.max(1, Number(query.page)); const limit = Math.min(200, Math.max(1, Number(query.limit)));

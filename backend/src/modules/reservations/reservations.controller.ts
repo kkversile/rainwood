@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ReservationsService } from './reservations.service';
-import { CancellationDto, CreateReservationDto, FolioChargeDto, ManualReservationDto, ModificationDto, PayDueMilestonesDto, RatePlanListQueryDto, ReconfirmationDto, ReservationListQueryDto, VoidFolioChargeDto } from './reservations.dto';
+import { CancellationDto, CheckInDto, CheckOutDto, CreateReservationDto, FolioChargeDto, ManualReservationDto, ModificationDto, PayDueMilestonesDto, RatePlanListQueryDto, ReconfirmationDto, ReservationListQueryDto, RoomChangeDto, VoidFolioChargeDto } from './reservations.dto';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -43,6 +43,11 @@ export class ReservationsController {
   @Roles('AGENT' as any)
   mineRatePlans(@CurrentUser() user: any, @Query() query: RatePlanListQueryDto) { return this.s.listRatePlansForUser(user.id, query.from, query.to); }
 
+  @Get('in-house')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER')
+  inHouse(@Query('hotelId') hotelId?: string) { return this.s.inHouse(hotelId); }
+
   @Get(':reference')
   @UseGuards(OptionalJwtAuthGuard, ActiveAgentGuard)
   get(@Param('reference') reference: string) { return this.s.get(reference); }
@@ -51,6 +56,26 @@ export class ReservationsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER')
   detail(@Param('reference') reference: string, @CurrentUser() user: any) { return this.s.get(reference, true, user?.role); }
+
+  @Get(':reference/available-rooms')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER')
+  availableRooms(@Param('reference') reference: string) { return this.s.availableRooms(reference); }
+
+  @Post(':reference/check-in')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION')
+  checkIn(@Param('reference') reference: string, @Body() body: CheckInDto, @CurrentUser() user: any) { return this.s.checkIn(reference, body, user); }
+
+  @Post(':reference/room-change')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION')
+  roomChange(@Param('reference') reference: string, @Body() body: RoomChangeDto, @CurrentUser() user: any) { return this.s.roomChange(reference, body, user); }
+
+  @Post(':reference/check-out')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION')
+  checkOut(@Param('reference') reference: string, @Body() body: CheckOutDto, @CurrentUser() user: any) { return this.s.checkOut(reference, body, user); }
 
   @Get(':reference/folio')
   @UseGuards(JwtAuthGuard, RolesGuard)

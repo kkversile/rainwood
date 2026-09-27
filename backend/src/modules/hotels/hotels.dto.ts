@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsEmail, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { RoomOperationalStatus } from '@prisma/client';
+import { ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 
 export class HotelContentDto {
   @IsString()
@@ -270,4 +271,13 @@ export class HotelLocationTransportDto {
   @IsString() @MinLength(2) @MaxLength(160) name!: string;
   @IsString() @MaxLength(40) distance!: string;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+}
+
+export class PhysicalRoomDto {
+  @IsString() @MinLength(1) @MaxLength(40) roomNumber!: string;
+  @IsString() roomTypeId!: string;
+  @IsOptional() @IsString() @MaxLength(40) floor?: string;
+  @IsOptional() @IsString() @MaxLength(80) wing?: string;
+  @IsOptional() @IsEnum(RoomOperationalStatus) status?: RoomOperationalStatus;
+  @IsOptional() @IsBoolean() active?: boolean;
 }

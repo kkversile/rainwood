@@ -1,11 +1,11 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { FolioChargeCategory, Prisma, ReservationStatus, SyncStatus } from '@prisma/client';
+import { FolioChargeCategory, Prisma, ReservationStatus, RoomOperationalStatus, StayStatus, SyncStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/audit.service';
 import { HoldsService } from '../holds/holds.service';
-import { CancellationDto, CreateReservationDto, FolioChargeDto, ModificationDto, ReservationListQueryDto, VoidFolioChargeDto } from './reservations.dto';
-import { parseDateOnly, toDateOnly } from '../../common/dates';
+import { CancellationDto, CheckInDto, CheckOutDto, CreateReservationDto, FolioChargeDto, ModificationDto, ReservationListQueryDto, RoomChangeDto, VoidFolioChargeDto } from './reservations.dto';
+import { parseDateOnly, todayUtc, toDateOnly } from '../../common/dates';
 import { sha256 } from '../../common/security';
 import { serializable } from '../../common/transactions';
 import { assertReservationTransition } from './reservation-state';
@@ -15,6 +15,121 @@ import { calculateAgentBookingPaymentTerms, calculateReservationPaymentSchedule 
 @Injectable()
 export class ReservationsService {
   constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService) {}
+
+  private operationalRoles = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION'];
+
+  private assertOperationalRole(role?: string) {
+    if (!this.operationalRoles.includes(role ?? '')) throw new ForbiddenException('Front-office permission is required for this action.');
+  }
+
+  async availableRooms(reference: string) {
+    const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, hotelId: true, checkIn: true, checkOut: true, hotel: { select: { id: true, name: true } }, lines: { select: { id: true, rooms: true, roomType: { select: { id: true, name: true } } } } } });
+    if (!reservation) throw new NotFoundException('Reservation not found');
+    const requirements = await Promise.all(reservation.lines.map(async (line) => {
+      const rooms = await this.p.room.findMany({
+        where: { hotelId: reservation.hotelId, roomTypeId: line.roomType.id, active: true, status: RoomOperationalStatus.AVAILABLE, assignments: { none: { unassignedAt: null, reservationId: { not: reservation.id }, reservation: { checkIn: { lt: reservation.checkOut }, checkOut: { gt: reservation.checkIn } } } } },
+        select: { id: true, roomNumber: true, floor: true, wing: true, status: true }, orderBy: { roomNumber: 'asc' },
+      });
+      return { reservationLineId: line.id, roomType: line.roomType, requiredRooms: line.rooms, availableRooms: rooms };
+    }));
+    return { reservation: { id: reservation.id, reference: reservation.reference, hotel: reservation.hotel, checkIn: reservation.checkIn, checkOut: reservation.checkOut }, requirements };
+  }
+
+  async checkIn(reference: string, body: CheckInDto, user: { id: string; role?: string }) {
+    this.assertOperationalRole(user.role);
+    return serializable(this.p, async (tx) => {
+      const reservation = await tx.reservation.findUnique({ where: { reference }, include: { hotel: { select: { id: true, name: true } }, lines: { include: { roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, include: { room: true } } } });
+      if (!reservation) throw new NotFoundException('Reservation not found');
+      if (!([ReservationStatus.CONFIRMED, ReservationStatus.MODIFIED] as ReservationStatus[]).includes(reservation.status)) throw new BadRequestException('Only confirmed or modified reservations can be checked in.');
+      if (reservation.stayStatus !== StayStatus.EXPECTED) throw new ConflictException('This stay has already been checked in or completed.');
+      if (toDateOnly(reservation.checkIn) !== toDateOnly(todayUtc())) throw new BadRequestException('Check-in is allowed on the scheduled arrival date only.');
+      const expected = new Map(reservation.lines.map((line) => [line.id, line.rooms]));
+      if (!Array.isArray(body.assignments) || body.assignments.length !== reservation.lines.reduce((sum, line) => sum + line.rooms, 0)) throw new BadRequestException('Assign exactly one physical room for each booked room.');
+      const roomIds = body.assignments.map((item) => item.roomId);
+      if (new Set(roomIds).size !== roomIds.length) throw new BadRequestException('A physical room cannot be assigned twice.');
+      const counts = new Map<string, number>();
+      for (const item of body.assignments) {
+        if (!expected.has(item.reservationLineId)) throw new BadRequestException('Assignment contains an invalid reservation line.');
+        counts.set(item.reservationLineId, (counts.get(item.reservationLineId) ?? 0) + 1);
+      }
+      for (const [lineId, required] of expected) if ((counts.get(lineId) ?? 0) !== required) throw new BadRequestException('Room assignments do not match the booked room quantities.');
+      const rooms = await tx.room.findMany({ where: { id: { in: roomIds } }, include: { assignments: { where: { unassignedAt: null }, include: { reservation: { select: { id: true, checkIn: true, checkOut: true } } } } } });
+      if (rooms.length !== roomIds.length) throw new BadRequestException('One or more selected rooms do not exist.');
+      const roomMap = new Map(rooms.map((room) => [room.id, room]));
+      for (const item of body.assignments) {
+        const room = roomMap.get(item.roomId)!;
+        const line = reservation.lines.find((candidate) => candidate.id === item.reservationLineId)!;
+        if (room.hotelId !== reservation.hotelId || room.roomTypeId !== line.roomTypeId) throw new BadRequestException('Selected room does not belong to the reservation hotel and room type.');
+        if (!room.active || room.status !== RoomOperationalStatus.AVAILABLE) throw new ConflictException(`Room ${room.roomNumber} is not available.`);
+        if (room.assignments.some((assignment) => assignment.reservationId !== reservation.id && assignment.reservation.checkIn < reservation.checkOut && assignment.reservation.checkOut > reservation.checkIn)) throw new ConflictException(`Room ${room.roomNumber} is already assigned for overlapping dates.`);
+      }
+      const now = new Date();
+      for (const item of body.assignments) {
+        await tx.reservationRoomAssignment.create({ data: { reservationId: reservation.id, reservationLineId: item.reservationLineId, roomId: item.roomId, assignedById: user.id, assignedAt: now } });
+        await tx.room.update({ where: { id: item.roomId }, data: { status: RoomOperationalStatus.OCCUPIED } });
+      }
+      const updated = await tx.reservation.update({ where: { id: reservation.id }, data: { stayStatus: StayStatus.CHECKED_IN, checkedInAt: now, checkedInById: user.id }, include: { roomAssignments: { where: { unassignedAt: null }, include: { room: { select: { id: true, roomNumber: true, floor: true, wing: true, status: true, roomType: { select: { id: true, name: true } } } } } }, checkedInBy: { select: { id: true, name: true } } } });
+      await tx.auditLog.create({ data: { actorUserId: user.id, action: 'GUEST_CHECKED_IN', entityType: 'Reservation', entityId: reservation.id, after: { reference, hotelId: reservation.hotelId, rooms: updated.roomAssignments.map((assignment) => assignment.room.roomNumber), note: body.note?.trim() || null } } });
+      await tx.auditLog.create({ data: { actorUserId: user.id, action: 'ROOM_ASSIGNED', entityType: 'Reservation', entityId: reservation.id, after: { reference, roomIds } } });
+      return this.stayLifecycleResult(updated);
+    });
+  }
+
+  async roomChange(reference: string, body: RoomChangeDto, user: { id: string; role?: string }) {
+    this.assertOperationalRole(user.role);
+    const reason = body.reason.trim();
+    return serializable(this.p, async (tx) => {
+      const reservation = await tx.reservation.findUnique({ where: { reference }, include: { roomAssignments: { where: { unassignedAt: null }, include: { room: true } }, hotel: { select: { id: true, name: true } } } });
+      if (!reservation) throw new NotFoundException('Reservation not found');
+      if (reservation.stayStatus !== StayStatus.CHECKED_IN) throw new BadRequestException('Room changes are only available for checked-in stays.');
+      const current = reservation.roomAssignments.find((item) => item.id === body.assignmentId);
+      if (!current) throw new NotFoundException('Active room assignment not found.');
+      if (current.roomId === body.newRoomId) throw new BadRequestException('Choose a different replacement room.');
+      const target = await tx.room.findUnique({ where: { id: body.newRoomId }, include: { assignments: { where: { unassignedAt: null }, include: { reservation: { select: { id: true, checkIn: true, checkOut: true } } } }, roomType: { select: { id: true, name: true } } } });
+      if (!target || target.hotelId !== reservation.hotelId || target.roomTypeId !== current.room.roomTypeId) throw new BadRequestException('Replacement room must belong to the same hotel and room type.');
+      if (!target.active || target.status !== RoomOperationalStatus.AVAILABLE) throw new ConflictException(`Room ${target.roomNumber} is not available.`);
+      if (target.assignments.some((assignment) => assignment.reservationId !== reservation.id && assignment.reservation.checkIn < reservation.checkOut && assignment.reservation.checkOut > reservation.checkIn)) throw new ConflictException(`Room ${target.roomNumber} is already assigned for overlapping dates.`);
+      const now = new Date();
+      await tx.reservationRoomAssignment.update({ where: { id: current.id }, data: { unassignedAt: now, unassignedById: user.id, reason } });
+      await tx.room.update({ where: { id: current.roomId }, data: { status: RoomOperationalStatus.DIRTY } });
+      const next = await tx.reservationRoomAssignment.create({ data: { reservationId: reservation.id, reservationLineId: current.reservationLineId, roomId: target.id, assignedById: user.id, assignedAt: now, reason } });
+      await tx.room.update({ where: { id: target.id }, data: { status: RoomOperationalStatus.OCCUPIED } });
+      await tx.auditLog.create({ data: { actorUserId: user.id, action: 'ROOM_CHANGED', entityType: 'ReservationRoomAssignment', entityId: next.id, after: { reference, oldRoom: current.room.roomNumber, newRoom: target.roomNumber, reason } } });
+      return this.getLifecycle(reference, tx);
+    });
+  }
+
+  async checkOut(reference: string, body: CheckOutDto, user: { id: string; role?: string }) {
+    this.assertOperationalRole(user.role);
+    return serializable(this.p, async (tx) => {
+      const reservation = await tx.reservation.findUnique({ where: { reference }, include: { roomAssignments: { where: { unassignedAt: null }, include: { room: true } }, folioCharges: { where: { status: 'POSTED' }, select: { totalAmount: true } } } });
+      if (!reservation) throw new NotFoundException('Reservation not found');
+      if (reservation.stayStatus !== StayStatus.CHECKED_IN) throw new BadRequestException('Only checked-in stays can be checked out.');
+      const totalOutstanding = Number(reservation.balanceAmount) + reservation.folioCharges.reduce((sum, charge) => sum + Number(charge.totalAmount), 0);
+      if (totalOutstanding > 0.005 && !body.force) throw new ConflictException({ code: 'OUTSTANDING_BALANCE', message: `Outstanding balance is INR ${totalOutstanding.toFixed(2)}. Confirm checkout to continue.`, totalOutstanding });
+      const now = new Date();
+      for (const assignment of reservation.roomAssignments) await tx.room.update({ where: { id: assignment.roomId }, data: { status: RoomOperationalStatus.DIRTY } });
+      await tx.reservationRoomAssignment.updateMany({ where: { reservationId: reservation.id, unassignedAt: null }, data: { unassignedAt: now, unassignedById: user.id, reason: body.note?.trim() || 'Guest checked out' } });
+      const updated = await tx.reservation.update({ where: { id: reservation.id }, data: { stayStatus: StayStatus.CHECKED_OUT, checkedOutAt: now, checkedOutById: user.id }, include: { checkedOutBy: { select: { id: true, name: true } } } });
+      await tx.auditLog.create({ data: { actorUserId: user.id, action: 'GUEST_CHECKED_OUT', entityType: 'Reservation', entityId: reservation.id, after: { reference, rooms: reservation.roomAssignments.map((assignment) => assignment.room.roomNumber), totalOutstanding, note: body.note?.trim() || null } } });
+      return { reference: updated.reference, stayStatus: updated.stayStatus, checkedOutAt: updated.checkedOutAt, checkedOutBy: updated.checkedOutBy, totalOutstanding };
+    });
+  }
+
+  async inHouse(hotelId?: string) {
+    const rows = await this.p.reservation.findMany({ where: { stayStatus: StayStatus.CHECKED_IN, hotelId: hotelId || undefined }, orderBy: [{ hotel: { name: 'asc' } }, { guestName: 'asc' }], include: { hotel: { select: { id: true, name: true } }, checkedInBy: { select: { id: true, name: true } }, lines: { include: { roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, include: { room: { select: { id: true, roomNumber: true, floor: true, wing: true, status: true, roomType: { select: { id: true, name: true } } } } } }, folioCharges: { where: { status: 'POSTED' }, select: { totalAmount: true } } } });
+    return rows.map((row) => ({ reference: row.reference, guestName: row.guestName, hotel: row.hotel, arrival: row.checkIn, departure: row.checkOut, stayStatus: row.stayStatus, checkedInAt: row.checkedInAt, checkedInBy: row.checkedInBy, rooms: row.roomAssignments.map((assignment) => assignment.room), roomTypes: [...new Map(row.lines.map((line) => [line.roomType.id, line.roomType.name])).values()], pax: row.lines.reduce((sum, line) => sum + line.adults + line.children, 0), balance: Number(row.balanceAmount), incidentals: row.folioCharges.reduce((sum, charge) => sum + Number(charge.totalAmount), 0), totalOutstanding: Number(row.balanceAmount) + row.folioCharges.reduce((sum, charge) => sum + Number(charge.totalAmount), 0) }));
+  }
+
+  private stayLifecycleResult(row: any) {
+    return { reference: row.reference, stayStatus: row.stayStatus, checkedInAt: row.checkedInAt, checkedInBy: row.checkedInBy, rooms: (row.roomAssignments ?? []).map((assignment: any) => assignment.room) };
+  }
+
+  private async getLifecycle(reference: string, client: Prisma.TransactionClient | PrismaService = this.p) {
+    const row = await client.reservation.findUnique({ where: { reference }, include: { checkedInBy: { select: { id: true, name: true } }, checkedOutBy: { select: { id: true, name: true } }, roomAssignments: { where: { unassignedAt: null }, include: { room: { select: { id: true, roomNumber: true, floor: true, wing: true, status: true, roomType: { select: { id: true, name: true } } } } } } } });
+    if (!row) throw new NotFoundException('Reservation not found');
+    return { ...this.stayLifecycleResult(row), checkedOutAt: row.checkedOutAt, checkedOutBy: row.checkedOutBy };
+  }
 
   private reference() { return `RW-${new Date().getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`; }
 
@@ -146,6 +261,9 @@ export class ReservationsService {
         hotel: true,
         createdBy: { select: { id: true, name: true } },
         reconfirmedBy: { select: { id: true, name: true } },
+        checkedInBy: { select: { id: true, name: true } },
+        checkedOutBy: { select: { id: true, name: true } },
+        roomAssignments: { include: { room: { select: { id: true, roomNumber: true, floor: true, wing: true, status: true, roomType: { select: { id: true, name: true } } } }, assignedBy: { select: { id: true, name: true } }, unassignedBy: { select: { id: true, name: true } } }, orderBy: { assignedAt: 'asc' } },
         lines: { include: { roomType: true, ratePlan: true, nights: { orderBy: { date: 'asc' } } } },
         payments: { select: { id: true, amount: true, mode: true, verified: true, paidAt: true, createdAt: true }, orderBy: { createdAt: 'desc' } },
       },
@@ -159,6 +277,7 @@ export class ReservationsService {
         id: reservation.id,
         reference: reservation.reference,
         status: reservation.status,
+        stayStatus: reservation.stayStatus,
         paymentStatus: reservation.paymentStatus,
         syncStatus: reservation.syncStatus,
         guestName: reservation.guestName,
@@ -183,6 +302,11 @@ export class ReservationsService {
         createdBy: reservation.createdBy,
         reconfirmedAt: reservation.reconfirmedAt,
         reconfirmedBy: reservation.reconfirmedBy,
+        checkedInAt: reservation.checkedInAt,
+        checkedInBy: reservation.checkedInBy,
+        checkedOutAt: reservation.checkedOutAt,
+        checkedOutBy: reservation.checkedOutBy,
+        roomAssignments: (reservation.roomAssignments ?? []).map((assignment) => ({ id: assignment.id, room: assignment.room, assignedAt: assignment.assignedAt, assignedBy: assignment.assignedBy, unassignedAt: assignment.unassignedAt, unassignedBy: assignment.unassignedBy, reason: assignment.reason })),
         hotel: { id: reservation.hotel.id, name: reservation.hotel.name, slug: reservation.hotel.slug, city: reservation.hotel.city },
         lines: reservation.lines.map((line) => ({
           roomType: { id: line.roomType.id, name: line.roomType.name },
@@ -212,8 +336,9 @@ export class ReservationsService {
     if (['CANCELLED', 'EXPIRED', 'NO_SHOW'].includes(status)) throw new BadRequestException('Guest folio charges cannot be posted for this reservation.');
   }
 
-  private assertStaffFolioEligible(status: ReservationStatus) {
-    if (!['CONFIRMED', 'MODIFIED'].includes(status)) throw new BadRequestException('This reservation is not eligible for service-staff folio charges.');
+  private async assertStaffFolioEligible(reference: string) {
+    const stay = await this.p.reservation.findUnique({ where: { reference }, select: { stayStatus: true } });
+    if (stay?.stayStatus !== StayStatus.CHECKED_IN) throw new BadRequestException('This reservation is not eligible for service-staff folio charges.');
   }
 
   async getFolio(reference: string) {
@@ -283,7 +408,7 @@ export class ReservationsService {
   async postFolioCharge(reference: string, body: FolioChargeDto, user: { id: string }, options?: { postingDate?: Date; allowedCategories?: readonly FolioChargeCategory[]; staffOnly?: boolean; idempotencyKey?: string }) {
     const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, status: true, hotelId: true, hotel: { select: { id: true, name: true } } } });
     if (!reservation) throw new NotFoundException('Reservation not found');
-    if (options?.staffOnly) this.assertStaffFolioEligible(reservation.status);
+    if (options?.staffOnly) await this.assertStaffFolioEligible(reference);
     else this.assertFolioEligible(reservation.status);
     if (!Object.values(FolioChargeCategory).includes(body.category)) throw new BadRequestException('Invalid folio charge category');
     if (options?.allowedCategories && !options.allowedCategories.includes(body.category)) throw new ForbiddenException('Your department cannot post this folio category.');

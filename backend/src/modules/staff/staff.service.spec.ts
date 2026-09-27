@@ -11,7 +11,7 @@ function profile(overrides: Record<string, unknown> = {}) {
 }
 
 function stay(overrides: Record<string, unknown> = {}) {
-  return { reference: 'RW-STAFF-1', guestName: 'Demo Guest', checkIn: today, checkOut: tomorrow, status: 'CONFIRMED', hotelId: 'hotel-1', hotel: { id: 'hotel-1', name: 'RainWood Demo' }, lines: [{ rooms: 1, adults: 2, children: 1, roomType: { id: 'room-1', name: 'Valley Room' } }], ...overrides };
+  return { reference: 'RW-STAFF-1', guestName: 'Demo Guest', checkIn: today, checkOut: tomorrow, status: 'CONFIRMED', stayStatus: 'CHECKED_IN', hotelId: 'hotel-1', hotel: { id: 'hotel-1', name: 'RainWood Demo' }, lines: [{ rooms: 1, adults: 2, children: 1, roomType: { id: 'room-1', name: 'Valley Room' } }], roomAssignments: [{ id: 'assignment-1', room: { roomNumber: '203', floor: '2', wing: null, roomType: { name: 'Valley Room' } } }], ...overrides };
 }
 
 function setup(row: any = stay(), user: any = profile()) {
@@ -26,10 +26,10 @@ describe('StaffService', () => {
     await expect(service.getMe('staff-1')).resolves.toEqual(expect.objectContaining({ hotel: { id: 'hotel-1', name: 'RainWood Demo' }, allowedCategories: ['FOOD_AND_BEVERAGE', 'ROOM_SERVICE', 'MINIBAR', 'OTHER'] }));
   });
 
-  it('scopes the stay list to the assigned hotel and active stay date window', async () => {
+  it('scopes the stay list to the assigned hotel and checked-in stay status', async () => {
     const { service, prisma } = setup();
     await service.listStays('staff-1', {} as any);
-    expect(prisma.reservation.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ hotelId: 'hotel-1', status: { in: ['CONFIRMED', 'MODIFIED'] }, checkIn: { lte: today }, checkOut: { gt: today } }) }));
+    expect(prisma.reservation.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ hotelId: 'hotel-1', stayStatus: 'CHECKED_IN' }) }));
   });
 
   it('summarizes multi-room line occupancy without multiplying guest totals by rooms', async () => {
@@ -40,17 +40,17 @@ describe('StaffService', () => {
   it('rejects a cross-hotel stay and non-operational statuses', async () => {
     const crossHotel = setup(stay({ hotelId: 'hotel-2', hotel: { id: 'hotel-2', name: 'Other Hotel' } }));
     await expect(crossHotel.service.getStay('staff-1', 'RW-STAFF-1')).rejects.toBeInstanceOf(NotFoundException);
-    for (const status of ['DRAFT', 'PENDING_PAYMENT', 'TENTATIVE', 'COMPLETED']) {
-      const invalid = setup(stay({ status }));
+    for (const stayStatus of ['EXPECTED', 'CHECKED_OUT', 'NO_SHOW']) {
+      const invalid = setup(stay({ stayStatus }));
       await expect(invalid.service.getStay('staff-1', 'RW-STAFF-1')).rejects.toBeInstanceOf(NotFoundException);
     }
   });
 
-  it('allows same-day arrival and blocks departed stays', async () => {
+  it('returns checked-in stays independent of reservation date heuristics', async () => {
     const current = setup();
     await expect(current.service.getStay('staff-1', 'RW-STAFF-1')).resolves.toEqual(expect.objectContaining({ reference: 'RW-STAFF-1' }));
     const departed = setup(stay({ checkOut: today }));
-    await expect(departed.service.getStay('staff-1', 'RW-STAFF-1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(departed.service.getStay('staff-1', 'RW-STAFF-1')).resolves.toEqual(expect.objectContaining({ reference: 'RW-STAFF-1' }));
   });
 
   it('enforces department categories before posting and delegates server-controlled posting', async () => {

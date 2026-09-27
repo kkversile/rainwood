@@ -1,7 +1,7 @@
 import { Body, ConflictException, Controller, Delete, Get, Header, Param, Patch, Post, Put, Query, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { HotelsService } from './hotels.service';
-import { AmenityDto, CopyRatePlanDto, HotelContactDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelUpdateDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
+import { AmenityDto, CopyRatePlanDto, HotelContactDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelUpdateDto, HotelVideoDto, InventoryBatchDto, PhysicalRoomDto, RateBatchDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -21,6 +21,21 @@ export class HotelsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
   ratePlans() { return this.service.ratePlans(); }
+
+  @Get('physical-rooms')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER')
+  physicalRooms(@Query('hotelId') hotelId?: string) { return this.service.physicalRooms(hotelId); }
+
+  @Post(':hotelId/physical-rooms')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  createPhysicalRoom(@Param('hotelId') hotelId: string, @Body() body: PhysicalRoomDto) { return this.service.createPhysicalRoom(hotelId, body); }
+
+  @Patch('physical-rooms/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  updatePhysicalRoom(@Param('id') id: string, @Body() body: Partial<PhysicalRoomDto>) { return this.service.updatePhysicalRoom(id, body); }
 
   @Get(':hotelId/rate-plan-masters')
   @UseGuards(JwtAuthGuard, RolesGuard)

@@ -1,9 +1,9 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, RoomOperationalStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { normalizeOccupancyPrices, SUPPORTED_OCCUPANCY_KEYS } from '../../common/rate-pricing';
 import { parseDateOnly, parseExcelDateOnly } from '../../common/dates';
-import { AmenityDto, CopyRatePlanDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, RateBatchDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
+import { AmenityDto, CopyRatePlanDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, PhysicalRoomDto, RateBatchDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
 import { FilesService } from '../files/files.service';
 import ExcelJS from 'exceljs';
 import { canonicalMealPlan, canonicalRatePlanCode } from './rate-plan.utils';
@@ -20,6 +20,36 @@ function existingSupportedOccupancyPrices(value: unknown): Record<string, number
 @Injectable()
 export class HotelsService {
   constructor(private prisma: PrismaService, private files: FilesService) {}
+
+  async physicalRooms(hotelId?: string) {
+    return this.prisma.room.findMany({ where: { hotelId: hotelId || undefined }, orderBy: [{ hotel: { name: 'asc' } }, { roomNumber: 'asc' }], include: { hotel: { select: { id: true, name: true } }, roomType: { select: { id: true, name: true } } } });
+  }
+
+  async createPhysicalRoom(hotelId: string, body: PhysicalRoomDto) {
+    const roomType = await this.prisma.roomType.findFirst({ where: { id: body.roomTypeId, hotelId } });
+    if (!roomType) throw new BadRequestException('Room type does not belong to the selected hotel.');
+    try {
+      return await this.prisma.room.create({ data: { hotelId, roomTypeId: body.roomTypeId, roomNumber: body.roomNumber.trim(), floor: body.floor?.trim() || null, wing: body.wing?.trim() || null, status: body.status ?? RoomOperationalStatus.AVAILABLE, active: body.active ?? true }, include: { hotel: { select: { id: true, name: true } }, roomType: { select: { id: true, name: true } } } });
+    } catch (error: any) {
+      if (error?.code === 'P2002') throw new ConflictException('That room number already exists at this hotel.');
+      throw error;
+    }
+  }
+
+  async updatePhysicalRoom(id: string, body: Partial<PhysicalRoomDto>) {
+    const current = await this.prisma.room.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException('Physical room not found.');
+    if (body.roomTypeId) {
+      const roomType = await this.prisma.roomType.findFirst({ where: { id: body.roomTypeId, hotelId: current.hotelId } });
+      if (!roomType) throw new BadRequestException('Room type does not belong to this hotel.');
+    }
+    try {
+      return await this.prisma.room.update({ where: { id }, data: { roomNumber: body.roomNumber?.trim(), roomTypeId: body.roomTypeId, floor: body.floor === undefined ? undefined : body.floor?.trim() || null, wing: body.wing === undefined ? undefined : body.wing?.trim() || null, status: body.status, active: body.active }, include: { hotel: { select: { id: true, name: true } }, roomType: { select: { id: true, name: true } } } });
+    } catch (error: any) {
+      if (error?.code === 'P2002') throw new ConflictException('That room number already exists at this hotel.');
+      throw error;
+    }
+  }
 
   list() {
     return this.prisma.hotel.findMany({
