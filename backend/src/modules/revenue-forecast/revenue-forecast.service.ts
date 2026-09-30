@@ -137,8 +137,8 @@ export class RevenueForecastService {
       const stayDate = new Date(day.businessDate); const summary = day.summary as any ?? {};
       if (roomTypeId) {
         const row = Array.isArray(summary.roomTypePerformance) ? summary.roomTypePerformance.find((item: any) => item.roomTypeId === roomTypeId) : null;
-        if (row && number(row.roomNights) > 0) actuals.push({ stayDate, roomTypeId, finalRooms: number(row.roomNights), weekday: stayDate.getUTCDay(), seasonName: this.seasonForDate(seasons, stayDate, roomTypeId)?.name ?? null });
-      } else if (summary.occupancy?.occupiedRoomNights !== undefined && number(summary.occupancy.occupiedRoomNights) > 0) {
+        if (row && number(row.roomNights) >= 0) actuals.push({ stayDate, roomTypeId, finalRooms: number(row.roomNights), weekday: stayDate.getUTCDay(), seasonName: this.seasonForDate(seasons, stayDate, roomTypeId)?.name ?? null });
+      } else if (summary.occupancy?.occupiedRoomNights !== undefined && number(summary.occupancy.occupiedRoomNights) >= 0) {
         actuals.push({ stayDate, roomTypeId: null, finalRooms: number(summary.occupancy.occupiedRoomNights), weekday: stayDate.getUTCDay(), seasonName: this.seasonForDate(seasons, stayDate)?.name ?? null });
       }
     }
@@ -230,6 +230,6 @@ export class RevenueForecastService {
       if (point && !observations.some((row) => row.observationDate === dateKey(current) && row.source === 'LIVE')) observations.push({ observationDate: dateKey(current), daysBeforeArrival: Math.round((stayDate.getTime() - current.getTime()) / 86_400_000), bookedRooms: point.bookedRooms, heldRooms: point.heldRooms, roomRevenue: point.roomRevenue, adr: point.adr, sellableRooms: point.sellableRooms, source: 'LIVE' });
     }
     observations.sort((a, b) => a.observationDate.localeCompare(b.observationDate)); const context = await this.completionContext(hotel, query.roomTypeId); const latest = observations[observations.length - 1]; const completion = latest ? this.completionFor(context, stayDate, latest.daysBeforeArrival, query.roomTypeId) : { available: false, sampleSize: 0, reason: 'INSUFFICIENT_HISTORY' as const };
-    return { hotel: { id: hotel.id, name: hotel.name, timezoneName: hotel.timezoneName }, hotelId: hotel.id, stayDate: dateKey(stayDate), roomTypeId: query.roomTypeId ?? null, sellableRooms: latest?.sellableRooms ?? null, observations, completion, leadBuckets: BOOKING_CURVE_LEAD_BUCKETS, historicalSource: 'RevenueForecastSnapshot', livePointIncluded: observations.some((row) => row.source === 'LIVE') };
+    return { hotel: { id: hotel.id, name: hotel.name, timezoneName: hotel.timezoneName }, hotelId: hotel.id, stayDate: dateKey(stayDate), roomTypeId: query.roomTypeId ?? null, sellableRooms: latest?.sellableRooms ?? null, observations, completion, leadBuckets: BOOKING_CURVE_LEAD_BUCKETS, historicalSource: 'RevenueForecastSnapshot', finalDemandSource: query.roomTypeId ? 'HotelBusinessDay.summary.roomTypePerformance.roomNights' : 'HotelBusinessDay.summary.occupancy.occupiedRoomNights', livePointIncluded: observations.some((row) => row.source === 'LIVE') };
   }
 }
