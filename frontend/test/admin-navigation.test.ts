@@ -12,7 +12,7 @@ test('grouped admin navigation keeps the requested information architecture', ()
   assert.deepEqual(groups.map((group) => group.label), ['Operations', 'Reservations', 'Revenue', 'CRM & Sales', 'Reports', 'System']);
   assert.deepEqual(groups[0].items.map((item) => item.label), ['Rooms & Inventory', 'Physical Rooms', 'Housekeeping', 'Maintenance', 'Supplementary Charges']);
   assert.deepEqual(groups[1].items.map((item) => item.label), ['Reservations', 'Arrivals', 'In-house', 'Payments', 'Contact Requests']);
-  assert.deepEqual(groups[2].items.map((item) => item.label), ['Rate Plans', 'Rates', 'Rate Seasons', 'Yield Rules', 'Rate Simulator', 'Promotions', 'Rate Import']);
+  assert.deepEqual(groups[2].items.map((item) => item.label), ['Revenue Forecast', 'Rate Plans', 'Rates', 'Rate Seasons', 'Yield Rules', 'Rate Simulator', 'Promotions', 'Rate Import']);
   assert.deepEqual(groups[3].items.map((item) => item.label), ['Guests', 'Agents']);
   assert.deepEqual(groups[4].items.map((item) => item.label), ['Reports', 'Night Audit']);
   assert.deepEqual(groups[5].items.map((item) => item.label), ['Manage Hotels', 'AxisRooms', 'Jobs', 'Users', 'Site Settings', 'Audit Logs']);

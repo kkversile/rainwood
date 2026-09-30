@@ -29,7 +29,7 @@ function setup(overrides: Record<string, any> = {}) {
     $transaction: jest.fn(async (work: any) => work(p)),
   };
   Object.assign(p, overrides);
-  return { service: new NightAuditService(p), p, hotel, admin, rooms };
+  return { service: new NightAuditService(p, { captureForHotel: jest.fn().mockResolvedValue({ created: 0, existing: 0, availableStayDates: 0 }) } as any), p, hotel, admin, rooms };
 }
 
 describe('NightAuditService', () => {

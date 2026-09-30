@@ -6,6 +6,7 @@ import { PrismaService } from '../../common/prisma.service';
 import { serializable } from '../../common/transactions';
 import { NightAuditCloseDto, NightAuditPreviewQueryDto } from './night-audit.dto';
 import { getActorScope, resolveRequestedHotel } from '../../common/role-scope';
+import { RevenueForecastService } from '../revenue-forecast/revenue-forecast.service';
 
 const ACTIVE_HOUSEKEEPING = ['PENDING', 'ACCEPTED', 'CLEANING'];
 const ACTIVE_MAINTENANCE: MaintenanceTicketStatus[] = [MaintenanceTicketStatus.OPEN, MaintenanceTicketStatus.ASSIGNED, MaintenanceTicketStatus.IN_PROGRESS];
@@ -15,7 +16,7 @@ type Issue = { code: string; message: string; details?: unknown };
 
 @Injectable()
 export class NightAuditService {
-  constructor(private readonly p: PrismaService) {}
+  constructor(private readonly p: PrismaService, private readonly revenueForecast: RevenueForecastService) {}
 
   private async admin(userId: string, client: any = this.p) {
     const scope = await getActorScope(client, userId);
@@ -154,7 +155,7 @@ export class NightAuditService {
     const { hotel } = await this.hotelFor(userId, body.hotelId);
     const businessDate = this.businessDate(hotel, body.businessDate);
     try {
-      return await serializable(this.p, async (tx) => {
+      const result = await serializable(this.p, async (tx) => {
         const existing = await tx.hotelBusinessDay.findUnique({ where: { hotelId_businessDate: { hotelId: hotel.id, businessDate } }, include: { closedBy: { select: { id: true, name: true } } } });
         if (existing?.status === HotelBusinessDayStatus.CLOSED) return this.result(hotel, businessDate, { summary: existing.summary, blockers: [], warnings: (existing.exceptions as any)?.warnings ?? [] }, existing);
         const currentDate = getHotelOperationalDate(hotel.timezoneName);
@@ -167,6 +168,12 @@ export class NightAuditService {
         await tx.auditLog.create({ data: { actorUserId: userId, action: 'NIGHT_AUDIT_CLOSED', entityType: 'HotelBusinessDay', entityId: day.id, after: { hotelId: hotel.id, businessDate: toDateOnly(businessDate), blockerCount: 0, warningCount: calculated.warnings.length, summary: calculated.summary } } });
         return this.result(hotel, businessDate, calculated, day);
       });
+      try {
+        const snapshot = await this.revenueForecast.captureForHotel(hotel.id, businessDate, 30);
+        return { ...result, revenueForecastSnapshot: { status: 'CAPTURED', ...snapshot } };
+      } catch (error: any) {
+        return { ...result, revenueForecastSnapshot: { status: 'FAILED_RETRYABLE', message: 'Revenue forecast snapshot capture failed; retry from Revenue Forecast.', errorCode: error?.code ?? 'SNAPSHOT_CAPTURE_FAILED' } };
+      }
     } catch (error: any) {
       if (error?.code === 'P2002') {
         const existing = await this.p.hotelBusinessDay.findUnique({ where: { hotelId_businessDate: { hotelId: hotel.id, businessDate } }, include: { closedBy: { select: { id: true, name: true } } } });

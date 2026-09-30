@@ -10,6 +10,7 @@ const links = [['/', 'Home'], ['/hotels', 'Hotels'], ['/booking', 'Book'], ['/co
 type AdminLink = { readonly key: string; readonly href: string; readonly label: string };
 export const adminLinks = [
   { key: 'dashboard', href: '/admin/dashboard', label: 'Dashboard' },
+  { key: 'revenueForecast', href: '/admin/revenue-forecast', label: 'Revenue Forecast' },
   { key: 'manageHotels', href: '/admin/hotels', label: 'Manage Hotels' },
   { key: 'roomsInventory', href: '/admin/rooms-inventory', label: 'Rooms & Inventory' },
   { key: 'physicalRooms', href: '/admin/rooms', label: 'Physical Rooms' },
@@ -43,7 +44,7 @@ const propertyHiddenLinks = new Set(['/admin/hotels', '/admin/settings', '/admin
 const adminGroupDefinitions = [
   { key: 'operations', label: 'Operations', itemKeys: ['roomsInventory', 'physicalRooms', 'housekeeping', 'maintenance', 'supplementaryCharges'] },
   { key: 'reservations', label: 'Reservations', itemKeys: ['reservations', 'arrivals', 'inHouse', 'payments', 'contactRequests'] },
-  { key: 'revenue', label: 'Revenue', itemKeys: ['ratePlans', 'rates', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
+  { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rates', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
   { key: 'crmSales', label: 'CRM & Sales', itemKeys: ['guests', 'agents'] },
   { key: 'reports', label: 'Reports', itemKeys: ['reports', 'nightAudit'] },
   { key: 'system', label: 'System', itemKeys: ['manageHotels', 'axisRooms', 'jobs', 'users', 'siteSettings', 'auditLogs'] },
