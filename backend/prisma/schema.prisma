@@ -167,6 +167,38 @@ enum PaymentMode {
   BANK_TRANSFER
   CASH
   COMPANY_CREDIT
+  CHEQUE
+  OTHER
+}
+
+enum ExpenseStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+enum CorporatePricingType {
+  FIXED
+  DISCOUNT_PERCENT
+}
+
+enum InquiryStatus {
+  NEW
+  CONTACTED
+  QUOTE_SENT
+  FOLLOW_UP
+  CONVERTED
+  LOST
+}
+
+enum InquiryFollowUpMethod {
+  CALL
+  WHATSAPP
+  EMAIL
+  IN_PERSON
+  OTHER
 }
 
 enum PaymentProvider {
@@ -366,6 +398,10 @@ model User {
   maintenanceTicketsReported MaintenanceTicket[]         @relation("MaintenanceTicketReporter")
   maintenanceTicketsAssigned MaintenanceTicket[]         @relation("MaintenanceTicketAssignee")
   maintenanceTicketsCreated  MaintenanceTicket[]         @relation("MaintenanceTicketCreator")
+  createdExpenses            Expense[]                   @relation("ExpenseCreator")
+  approvedExpenses           Expense[]                   @relation("ExpenseApprover")
+  assignedInquiries          BookingInquiry[]            @relation("InquiryAssignee")
+  createdInquiryFollowUps    InquiryFollowUp[]           @relation("InquiryFollowUpCreator")
   wallet                     AgentWallet?
   createdAt                  DateTime                    @default(now())
   updatedAt                  DateTime                    @updatedAt
@@ -407,66 +443,72 @@ model RefreshToken {
 }
 
 model Hotel {
-  id                   String                     @id @default(cuid())
-  code                 String                     @unique
-  name                 String
-  slug                 String                     @unique
-  city                 String
-  mobile               String?
-  email                String?
-  place                String?
-  propertyType         String?
-  location             String?
-  country              String?
-  state                String?
-  address              String?
-  pincode              String?
-  latitude             String?
-  longitude            String?
-  category             String?
-  margin               String?
-  powerBackup          Boolean                    @default(false)
-  description          String?
-  active               Boolean                    @default(true)
-  seoTitle             String?
-  seoDescription       String?
-  canonicalPath        String?
-  ogImageUrl           String?
-  virtualTourUrl       String?
-  timezoneName         String                     @default("Asia/Kolkata")
-  axisPropertyId       String?                    @unique
-  rooms                RoomType[]
-  physicalRooms        Room[]
-  ratePlanMasters      RatePlanMaster[]
-  images               HotelImage[]
-  videos               HotelVideo[]
-  amenities            HotelAmenity[]
-  reviews              HotelReview[]
-  taxes                Tax[]
-  charges              Charge[]
-  supplementaryCharges HotelSupplementaryCharge[]
-  cancellationRules    CancellationRule[]
-  policy               HotelPolicy?
-  contacts             HotelContact[]
-  documents            HotelDocument[]
-  locationProfile      HotelLocationProfile?
-  locationAttractions  HotelLocationAttraction[]
-  locationTransports   HotelLocationTransport[]
-  reservations         Reservation[]
-  guestProfiles        GuestProfile[]             @relation("GuestPreferredHotel")
-  guestNotes           GuestNote[]                @relation("GuestNoteHotel")
-  staffUsers           User[]                     @relation("StaffHotel")
-  housekeepingTasks    HousekeepingTask[]
-  maintenanceTickets   MaintenanceTicket[]
-  holds                InventoryHold[]
-  waitlist             WaitlistEntry[]
-  businessDays         HotelBusinessDay[]
-  promotions           Promotion[]
-  rateSeasons          RateSeason[]
-  yieldRules           YieldRule[]
-  revenueForecasts     RevenueForecastSnapshot[]
-  createdAt            DateTime                   @default(now())
-  updatedAt            DateTime                   @updatedAt
+  id                      String                     @id @default(cuid())
+  code                    String                     @unique
+  name                    String
+  slug                    String                     @unique
+  city                    String
+  mobile                  String?
+  email                   String?
+  place                   String?
+  propertyType            String?
+  location                String?
+  country                 String?
+  state                   String?
+  address                 String?
+  pincode                 String?
+  latitude                String?
+  longitude               String?
+  category                String?
+  margin                  String?
+  powerBackup             Boolean                    @default(false)
+  description             String?
+  active                  Boolean                    @default(true)
+  seoTitle                String?
+  seoDescription          String?
+  canonicalPath           String?
+  ogImageUrl              String?
+  virtualTourUrl          String?
+  timezoneName            String                     @default("Asia/Kolkata")
+  axisPropertyId          String?                    @unique
+  rooms                   RoomType[]
+  physicalRooms           Room[]
+  ratePlanMasters         RatePlanMaster[]
+  images                  HotelImage[]
+  videos                  HotelVideo[]
+  amenities               HotelAmenity[]
+  reviews                 HotelReview[]
+  taxes                   Tax[]
+  charges                 Charge[]
+  supplementaryCharges    HotelSupplementaryCharge[]
+  cancellationRules       CancellationRule[]
+  policy                  HotelPolicy?
+  contacts                HotelContact[]
+  documents               HotelDocument[]
+  locationProfile         HotelLocationProfile?
+  locationAttractions     HotelLocationAttraction[]
+  locationTransports      HotelLocationTransport[]
+  reservations            Reservation[]
+  guestProfiles           GuestProfile[]             @relation("GuestPreferredHotel")
+  guestNotes              GuestNote[]                @relation("GuestNoteHotel")
+  staffUsers              User[]                     @relation("StaffHotel")
+  housekeepingTasks       HousekeepingTask[]
+  maintenanceTickets      MaintenanceTicket[]
+  holds                   InventoryHold[]
+  waitlist                WaitlistEntry[]
+  businessDays            HotelBusinessDay[]
+  promotions              Promotion[]
+  rateSeasons             RateSeason[]
+  yieldRules              YieldRule[]
+  revenueForecasts        RevenueForecastSnapshot[]
+  expenseCategories       ExpenseCategory[]
+  vendors                 Vendor[]
+  expenses                Expense[]
+  corporateLinks          CorporateAccountHotel[]
+  corporateRateAgreements CorporateRateAgreement[]
+  inquiries               BookingInquiry[]
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
 
   @@index([active, slug])
 }
@@ -680,41 +722,43 @@ model HotelAmenity {
 }
 
 model RoomType {
-  id                     String               @id @default(cuid())
-  hotelId                String
-  hotel                  Hotel                @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  code                   String
-  name                   String
-  roomTypeTitle          String?
-  roomsAvailable         Int                  @default(0)
-  preferredFor           String               @default("")
-  acAvailable            Boolean              @default(false)
-  description            String?
-  maxAdults              Int                  @default(2)
-  maxChildren            Int                  @default(1)
-  maxOccupancy           Int                  @default(3)
-  checkInTime            String?
-  checkOutTime           String?
-  gstType                String               @default("Included")
-  gstPercentage          String               @default("GST - 0%")
-  inbuiltAmenities       String               @default("")
-  breakfastIncluded      Boolean              @default(false)
-  lunchIncluded          Boolean              @default(false)
-  dinnerIncluded         Boolean              @default(false)
-  active                 Boolean              @default(true)
-  axisRoomId             String?
-  images                 RoomImage[]
-  ratePlans              RatePlan[]
-  inventory              InventoryDay[]
-  lines                  ReservationLine[]
-  holdLines              InventoryHoldLine[]
-  waitlist               WaitlistEntry[]
-  physicalRooms          Room[]
-  guestPreferredProfiles GuestProfile[]       @relation("GuestPreferredRoomType")
-  promotionRooms         PromotionRoomType[]
-  seasonRooms            RateSeasonRoomType[]
-  yieldRules             YieldRule[]
-  revenueForecasts       RevenueForecastSnapshot[]
+  id                      String                    @id @default(cuid())
+  hotelId                 String
+  hotel                   Hotel                     @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  code                    String
+  name                    String
+  roomTypeTitle           String?
+  roomsAvailable          Int                       @default(0)
+  preferredFor            String                    @default("")
+  acAvailable             Boolean                   @default(false)
+  description             String?
+  maxAdults               Int                       @default(2)
+  maxChildren             Int                       @default(1)
+  maxOccupancy            Int                       @default(3)
+  checkInTime             String?
+  checkOutTime            String?
+  gstType                 String                    @default("Included")
+  gstPercentage           String                    @default("GST - 0%")
+  inbuiltAmenities        String                    @default("")
+  breakfastIncluded       Boolean                   @default(false)
+  lunchIncluded           Boolean                   @default(false)
+  dinnerIncluded          Boolean                   @default(false)
+  active                  Boolean                   @default(true)
+  axisRoomId              String?
+  images                  RoomImage[]
+  ratePlans               RatePlan[]
+  inventory               InventoryDay[]
+  lines                   ReservationLine[]
+  holdLines               InventoryHoldLine[]
+  waitlist                WaitlistEntry[]
+  physicalRooms           Room[]
+  guestPreferredProfiles  GuestProfile[]            @relation("GuestPreferredRoomType")
+  promotionRooms          PromotionRoomType[]
+  seasonRooms             RateSeasonRoomType[]
+  yieldRules              YieldRule[]
+  revenueForecasts        RevenueForecastSnapshot[]
+  corporateRateAgreements CorporateRateAgreement[]
+  inquiries               BookingInquiry[]
 
   @@unique([hotelId, code])
   @@unique([hotelId, axisRoomId])
@@ -734,24 +778,25 @@ model RoomImage {
 }
 
 model RatePlan {
-  id                String               @id @default(cuid())
-  roomTypeId        String
-  roomType          RoomType             @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
-  masterId          String
-  master            RatePlanMaster       @relation(fields: [masterId], references: [id], onDelete: Restrict)
-  code              String
-  name              String
-  mealPlan          String
-  description       String?
-  active            Boolean              @default(true)
-  axisRatePlanId    String?
-  rates             RateDay[]
-  lines             ReservationLine[]
-  holdLines         InventoryHoldLine[]
-  cancellationRules CancellationRule[]
-  assignedAgents    AgentRatePlan[]
-  promotionRates    PromotionRatePlan[]
-  seasonRates       RateSeasonRatePlan[]
+  id                      String                   @id @default(cuid())
+  roomTypeId              String
+  roomType                RoomType                 @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  masterId                String
+  master                  RatePlanMaster           @relation(fields: [masterId], references: [id], onDelete: Restrict)
+  code                    String
+  name                    String
+  mealPlan                String
+  description             String?
+  active                  Boolean                  @default(true)
+  axisRatePlanId          String?
+  rates                   RateDay[]
+  lines                   ReservationLine[]
+  holdLines               InventoryHoldLine[]
+  cancellationRules       CancellationRule[]
+  assignedAgents          AgentRatePlan[]
+  promotionRates          PromotionRatePlan[]
+  seasonRates             RateSeasonRatePlan[]
+  corporateRateAgreements CorporateRateAgreement[]
 
   @@unique([roomTypeId, code])
   @@unique([roomTypeId, masterId])
@@ -914,19 +959,19 @@ model InventoryDay {
 }
 
 model RevenueForecastSnapshot {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   hotelId         String
-  hotel           Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  observationDate DateTime @db.Date
-  stayDate        DateTime @db.Date
+  hotel           Hotel     @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  observationDate DateTime  @db.Date
+  stayDate        DateTime  @db.Date
   roomTypeId      String?
   roomType        RoomType? @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
   sellableRooms   Int
   bookedRooms     Int
   heldRooms       Int
-  roomRevenue     Decimal  @db.Decimal(14, 2)
-  adr             Decimal  @db.Decimal(14, 2)
-  createdAt       DateTime @default(now())
+  roomRevenue     Decimal   @db.Decimal(14, 2)
+  adr             Decimal   @db.Decimal(14, 2)
+  createdAt       DateTime  @default(now())
 
   @@unique([hotelId, observationDate, stayDate, roomTypeId])
   @@index([hotelId, observationDate, stayDate])
@@ -1123,6 +1168,10 @@ model Reservation {
   guestName            String
   guestProfileId       String?
   guestProfile         GuestProfile?               @relation(fields: [guestProfileId], references: [id], onDelete: SetNull)
+  corporateAccountId   String?
+  corporateAccount     CorporateAccount?           @relation(fields: [corporateAccountId], references: [id], onDelete: SetNull)
+  corporateSnapshot    Json?
+  convertedInquiry     BookingInquiry?
   email                String
   mobile               String
   address              String?
@@ -1169,6 +1218,187 @@ model Reservation {
   @@index([stayStatus, checkIn, checkOut])
   @@index([email, createdAt])
   @@index([guestProfileId, createdAt])
+  @@index([corporateAccountId, createdAt])
+}
+
+model ExpenseCategory {
+  id          String    @id @default(cuid())
+  name        String
+  code        String?
+  description String?
+  active      Boolean   @default(true)
+  hotelId     String?
+  hotel       Hotel?    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  expenses    Expense[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([hotelId, name])
+  @@index([hotelId, active])
+}
+
+model Vendor {
+  id               String    @id @default(cuid())
+  hotelId          String?
+  hotel            Hotel?    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  name             String
+  legalName        String?
+  gstin            String?
+  pan              String?
+  email            String?
+  mobile           String?
+  address          String?
+  paymentTermsDays Int?
+  active           Boolean   @default(true)
+  expenses         Expense[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([hotelId, name])
+  @@index([hotelId, active])
+}
+
+model Expense {
+  id               String          @id @default(cuid())
+  hotelId          String
+  hotel            Hotel           @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  expenseNo        String          @unique
+  expenseDate      DateTime        @db.Date
+  categoryId       String
+  category         ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  vendorId         String?
+  vendor           Vendor?         @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  description      String
+  amount           Decimal         @db.Decimal(14, 2)
+  taxableAmount    Decimal?        @db.Decimal(14, 2)
+  taxAmount        Decimal?        @db.Decimal(14, 2)
+  totalAmount      Decimal         @db.Decimal(14, 2)
+  paymentMode      PaymentMode
+  paymentReference String?
+  status           ExpenseStatus   @default(DRAFT)
+  notes            String?
+  createdById      String
+  createdBy        User            @relation("ExpenseCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedById     String?
+  approvedBy       User?           @relation("ExpenseApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([hotelId, expenseDate, status])
+  @@index([categoryId, expenseDate])
+  @@index([vendorId, expenseDate])
+}
+
+model CorporateAccount {
+  id             String                   @id @default(cuid())
+  name           String
+  legalName      String?
+  gstin          String?
+  pan            String?
+  billingAddress String?
+  city           String?
+  state          String?
+  country        String?
+  postalCode     String?
+  contactPerson  String?
+  email          String?
+  mobile         String?
+  creditLimit    Decimal?                 @db.Decimal(14, 2)
+  creditDays     Int?
+  active         Boolean                  @default(true)
+  hotels         CorporateAccountHotel[]
+  reservations   Reservation[]
+  rateAgreements CorporateRateAgreement[]
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  @@index([active, name])
+}
+
+model CorporateAccountHotel {
+  corporateAccountId  String
+  hotelId             String
+  corporateAccount    CorporateAccount @relation(fields: [corporateAccountId], references: [id], onDelete: Cascade)
+  hotel               Hotel            @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  active              Boolean          @default(true)
+  accountCode         String?
+  creditLimitOverride Decimal?         @db.Decimal(14, 2)
+  creditDaysOverride  Int?
+
+  @@id([corporateAccountId, hotelId])
+  @@index([hotelId, active])
+}
+
+model CorporateRateAgreement {
+  id                 String               @id @default(cuid())
+  corporateAccountId String
+  corporateAccount   CorporateAccount     @relation(fields: [corporateAccountId], references: [id], onDelete: Cascade)
+  hotelId            String
+  hotel              Hotel                @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomTypeId         String
+  roomType           RoomType             @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  ratePlanId         String
+  ratePlan           RatePlan             @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+  validFrom          DateTime             @db.Date
+  validTo            DateTime             @db.Date
+  pricingType        CorporatePricingType
+  fixedRate          Decimal?             @db.Decimal(12, 2)
+  discountPercent    Decimal?             @db.Decimal(5, 2)
+  active             Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@index([corporateAccountId, hotelId, active, validFrom, validTo])
+}
+
+model BookingInquiry {
+  id                     String            @id @default(cuid())
+  hotelId                String
+  hotel                  Hotel             @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  inquiryNo              String            @unique
+  guestName              String
+  mobile                 String
+  email                  String?
+  source                 BookingSource
+  checkIn                DateTime?         @db.Date
+  checkOut               DateTime?         @db.Date
+  adults                 Int?
+  children               Int?
+  roomTypeId             String?
+  roomType               RoomType?         @relation(fields: [roomTypeId], references: [id], onDelete: SetNull)
+  quotedAmount           Decimal?          @db.Decimal(14, 2)
+  quotedAt               DateTime?
+  quoteSnapshot          Json?
+  status                 InquiryStatus     @default(NEW)
+  assignedToId           String?
+  assignedTo             User?             @relation("InquiryAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  nextFollowUpAt         DateTime?
+  lastFollowUpAt         DateTime?
+  notes                  String?
+  convertedReservationId String?           @unique
+  convertedReservation   Reservation?      @relation(fields: [convertedReservationId], references: [id], onDelete: SetNull)
+  lostReason             String?
+  followUps              InquiryFollowUp[]
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  @@index([hotelId, status, nextFollowUpAt])
+  @@index([mobile, email])
+}
+
+model InquiryFollowUp {
+  id             String                @id @default(cuid())
+  inquiryId      String
+  inquiry        BookingInquiry        @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  method         InquiryFollowUpMethod
+  note           String
+  nextFollowUpAt DateTime?
+  createdById    String
+  createdBy      User                  @relation("InquiryFollowUpCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt      DateTime              @default(now())
+
+  @@index([inquiryId, createdAt])
 }
 
 model GuestProfile {

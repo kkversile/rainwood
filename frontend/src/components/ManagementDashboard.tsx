@@ -7,7 +7,7 @@ import { useAdminProfile } from './AdminData';
 type Hotel = { id: string; name: string; timezoneName?: string };
 type Dashboard = {
   period: { hotel: { id: string; name: string; timezoneName: string }; from: string; to: string; days: number };
-  kpis: Record<string, number>;
+  kpis: Record<string, number | string>;
   daily: { date: string; occupancy: number; adr: number; revpar: number; roomRevenue: number; incidentalRevenue: number; grossRevenue: number; legacyOccupancySemantics?: boolean }[];
   sources: { source: string; reservations: number; roomNights: number; roomRevenue: number }[];
   roomTypes: { roomTypeId: string; roomType: string; roomNights: number; roomRevenue: number; adr: number }[];
@@ -69,8 +69,8 @@ export function ManagementDashboard() {
   }
 
   const k = data?.kpis; const op = data?.operations;
-  const periodKpis = k ? [['occupancy', `${k.occupancy}%`, 'Occupancy'], ['adr', money(k.adr), 'ADR'], ['revpar', money(k.revpar), 'RevPAR'], ['roomRevenue', money(k.roomRevenue), 'Room revenue'], ['incidentalRevenue', money(k.incidentalRevenue), 'Incidental revenue'], ['grossRevenue', money(k.grossRevenue), 'Gross revenue'], ['paymentsReceived', money(k.paymentsReceived), 'Payments received']] : [];
-  const periodEnd = k && op ? [['inHouse', k.inHouse, 'In house'], ['outstanding', money(k.outstandingBalance), 'Outstanding'], ['roomsAvailable', op.roomsAvailable, 'Available rooms'], ['dirtyRooms', op.dirtyRooms, 'Dirty'], ['cleaningRooms', op.cleaningRooms, 'Cleaning'], ['outOfOrderRooms', op.outOfOrderRooms, 'OOO'], ['maintenance', op.openMaintenanceTickets, 'Maintenance']] : [];
+  const periodKpis = k ? [['occupancy', `${k.occupancy}%`, 'Occupancy'], ['adr', money(Number(k.adr)), 'ADR'], ['revpar', money(Number(k.revpar)), 'RevPAR'], ['roomRevenue', money(Number(k.roomRevenue)), 'Room revenue'], ['incidentalRevenue', money(Number(k.incidentalRevenue)), 'Incidental revenue'], ['grossRevenue', money(Number(k.grossRevenue)), 'Gross revenue'], ['operatingExpenses', money(Number(k.operatingExpenses)), 'Approved + paid expenses'], ['operatingContribution', money(Number(k.operatingContribution)), 'Operating contribution'], ['paymentsReceived', money(Number(k.paymentsReceived)), 'Payments received']] : [];
+  const periodEnd = k && op ? [['inHouse', k.inHouse, 'In house'], ['outstanding', money(Number(k.outstandingBalance)), 'Outstanding'], ['roomsAvailable', op.roomsAvailable, 'Available rooms'], ['dirtyRooms', op.dirtyRooms, 'Dirty'], ['cleaningRooms', op.cleaningRooms, 'Cleaning'], ['outOfOrderRooms', op.outOfOrderRooms, 'OOO'], ['maintenance', op.openMaintenanceTickets, 'Maintenance']] : [];
 
   if (!canView) return <section className="managementDashboard"><p className="hint">Management dashboard access is limited to management roles.</p></section>;
 

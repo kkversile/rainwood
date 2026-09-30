@@ -25,6 +25,10 @@ export class CreateReservationDto {
   gstin?: string;
 
   @IsOptional()
+  @IsString()
+  corporateAccountId?: string;
+
+  @IsOptional()
   @IsEnum(BookingSource)
   source?: BookingSource;
 
@@ -84,6 +88,10 @@ export class ModificationDto {
   @IsOptional()
   @IsString()
   gstin?: string;
+
+  @IsOptional()
+  @IsString()
+  corporateAccountId?: string;
 
   @IsOptional()
   @IsEnum(BookingSource)

@@ -16,6 +16,7 @@ function setup(overrides: Record<string, any> = {}) {
     payment: { findMany: jest.fn().mockResolvedValue([{ amount: new Prisma.Decimal(50) }]) },
     reservation: { count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([{ totalAmount: new Prisma.Decimal(300), folioCharges: [{ totalAmount: new Prisma.Decimal(20) }], payments: [{ amount: new Prisma.Decimal(50) }] }]) },
     maintenanceTicket: { count: jest.fn().mockResolvedValue(2) },
+    expense: { aggregate: jest.fn().mockResolvedValue({ _sum: { totalAmount: null } }) },
   };
   Object.assign(p, overrides);
   return { service: new ManagementDashboardService(p), p, hotel };

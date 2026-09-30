@@ -244,6 +244,12 @@ export class ReservationsService {
       const liveHold = await tx.inventoryHold.updateMany({ where: { id: hold.id, status: 'ACTIVE', expiresAt: { gt: new Date() } }, data: { status: 'CONVERTED' } });
       if (liveHold.count !== 1) throw new BadRequestException('Hold expired or already converted');
       const hotelId = hold.hotelId;
+      let corporateAccount: { id: string; name: string; legalName: string | null; gstin: string | null; creditDays: number | null; creditLimit: any } | null = null;
+      if (body.corporateAccountId) {
+        if (!user || !['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'].includes(user.role ?? '')) throw new ForbiddenException('Corporate account selection requires an authorised reservation user.');
+        corporateAccount = await tx.corporateAccount.findFirst({ where: { id: body.corporateAccountId, active: true, hotels: { some: { hotelId, active: true } } }, select: { id: true, name: true, legalName: true, gstin: true, creditDays: true, creditLimit: true } });
+        if (!corporateAccount) throw new BadRequestException('Corporate account is not linked to this hotel.');
+      }
       const reservationReference = this.reference();
       const bookingTotal = hold.lines.reduce((sum, line) => sum + Number(line.quotedTotal), 0);
       const bookingCreatedAt = new Date();
@@ -274,6 +280,8 @@ export class ReservationsService {
           syncStatus: 'PENDING',
           guestName: body.guestName,
           guestProfileId: guestResolution.guestProfileId ?? undefined,
+          corporateAccountId: corporateAccount?.id,
+          corporateSnapshot: corporateAccount ? { id: corporateAccount.id, name: corporateAccount.name, legalName: corporateAccount.legalName, gstin: corporateAccount.gstin, creditDays: corporateAccount.creditDays, creditLimit: corporateAccount.creditLimit ? Number(corporateAccount.creditLimit) : null, capturedAt: bookingCreatedAt.toISOString() } : undefined,
           email: body.email.toLowerCase(),
           mobile: body.mobile,
           address: body.address,
@@ -667,11 +675,20 @@ export class ReservationsService {
       const idempotencyKey = body.idempotencyKey ?? `modify:${reservation.id}:${reservation.version + 1}`;
       const existing = await tx.reservationModification.findUnique({ where: { idempotencyKey } });
       if (existing) return existing;
-      const changes = { guestName: body.guestName ?? reservation.guestName, email: body.email?.toLowerCase() ?? reservation.email, mobile: body.mobile ?? reservation.mobile, address: body.address ?? reservation.address, gstin: body.gstin ?? reservation.gstin, source: body.source ?? reservation.source, sourceName: body.sourceName ?? reservation.sourceName, specialRequest: body.specialRequest ?? reservation.specialRequest, billingInstruction: body.billingInstruction ?? reservation.billingInstruction, internalRemark: body.internalRemark ?? reservation.internalRemark };
+      let corporateAccountId = reservation.corporateAccountId;
+      let corporateSnapshot = reservation.corporateSnapshot;
+      if (body.corporateAccountId !== undefined) {
+        if (!['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'].includes((await this.p.user.findUnique({ where: { id: user.id }, select: { role: true } }))?.role ?? '')) throw new ForbiddenException('Corporate account selection requires an authorised reservation user.');
+        const account = body.corporateAccountId ? await tx.corporateAccount.findFirst({ where: { id: body.corporateAccountId, active: true, hotels: { some: { hotelId: reservation.hotelId, active: true } } }, select: { id: true, name: true, legalName: true, gstin: true, creditDays: true, creditLimit: true } }) : null;
+        if (body.corporateAccountId && !account) throw new BadRequestException('Corporate account is not linked to this hotel.');
+        corporateAccountId = account?.id ?? null;
+        corporateSnapshot = account ? { id: account.id, name: account.name, legalName: account.legalName, gstin: account.gstin, creditDays: account.creditDays, creditLimit: account.creditLimit ? Number(account.creditLimit) : null, capturedAt: new Date().toISOString() } : null;
+      }
+      const changes = { guestName: body.guestName ?? reservation.guestName, email: body.email?.toLowerCase() ?? reservation.email, mobile: body.mobile ?? reservation.mobile, address: body.address ?? reservation.address, gstin: body.gstin ?? reservation.gstin, corporateAccountId, corporateSnapshot, source: body.source ?? reservation.source, sourceName: body.sourceName ?? reservation.sourceName, specialRequest: body.specialRequest ?? reservation.specialRequest, billingInstruction: body.billingInstruction ?? reservation.billingInstruction, internalRemark: body.internalRemark ?? reservation.internalRemark };
       const nextVersion = reservation.version + 1;
       const nextStatus = reservation.status === 'CONFIRMED' ? 'MODIFIED' : reservation.status;
       if (nextStatus !== reservation.status) assertReservationTransition(reservation.status, nextStatus);
-      const updated = await tx.reservation.update({ where: { id: reservation.id, version: reservation.version }, data: { ...changes, status: nextStatus, version: nextVersion, syncStatus: 'PENDING' } });
+      const updated = await tx.reservation.update({ where: { id: reservation.id, version: reservation.version }, data: { ...changes, corporateSnapshot: corporateSnapshot === null ? Prisma.JsonNull : corporateSnapshot as Prisma.InputJsonValue, status: nextStatus, version: nextVersion, syncStatus: 'PENDING' } });
       const modification = await tx.reservationModification.create({ data: { reservationId: reservation.id, fromVersion: reservation.version, toVersion: nextVersion, type: body.type ?? 'GUEST_DETAILS', status: 'APPLIED', changes: { before: { guestName: reservation.guestName, email: reservation.email, mobile: reservation.mobile, address: reservation.address, gstin: reservation.gstin, source: reservation.source, sourceName: reservation.sourceName, specialRequest: reservation.specialRequest, billingInstruction: reservation.billingInstruction, internalRemark: reservation.internalRemark }, after: changes }, priceDifference: 0, idempotencyKey, createdById: user.id } });
       await tx.outboxJob.create({ data: { type: 'AXIS_BOOKING_MODIFY', aggregateType: 'Reservation', aggregateId: reservation.id, idempotencyKey: `axis:modify:${reservation.id}:v${nextVersion}`, payload: { reservationId: reservation.id, version: nextVersion } } });
       await tx.auditLog.create({ data: { actorUserId: user.id, action: 'RESERVATION_MODIFIED', entityType: 'Reservation', entityId: reservation.id, before: { version: reservation.version }, after: { version: nextVersion, changes } } });

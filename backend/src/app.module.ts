@@ -28,6 +28,9 @@ import { HousekeepingModule } from './modules/housekeeping/housekeeping.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { NightAuditModule } from './modules/night-audit/night-audit.module';
 import { ManagementDashboardModule } from './modules/management-dashboard/management-dashboard.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
+import { CorporatesModule } from './modules/corporates/corporates.module';
+import { InquiriesModule } from './modules/inquiries/inquiries.module';
 import { GuestsModule } from './modules/guests/guests.module';
 import { RevenueForecastModule } from './modules/revenue-forecast/revenue-forecast.module';
 
@@ -61,6 +64,9 @@ import { RevenueForecastModule } from './modules/revenue-forecast/revenue-foreca
     MaintenanceModule,
     NightAuditModule,
     ManagementDashboardModule,
+    ExpensesModule,
+    CorporatesModule,
+    InquiriesModule,
     GuestsModule,
     RevenueForecastModule,
   ],
