@@ -32,7 +32,7 @@ describe('ExpensesService', () => {
   it('recalculates totals when only tax changes and ignores an inconsistent client total', async () => {
     p.expense.findUnique.mockResolvedValue({ id: 'expense-1', hotelId: 'hotel-a', status: ExpenseStatus.DRAFT, amount: 100, taxAmount: 10, categoryId: 'cat', vendorId: null });
     p.expense.update.mockImplementation(async ({ data }: any) => ({ id: 'expense-1', ...data, category: null, vendor: null, hotel: null, createdBy: null, approvedBy: null }));
-    const result = await service.update('user-1', 'expense-1', { taxAmount: 25, totalAmount: 1 });
+    const result = await service.update('user-1', 'expense-1', { taxAmount: 25 });
     expect(result.totalAmount).toBe(125);
     expect(p.expense.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ totalAmount: 125 }) }));
   });

@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsDateString, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import { FolioChargeCategory } from '@prisma/client';
+import { FolioChargeCategory, LostFoundType, StaffDepartment } from '@prisma/client';
 import { IsEnum, IsNumber, Min } from 'class-validator';
 
 export class StaffStaysQueryDto {
@@ -42,4 +42,22 @@ export class StaffFolioChargeDto {
   @MinLength(8)
   @MaxLength(120)
   idempotencyKey!: string;
+}
+
+export class StaffServiceOrderDto {
+  @IsEnum(StaffDepartment)
+  department!: StaffDepartment;
+  @IsOptional() @IsString() roomAssignmentId?: string;
+  @IsString() @MinLength(8) @MaxLength(120) idempotencyKey!: string;
+  @IsString() linesJson!: string;
+}
+
+export class StaffFoundItemDto {
+  @IsEnum(LostFoundType) type!: LostFoundType;
+  @IsString() @MinLength(2) itemCategory!: string;
+  @IsString() @MinLength(2) description!: string;
+  @IsOptional() @IsString() roomId?: string;
+  @IsOptional() @IsString() locationFound?: string;
+  @IsOptional() @IsDateString() foundAt?: string;
+  @IsOptional() @IsString() notes?: string;
 }

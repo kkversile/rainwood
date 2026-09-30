@@ -33,6 +33,7 @@ import { CorporatesModule } from './modules/corporates/corporates.module';
 import { InquiriesModule } from './modules/inquiries/inquiries.module';
 import { GuestsModule } from './modules/guests/guests.module';
 import { RevenueForecastModule } from './modules/revenue-forecast/revenue-forecast.module';
+import { GuestServicesModule } from './modules/guest-services/guest-services.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { RevenueForecastModule } from './modules/revenue-forecast/revenue-foreca
     InquiriesModule,
     GuestsModule,
     RevenueForecastModule,
+    GuestServicesModule,
   ],
 })
 export class AppModule {}

@@ -204,6 +204,34 @@ enum InquiryFollowUpMethod {
 enum DocumentSequenceType {
   EXPENSE
   INQUIRY
+  SERVICE_ORDER
+  LOST_FOUND
+}
+
+enum ServiceItemType {
+  FOOD
+  BEVERAGE
+  LAUNDRY
+  ROOM_SERVICE
+  OTHER
+}
+
+enum GuestServiceOrderStatus {
+  DRAFT
+  POSTED
+  VOIDED
+}
+
+enum LostFoundType {
+  LOST
+  FOUND
+}
+
+enum LostFoundStatus {
+  OPEN
+  MATCHED
+  RETURNED
+  DISPOSED
 }
 
 enum PaymentProvider {
@@ -390,6 +418,11 @@ model User {
   createdModifications       ReservationModification[]   @relation("ModificationCreator")
   postedFolioCharges         ReservationFolioCharge[]    @relation("FolioChargePostedBy")
   voidedFolioCharges         ReservationFolioCharge[]    @relation("FolioChargeVoidedBy")
+  postedServiceOrders        GuestServiceOrder[]         @relation("ServiceOrderPostedBy")
+  voidedServiceOrders        GuestServiceOrder[]         @relation("ServiceOrderVoidedBy")
+  reportedLostFoundItems     LostFoundItem[]             @relation("LostFoundReportedBy")
+  assignedLostFoundItems     LostFoundItem[]             @relation("LostFoundAssignedTo")
+  returnedLostFoundItems     LostFoundItem[]             @relation("LostFoundReturnedBy")
   assignedRatePlans          AgentRatePlan[]
   guestNotes                 GuestNote[]
   paymentMilestones          AgentPaymentMilestone[]
@@ -510,6 +543,9 @@ model Hotel {
   vendors                 Vendor[]
   expenses                Expense[]
   documentSequences       DocumentSequence[]
+  serviceItems            ServiceItem[]
+  serviceOrders           GuestServiceOrder[]
+  lostFoundItems          LostFoundItem[]
   corporateLinks          CorporateAccountHotel[]
   corporateRateAgreements CorporateRateAgreement[]
   inquiries               BookingInquiry[]
@@ -1219,6 +1255,8 @@ model Reservation {
   vouchers             Voucher[]
   cancellations        CancellationRequest[]
   modifications        ReservationModification[]
+  serviceOrders        GuestServiceOrder[]
+  lostFoundItems       LostFoundItem[]
   createdAt            DateTime                    @default(now())
   updatedAt            DateTime                    @updatedAt
 
@@ -1312,6 +1350,114 @@ model DocumentSequence {
 
   @@unique([hotelId, type, year])
   @@index([hotelId, type, year])
+}
+
+model ServiceItem {
+  id          String                  @id @default(cuid())
+  hotelId     String
+  hotel       Hotel                   @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  type        ServiceItemType
+  code        String?
+  name        String
+  description String?
+  unitPrice   Decimal                 @db.Decimal(12, 2)
+  taxRate     Decimal                 @default(0) @db.Decimal(5, 2)
+  active      Boolean                 @default(true)
+  lines       GuestServiceOrderLine[]
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@unique([hotelId, code])
+  @@index([hotelId, type, active])
+}
+
+model GuestServiceOrder {
+  id               String                     @id @default(cuid())
+  hotelId          String
+  hotel            Hotel                      @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  reservationId    String
+  reservation      Reservation                @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  roomAssignmentId String?
+  roomAssignment   ReservationRoomAssignment? @relation(fields: [roomAssignmentId], references: [id], onDelete: SetNull)
+  department       StaffDepartment
+  orderNo          String
+  status           GuestServiceOrderStatus    @default(DRAFT)
+  postedById       String?
+  postedBy         User?                      @relation("ServiceOrderPostedBy", fields: [postedById], references: [id], onDelete: SetNull)
+  postedAt         DateTime?
+  subtotalAmount   Decimal                    @default(0) @db.Decimal(12, 2)
+  taxAmount        Decimal                    @default(0) @db.Decimal(12, 2)
+  totalAmount      Decimal                    @default(0) @db.Decimal(12, 2)
+  folioChargeId    String?                    @unique
+  folioCharge      ReservationFolioCharge?    @relation("ServiceOrderFolioCharge", fields: [folioChargeId], references: [id], onDelete: SetNull)
+  idempotencyKey   String                     @unique
+  voidedAt         DateTime?
+  voidedById       String?
+  voidedBy         User?                      @relation("ServiceOrderVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  voidReason       String?
+  lines            GuestServiceOrderLine[]
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  @@unique([hotelId, orderNo])
+  @@index([hotelId, department, status, createdAt])
+  @@index([reservationId, createdAt])
+}
+
+model GuestServiceOrderLine {
+  id                  String            @id @default(cuid())
+  orderId             String
+  order               GuestServiceOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  serviceItemId       String
+  serviceItem         ServiceItem       @relation(fields: [serviceItemId], references: [id], onDelete: Restrict)
+  descriptionSnapshot String
+  quantity            Decimal           @db.Decimal(10, 2)
+  unitPriceSnapshot   Decimal           @db.Decimal(12, 2)
+  taxRateSnapshot     Decimal           @db.Decimal(5, 2)
+  taxableAmount       Decimal           @db.Decimal(12, 2)
+  taxAmount           Decimal           @db.Decimal(12, 2)
+  lineTotal           Decimal           @db.Decimal(12, 2)
+  createdAt           DateTime          @default(now())
+
+  @@index([orderId])
+  @@index([serviceItemId, createdAt])
+}
+
+model LostFoundItem {
+  id             String          @id @default(cuid())
+  hotelId        String
+  hotel          Hotel           @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  reference      String
+  type           LostFoundType
+  status         LostFoundStatus @default(OPEN)
+  itemCategory   String
+  description    String
+  roomId         String?
+  room           Room?           @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  reservationId  String?
+  reservation    Reservation?    @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  guestProfileId String?
+  guestProfile   GuestProfile?   @relation(fields: [guestProfileId], references: [id], onDelete: SetNull)
+  locationFound  String?
+  foundAt        DateTime?
+  reportedById   String
+  reportedBy     User            @relation("LostFoundReportedBy", fields: [reportedById], references: [id], onDelete: Restrict)
+  assignedToId   String?
+  assignedTo     User?           @relation("LostFoundAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  claimantName   String?
+  claimantMobile String?
+  returnedAt     DateTime?
+  returnedById   String?
+  returnedBy     User?           @relation("LostFoundReturnedBy", fields: [returnedById], references: [id], onDelete: SetNull)
+  disposalReason String?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([hotelId, reference])
+  @@index([hotelId, type, status, createdAt])
+  @@index([roomId, createdAt])
+  @@index([reservationId, status])
 }
 
 model CorporateAccount {
@@ -1428,7 +1574,7 @@ model InquiryFollowUp {
 }
 
 model GuestProfile {
-  id                  String        @id @default(cuid())
+  id                  String          @id @default(cuid())
   displayName         String
   mobile              String?
   email               String?
@@ -1437,16 +1583,17 @@ model GuestProfile {
   gstin               String?
   preferredLanguage   String?
   preferredRoomTypeId String?
-  preferredRoomType   RoomType?     @relation("GuestPreferredRoomType", fields: [preferredRoomTypeId], references: [id], onDelete: SetNull)
+  preferredRoomType   RoomType?       @relation("GuestPreferredRoomType", fields: [preferredRoomTypeId], references: [id], onDelete: SetNull)
   preferredHotelId    String?
-  preferredHotel      Hotel?        @relation("GuestPreferredHotel", fields: [preferredHotelId], references: [id], onDelete: SetNull)
+  preferredHotel      Hotel?          @relation("GuestPreferredHotel", fields: [preferredHotelId], references: [id], onDelete: SetNull)
   preferences         Json?
   vipLevel            String?
-  blacklisted         Boolean       @default(false)
+  blacklisted         Boolean         @default(false)
   reservations        Reservation[]
+  lostFoundItems      LostFoundItem[]
   notes               GuestNote[]
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   @@index([normalizedMobile])
   @@index([normalizedEmail])
@@ -1514,6 +1661,7 @@ model Room {
   assignments        ReservationRoomAssignment[]
   housekeepingTasks  HousekeepingTask[]
   maintenanceTickets MaintenanceTicket[]
+  lostFoundItems     LostFoundItem[]
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @updatedAt
 
@@ -1593,22 +1741,23 @@ model MaintenanceTicket {
 }
 
 model ReservationRoomAssignment {
-  id                String           @id @default(cuid())
+  id                String              @id @default(cuid())
   reservationId     String
-  reservation       Reservation      @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservation       Reservation         @relation(fields: [reservationId], references: [id], onDelete: Cascade)
   reservationLineId String?
-  reservationLine   ReservationLine? @relation(fields: [reservationLineId], references: [id], onDelete: SetNull)
+  reservationLine   ReservationLine?    @relation(fields: [reservationLineId], references: [id], onDelete: SetNull)
   roomId            String
-  room              Room             @relation(fields: [roomId], references: [id], onDelete: Restrict)
-  assignedAt        DateTime         @default(now())
+  room              Room                @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  assignedAt        DateTime            @default(now())
   assignedById      String
-  assignedBy        User             @relation("RoomAssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: Restrict)
+  assignedBy        User                @relation("RoomAssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: Restrict)
   unassignedAt      DateTime?
   unassignedById    String?
-  unassignedBy      User?            @relation("RoomAssignmentUnassignedBy", fields: [unassignedById], references: [id], onDelete: SetNull)
+  unassignedBy      User?               @relation("RoomAssignmentUnassignedBy", fields: [unassignedById], references: [id], onDelete: SetNull)
   reason            String?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  serviceOrders     GuestServiceOrder[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
   @@index([reservationId, unassignedAt])
   @@index([roomId, unassignedAt])
@@ -1636,6 +1785,7 @@ model ReservationFolioCharge {
   voidedBy       User?               @relation("FolioChargeVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
   voidReason     String?
   idempotencyKey String?             @unique
+  serviceOrder   GuestServiceOrder?  @relation("ServiceOrderFolioCharge")
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 

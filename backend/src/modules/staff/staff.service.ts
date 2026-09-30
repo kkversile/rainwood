@@ -4,12 +4,13 @@ import { PrismaService } from '../../common/prisma.service';
 import { toDateOnly } from '../../common/dates';
 import { getHotelOperationalDate } from '../../common/hotel-dates';
 import { ReservationsService } from '../reservations/reservations.service';
-import { StaffFolioChargeDto, StaffStaysQueryDto } from './staff.dto';
+import { StaffFolioChargeDto, StaffFoundItemDto, StaffStaysQueryDto } from './staff.dto';
+import { GuestServicesService } from '../guest-services/guest-services.service';
 import { allowedStaffFolioCategories } from './staff-rules';
 
 @Injectable()
 export class StaffService {
-  constructor(private p: PrismaService, private reservations: ReservationsService) {}
+  constructor(private p: PrismaService, private reservations: ReservationsService, private guestServices?: GuestServicesService) {}
 
   private async profile(userId: string) {
     const user = await this.p.user.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotelId: true, staffHotel: { select: { id: true, name: true, active: true, timezoneName: true } } } });
@@ -96,4 +97,6 @@ export class StaffService {
     await this.reservations.postFolioCharge(reference, { category: body.category, description: body.description, quantity: body.quantity, unitAmount: body.unitAmount, note: body.note, postingDate: toDateOnly(postingDate) }, { id: user.id }, { allowedCategories: allowed, staffOnly: true, postingDate, idempotencyKey: body.idempotencyKey });
     return this.staffFolio(await this.reservations.getFolio(reference));
   }
+
+  async reportFoundItem(userId: string, body: StaffFoundItemDto) { const user = await this.profile(userId); if (!user.staffHotelId || !this.guestServices) throw new ForbiddenException('Staff hotel is required.'); return this.guestServices.reportLost(userId, { ...body, hotelId: user.staffHotelId, type: body.type }); }
 }

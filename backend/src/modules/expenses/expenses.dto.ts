@@ -20,7 +20,6 @@ export class ExpenseCreateDto {
   @IsNumber() @Min(0) amount!: number;
   @IsOptional() @IsNumber() @Min(0) taxableAmount?: number;
   @IsOptional() @IsNumber() @Min(0) taxAmount?: number;
-  @IsOptional() @IsNumber() @Min(0) totalAmount?: number;
   @IsEnum(PaymentMode) paymentMode!: PaymentMode;
   @IsOptional() @IsString() paymentReference?: string;
   @IsOptional() @IsString() notes?: string;
@@ -34,7 +33,6 @@ export class ExpenseUpdateDto {
   @IsOptional() @IsNumber() @Min(0) amount?: number;
   @IsOptional() @IsNumber() @Min(0) taxableAmount?: number;
   @IsOptional() @IsNumber() @Min(0) taxAmount?: number;
-  @IsOptional() @IsNumber() @Min(0) totalAmount?: number;
   @IsOptional() @IsEnum(PaymentMode) paymentMode?: PaymentMode;
   @IsOptional() @IsString() paymentReference?: string;
   @IsOptional() @IsString() notes?: string;

@@ -586,10 +586,11 @@ export class ReservationsService {
     await this.assertReservationScope(reference, user.id);
     const reason = String(body.reason ?? '').trim();
     if (reason.length < 2) throw new BadRequestException('A void reason is required');
-    const charge = await this.p.reservationFolioCharge.findUnique({ where: { id: chargeId }, include: { reservation: { select: { id: true, reference: true } } } });
+    const charge = await this.p.reservationFolioCharge.findUnique({ where: { id: chargeId }, include: { reservation: { select: { id: true, reference: true } }, serviceOrder: { select: { id: true, orderNo: true, status: true } } } });
     if (!charge || charge.reservation.reference !== reference) throw new NotFoundException('Folio charge not found');
     if (charge.status === 'VOIDED') throw new BadRequestException('Folio charge is already voided');
     const updated = await this.p.reservationFolioCharge.update({ where: { id: charge.id }, data: { status: 'VOIDED', voidedAt: new Date(), voidedBy: { connect: { id: user.id } }, voidReason: reason }, select: { id: true, totalAmount: true } });
+    if (charge.serviceOrder && charge.serviceOrder.status === 'POSTED') await this.p.guestServiceOrder.update({ where: { id: charge.serviceOrder.id }, data: { status: 'VOIDED', voidedAt: new Date(), voidedById: user.id, voidReason: reason } });
     await this.audit.log({ actorUserId: user.id, action: 'FOLIO_CHARGE_VOIDED', entityType: 'ReservationFolioCharge', entityId: updated.id, before: { status: 'POSTED', totalAmount: Number(updated.totalAmount) }, after: { reference, status: 'VOIDED', reason, totalAmount: Number(updated.totalAmount) } });
     return this.getFolio(reference);
   }
