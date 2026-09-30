@@ -36,6 +36,7 @@ export function ManagementDashboard() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (!canView) return;
     apiRequest<Hotel[]>('/hotels').then((items) => {
       setHotels(items);
       if (items[0]) {
@@ -43,14 +44,14 @@ export function ManagementDashboard() {
         setHotelId(items[0].id); setFrom(today); setTo(today);
       }
     }).catch((reason: Error) => setError(reason.message));
-  }, []);
+  }, [canView]);
 
   const query = useMemo(() => new URLSearchParams({ ...(hotelId ? { hotelId } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) }).toString(), [hotelId, from, to]);
   useEffect(() => {
-    if (!hotelId || !from || !to) return;
+    if (!canView || !hotelId || !from || !to) return;
     setLoading(true); setError('');
     apiRequest<Dashboard>(`/management/dashboard?${query}`).then(setData).catch((reason: Error) => { setData(null); setError(reason.message); }).finally(() => setLoading(false));
-  }, [hotelId, from, to, query]);
+  }, [canView, hotelId, from, to, query]);
 
   function selectPreset(value: string) {
     setPreset(value);
