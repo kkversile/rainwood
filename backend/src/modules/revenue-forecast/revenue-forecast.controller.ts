@@ -16,5 +16,6 @@ export class RevenueForecastController {
   forecast(@CurrentUser() user: any, @Query() query: RevenueForecastQueryDto) { return this.service.forecast(user.id, query); }
 
   @Post('snapshots')
+  @Roles('SUPER_ADMIN')
   capture(@CurrentUser() user: any, @Body() body: RevenueForecastCaptureDto) { return this.service.capture(user.id, body); }
 }

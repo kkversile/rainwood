@@ -904,11 +904,12 @@
 .revenueForecastFilters{display:grid;gap:18px;margin-bottom:18px}
 .revenueForecastFilters .managementFilterGrid{grid-template-columns:repeat(4,minmax(0,1fr))}
 .revenueForecastFilters .formActions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.revenueForecastSummary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:18px 0}
+.revenueForecastSummary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}
 .revenueForecastSummary>div{display:grid;gap:5px;padding:18px;border:1px solid #d3e5e8;border-radius:14px;background:#fff}
 .revenueForecastSummary strong{font-size:1.35rem;color:#073f56}
 .revenueForecastSummary span{font-size:.78rem;color:#627b86}
 .revenueForecastPage table{min-width:1180px}
 .forecastSignalText{display:block;max-width:190px;margin-top:6px;color:#6b8088;font-size:.75rem;line-height:1.35}
+@media (max-width:1100px){.revenueForecastSummary{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:900px){.revenueForecastFilters .managementFilterGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.revenueForecastSummary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:560px){.revenueForecastFilters .managementFilterGrid{grid-template-columns:1fr}.revenueForecastSummary{grid-template-columns:1fr}}

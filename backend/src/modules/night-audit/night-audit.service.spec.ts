@@ -29,7 +29,8 @@ function setup(overrides: Record<string, any> = {}) {
     $transaction: jest.fn(async (work: any) => work(p)),
   };
   Object.assign(p, overrides);
-  return { service: new NightAuditService(p, { captureForHotel: jest.fn().mockResolvedValue({ created: 0, existing: 0, availableStayDates: 0 }) } as any), p, hotel, admin, rooms };
+  const revenueForecast = { captureForHotel: jest.fn().mockResolvedValue({ created: 0, existing: 0, availableStayDates: 0 }) };
+  return { service: new NightAuditService(p, revenueForecast as any), p, hotel, admin, rooms, revenueForecast };
 }
 
 describe('NightAuditService', () => {
@@ -56,12 +57,13 @@ describe('NightAuditService', () => {
   });
 
   it('creates a closed snapshot and returns the same closed record on retry', async () => {
-    const { service, p } = setup();
+    const { service, p, revenueForecast } = setup();
     const date = toDateOnly(currentDate());
     const first: any = await service.close('admin-1', { hotelId: 'hotel-1', businessDate: date });
     expect(first.alreadyClosed).toBe(true);
     expect(first.closed.closedBy.name).toBe('RainWood Admin');
     expect(p.hotelBusinessDay.create).toHaveBeenCalledTimes(1);
+    expect(revenueForecast.captureForHotel).toHaveBeenCalledWith('hotel-1', expect.any(Date), 90);
     p.hotelBusinessDay.findUnique.mockResolvedValue({ id: 'day-1', status: 'CLOSED', summary: first.summary, exceptions: { warnings: first.warnings }, closedAt: new Date(), closedBy: p.user.findUnique.mock.results[0]?.value ?? { id: 'admin-1', name: 'RainWood Admin' } });
     const second: any = await service.close('admin-1', { hotelId: 'hotel-1', businessDate: date });
     expect(second.alreadyClosed).toBe(true);

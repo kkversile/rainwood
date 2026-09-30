@@ -1,5 +1,6 @@
 import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
+import { REVENUE_FORECAST_HORIZON_DAYS } from './revenue-forecast.constants';
 
 export class RevenueForecastQueryDto {
   @IsOptional()
@@ -22,8 +23,8 @@ export class RevenueForecastQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(90)
-  horizon = 30;
+  @Max(REVENUE_FORECAST_HORIZON_DAYS)
+  horizon = REVENUE_FORECAST_HORIZON_DAYS;
 
   @IsOptional()
   @IsString()
@@ -43,6 +44,6 @@ export class RevenueForecastCaptureDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(90)
-  horizon = 30;
+  @Max(REVENUE_FORECAST_HORIZON_DAYS)
+  horizon = REVENUE_FORECAST_HORIZON_DAYS;
 }

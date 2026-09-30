@@ -7,6 +7,7 @@ import { serializable } from '../../common/transactions';
 import { NightAuditCloseDto, NightAuditPreviewQueryDto } from './night-audit.dto';
 import { getActorScope, resolveRequestedHotel } from '../../common/role-scope';
 import { RevenueForecastService } from '../revenue-forecast/revenue-forecast.service';
+import { REVENUE_FORECAST_HORIZON_DAYS } from '../revenue-forecast/revenue-forecast.constants';
 
 const ACTIVE_HOUSEKEEPING = ['PENDING', 'ACCEPTED', 'CLEANING'];
 const ACTIVE_MAINTENANCE: MaintenanceTicketStatus[] = [MaintenanceTicketStatus.OPEN, MaintenanceTicketStatus.ASSIGNED, MaintenanceTicketStatus.IN_PROGRESS];
@@ -169,7 +170,7 @@ export class NightAuditService {
         return this.result(hotel, businessDate, calculated, day);
       });
       try {
-        const snapshot = await this.revenueForecast.captureForHotel(hotel.id, businessDate, 30);
+        const snapshot = await this.revenueForecast.captureForHotel(hotel.id, businessDate, REVENUE_FORECAST_HORIZON_DAYS);
         return { ...result, revenueForecastSnapshot: { status: 'CAPTURED', ...snapshot } };
       } catch (error: any) {
         return { ...result, revenueForecastSnapshot: { status: 'FAILED_RETRYABLE', message: 'Revenue forecast snapshot capture failed; retry from Revenue Forecast.', errorCode: error?.code ?? 'SNAPSHOT_CAPTURE_FAILED' } };
