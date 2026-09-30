@@ -51,7 +51,9 @@ export function StaffGuestData({ reference }: { reference: string }) {
 
 export function StaffHomeRouter() {
   const [profile, setProfile] = useState<StaffProfile | null>(null);
-  useEffect(() => { apiRequest<StaffProfile>('/staff/me').then(setProfile).catch(() => undefined); }, []);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { apiRequest<StaffProfile>('/staff/me').then(setProfile).catch(() => undefined).finally(() => setLoading(false)); }, []);
+  if (loading) return <section className="staffContent"><p className="staffLoading">Checking staff access…</p></section>;
   if (profile?.department === 'HOUSEKEEPING') return <HousekeepingData profile={profile} />;
   if (profile?.department === 'MAINTENANCE') return <MaintenanceData profile={profile} />;
   return <StaffHomeData />;

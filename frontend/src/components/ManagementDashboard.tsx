@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../lib/api';
+import { useAdminProfile } from './AdminData';
 
 type Hotel = { id: string; name: string; timezoneName?: string };
 type Dashboard = {
@@ -23,6 +24,8 @@ const shiftDate = (value: string, days: number) => { const date = new Date(`${va
 const money = (value: number) => `INR ${Number(value ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function ManagementDashboard() {
+  const { profile } = useAdminProfile();
+  const canView = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN'].includes(profile?.role ?? '');
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [hotelId, setHotelId] = useState('');
   const [from, setFrom] = useState('');
@@ -67,6 +70,8 @@ export function ManagementDashboard() {
   const k = data?.kpis; const op = data?.operations;
   const periodKpis = k ? [['occupancy', `${k.occupancy}%`, 'Occupancy'], ['adr', money(k.adr), 'ADR'], ['revpar', money(k.revpar), 'RevPAR'], ['roomRevenue', money(k.roomRevenue), 'Room revenue'], ['incidentalRevenue', money(k.incidentalRevenue), 'Incidental revenue'], ['grossRevenue', money(k.grossRevenue), 'Gross revenue'], ['paymentsReceived', money(k.paymentsReceived), 'Payments received']] : [];
   const periodEnd = k && op ? [['inHouse', k.inHouse, 'In house'], ['outstanding', money(k.outstandingBalance), 'Outstanding'], ['roomsAvailable', op.roomsAvailable, 'Available rooms'], ['dirtyRooms', op.dirtyRooms, 'Dirty'], ['cleaningRooms', op.cleaningRooms, 'Cleaning'], ['outOfOrderRooms', op.outOfOrderRooms, 'OOO'], ['maintenance', op.openMaintenanceTickets, 'Maintenance']] : [];
+
+  if (!canView) return <section className="managementDashboard"><p className="hint">Management dashboard access is limited to management roles.</p></section>;
 
   return <section className="managementDashboard">
     <section className="formCard managementFilters">
