@@ -20,6 +20,10 @@ export class RevenueForecastQueryDto {
   to?: string;
 
   @IsOptional()
+  @IsOptional()
+  @IsString()
+  roomTypeId?: string;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)

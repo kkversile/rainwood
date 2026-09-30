@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { adminLinks, buildNavigationGroups, isAdminRouteActive, linksForRole } from '../src/components/Shell';
-import { bookingCurveAxisLabels, bookingCurveX, scopedRevenueForecastHotels } from '../src/components/RevenueForecast';
+import { bookingCurveAxisLabels, bookingCurveX, recommendationLabel, scopedRevenueForecastHotels } from '../src/components/RevenueForecast';
 
 const asAdminLinks = (role: string) => {
   const allowed = new Set(linksForRole(role).map(([href]) => href));
@@ -50,4 +50,11 @@ test('booking curve uses actual lead-time spacing and meaningful axis labels', (
   assert.ok(xs[1] - xs[0] > xs[3] - xs[2]);
   assert.equal(bookingCurveX(10, [{ daysBeforeArrival: 10 }]), 50);
   assert.deepEqual(bookingCurveAxisLabels(observations).map((label) => label.value), [90, 60, 30, 14, 7, 0]);
+});
+
+test('revenue recommendation labels cover strong, hold, soft, and insufficient states', () => {
+  assert.equal(recommendationLabel({ type: 'REVIEW_STRONG_UPWARD' }), 'Review upward');
+  assert.equal(recommendationLabel({ type: 'HOLD_RATE' }), 'Hold rate');
+  assert.equal(recommendationLabel({ type: 'REVIEW_SOFT_DEMAND' }), 'Soft demand');
+  assert.equal(recommendationLabel({ type: 'INSUFFICIENT_DATA' }), 'Insufficient data');
 });

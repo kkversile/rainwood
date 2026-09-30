@@ -7,6 +7,7 @@ import { getActorScope, resolveRequestedHotel } from '../../common/role-scope';
 import { resolvePrePromotionRate } from '../availability/pricing-context';
 import { BookingCurveQueryDto, RevenueForecastCaptureDto, RevenueForecastQueryDto } from './revenue-forecast.dto';
 import { BOOKING_CURVE_LEAD_BUCKETS, COMMITTED_OTB_STATUSES, COMPLETION_LEAD_TOLERANCE_DAYS, COMPLETION_MINIMUM_SAMPLE_SIZE, REVENUE_FORECAST_HISTORY_LOOKBACK_DAYS, REVENUE_FORECAST_HORIZON_DAYS, REVENUE_FORECAST_PICKUP_WINDOWS, REVENUE_FORECAST_SNAPSHOT_LOOKBACK_DAYS } from './revenue-forecast.constants';
+import { buildRevenueRecommendation } from './revenue-recommendation';
 
 export type OTBMetric = { stayDate: Date; roomTypeId: string | null; sellableRooms: number; bookedRooms: number; heldRooms: number; roomRevenue: number; adr: number };
 type Snapshot = OTBMetric & { id?: string; observationDate: Date; roomType?: { id: string; name: string } | null };
@@ -188,31 +189,31 @@ export class RevenueForecastService {
     return { available: true, ratio: money(ratio), leadTimeDays: targetBucket, sampleSize: selected.samples.length, comparisonLevel: selected.level, confidence: this.confidence(selected.samples.length, selected.level, selected.mismatch), historicalMedianOtbAtLead: money(this.median(selected.samples.map((row) => row.bookedRooms)) ?? 0), samples: selected.samples, dataQuality: { excludedZeroFinal: selected.zeroFinal, excludedMissingSnapshot: selected.missing, clampedRatios: selected.clamped, leadToleranceDays: COMPLETION_LEAD_TOLERANCE_DAYS } };
   }
 
-  private async rateContext(hotelId: string, stayDate: Date, roomTypeId?: string | null) {
-    if (!this.p.ratePlan?.findMany) return { available: false, reason: 'RATE_CONTEXT_UNAVAILABLE' };
+  private async rateContexts(hotelId: string, stayDates: Date[], roomTypeId?: string | null) {
+    const dates = [...new Map(stayDates.map((date) => [dateKey(date), date])).values()]; const contexts = new Map<string, any>();
+    if (!this.p.ratePlan?.findMany || !dates.length) return contexts;
+    const from = dates.reduce((min, date) => date < min ? date : min, dates[0]); const to = dates.reduce((max, date) => date > max ? date : max, dates[0]);
     const [plans, inventory, seasons, yieldRules] = await Promise.all([
-      this.p.ratePlan.findMany({ where: { active: true, master: { active: true }, roomType: { hotelId, ...(roomTypeId ? { id: roomTypeId } : {}) } }, select: { id: true, roomTypeId: true, name: true, rates: { where: { date: stayDate }, select: { amount: true, baseAmount: true, overrideAmount: true, occupancyPrices: true } } } }),
-      this.p.inventoryDay?.findMany ? this.p.inventoryDay.findMany({ where: { date: stayDate, roomType: { hotelId, ...(roomTypeId ? { id: roomTypeId } : {}) } }, select: { roomTypeId: true, available: true, held: true, sold: true } }) : [],
-      this.p.rateSeason?.findMany ? this.p.rateSeason.findMany({ where: { hotelId, active: true, startDate: { lte: stayDate }, endDate: { gte: stayDate } }, include: { roomTypes: true, ratePlans: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] }) : [],
+      this.p.ratePlan.findMany({ where: { active: true, master: { active: true }, roomType: { hotelId, ...(roomTypeId ? { id: roomTypeId } : {}) } }, select: { id: true, roomTypeId: true, name: true, rates: { where: { date: { in: dates } }, select: { date: true, amount: true, baseAmount: true, overrideAmount: true, occupancyPrices: true } } } }),
+      this.p.inventoryDay?.findMany ? this.p.inventoryDay.findMany({ where: { date: { in: dates }, roomType: { hotelId, ...(roomTypeId ? { id: roomTypeId } : {}) } }, select: { date: true, roomTypeId: true, available: true, held: true, sold: true } }) : [],
+      this.p.rateSeason?.findMany ? this.p.rateSeason.findMany({ where: { hotelId, active: true, startDate: { lte: to }, endDate: { gte: from } }, include: { roomTypes: true, ratePlans: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] }) : [],
       this.p.yieldRule?.findMany ? this.p.yieldRule.findMany({ where: { hotelId, active: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] }) : [],
     ]);
-    const inventoryByRoomType = new Map((inventory as any[]).map((row) => [row.roomTypeId, row]));
-    const rows = (plans as any[]).filter((plan) => plan.rates?.[0]).map((plan) => {
-      const pricing = resolvePrePromotionRate({ rate: plan.rates[0], date: dateKey(stayDate), weekday: stayDate.getUTCDay(), roomTypeId: plan.roomTypeId, ratePlanId: plan.id, inventoryDay: inventoryByRoomType.get(plan.roomTypeId), seasons, yieldRules });
-      return {
-        roomTypeId: plan.roomTypeId,
-        ratePlanId: plan.id,
-        ratePlan: plan.name,
-        baseRate: money(pricing.baseRate),
-        manualOverride: pricing.manualOverride === null ? null : money(pricing.manualOverride),
-        season: pricing.season ? { id: pricing.season.id, name: pricing.season.name, adjustmentType: pricing.season.adjustmentType, adjustmentValue: number(pricing.season.adjustmentValue) } : null,
-        yield: pricing.yield ? { id: pricing.yield.id, name: pricing.yield.name, occupancyPercent: money(pricing.occupancyPercent), adjustmentType: pricing.yield.adjustmentType, adjustmentValue: number(pricing.yield.adjustmentValue) } : null,
-        effectivePrePromoRate: money(pricing.effectivePrePromoRate),
-        source: pricing.source,
-        note: 'Pre-Promotion Sell Rate; promotions are intentionally excluded.',
-      };
-    });
-    return rows.length ? { available: true, multipleRates: rows.length > 1, rows } : { available: false, reason: 'NO_RATE_DAY_FOR_STAY_DATE' };
+    const inventoryByDateAndRoom = new Map((inventory as any[]).map((row) => [`${row.date ? dateKey(new Date(row.date)) : dateKey(dates[0])}:${row.roomTypeId}`, row]));
+    for (const stayDate of dates) {
+      const date = dateKey(stayDate); const rows = (plans as any[]).flatMap((plan) => {
+        const rate = plan.rates?.find((item: any) => !item.date || dateKey(new Date(item.date)) === date); if (!rate) return [];
+        const pricing = resolvePrePromotionRate({ rate, date, weekday: stayDate.getUTCDay(), roomTypeId: plan.roomTypeId, ratePlanId: plan.id, inventoryDay: inventoryByDateAndRoom.get(`${date}:${plan.roomTypeId}`), seasons, yieldRules });
+        return [{ roomTypeId: plan.roomTypeId, ratePlanId: plan.id, ratePlan: plan.name, baseRate: money(pricing.baseRate), manualOverride: pricing.manualOverride === null ? null : money(pricing.manualOverride), season: pricing.season ? { id: pricing.season.id, name: pricing.season.name, adjustmentType: pricing.season.adjustmentType, adjustmentValue: number(pricing.season.adjustmentValue) } : null, yield: pricing.yield ? { id: pricing.yield.id, name: pricing.yield.name, occupancyPercent: money(pricing.occupancyPercent), adjustmentType: pricing.yield.adjustmentType, adjustmentValue: number(pricing.yield.adjustmentValue) } : null, effectivePrePromoRate: money(pricing.effectivePrePromoRate), source: pricing.source, note: 'Pre-Promotion Sell Rate; promotions are intentionally excluded.' }];
+      });
+      contexts.set(date, rows.length ? { available: true, multipleRates: rows.length > 1, rows } : { available: false, reason: 'NO_RATE_DAY_FOR_STAY_DATE' });
+    }
+    return contexts;
+  }
+
+  private async rateContext(hotelId: string, stayDate: Date, roomTypeId?: string | null) {
+    const contexts = await this.rateContexts(hotelId, [stayDate], roomTypeId);
+    return contexts.get(dateKey(stayDate)) ?? { available: false, reason: 'RATE_CONTEXT_UNAVAILABLE' };
   }
 
   async forecast(userId: string, query: RevenueForecastQueryDto) {
@@ -222,9 +223,10 @@ export class RevenueForecastService {
     const windows = this.windows(query.pickupWindows); const maxWindow = Math.max(...windows); const dates = Array.from({ length: requestedDays }, (_, index) => addDays(from, index)); const observations = Array.from({ length: maxWindow + 1 }, (_, index) => addDays(observation, -index));
     const snapshots = await this.p.revenueForecastSnapshot.findMany({ where: { hotelId: hotel.id, observationDate: { in: observations }, stayDate: { gte: from, lte: to } }, orderBy: { createdAt: 'asc' }, include: { roomType: { select: { id: true, name: true } } } });
     const snapshotAggregate = new Map<string, Snapshot>(); const currentSnapshotRoomTypes: Snapshot[] = [];
-    for (const row of snapshots as any[]) { const value = this.snapshotMetric(row); if (row.roomTypeId === null) snapshotAggregate.set(key(row.observationDate, row.stayDate), value); if (dateKey(row.observationDate) === dateKey(observation) && row.roomTypeId) currentSnapshotRoomTypes.push(value); }
-    const liveCalculation = isLive ? await this.calculateOtbForStayRange(hotel.id, from < observation ? observation : from, to) : null; const liveByDate = new Map((liveCalculation?.totals ?? []).map((row) => [dateKey(row.stayDate), row]));
-    const completionContext = isLive ? await this.completionContext(hotel) : null;
+     for (const row of snapshots as any[]) { const value = this.snapshotMetric(row); if (query.roomTypeId ? row.roomTypeId === query.roomTypeId : row.roomTypeId === null) snapshotAggregate.set(key(row.observationDate, row.stayDate), value); if (dateKey(row.observationDate) === dateKey(observation) && row.roomTypeId) currentSnapshotRoomTypes.push(value); }
+     const liveCalculation = isLive ? await this.calculateOtbForStayRange(hotel.id, from < observation ? observation : from, to) : null; const liveByDate = new Map((query.roomTypeId ? (liveCalculation?.roomTypes ?? []) : (liveCalculation?.totals ?? [])).filter((row) => !query.roomTypeId || row.roomTypeId === query.roomTypeId).map((row) => [dateKey(row.stayDate), row]));
+     const completionContext = isLive ? await this.completionContext(hotel, query.roomTypeId) : null;
+     const rateContexts = isLive ? await this.rateContexts(hotel.id, dates, query.roomTypeId) : new Map<string, any>();
     const rows = dates.map((stayDate) => {
       const current = isLive ? liveByDate.get(dateKey(stayDate)) : snapshotAggregate.get(key(observation, stayDate)); const pickup: Record<string, number | null> = {}; const pickupRevenue: Record<string, number | null> = {}; const pace: Record<string, number | null> = {}; const revenuePace: Record<string, number | null> = {};
       for (const window of windows) { const previous = snapshotAggregate.get(key(addDays(observation, -window), stayDate)); pickup[String(window)] = current && previous ? current.bookedRooms - previous.bookedRooms : null; pickupRevenue[String(window)] = current && previous ? money(current.roomRevenue - previous.roomRevenue) : null; pace[String(window)] = current && previous ? money((current.bookedRooms - previous.bookedRooms) / window) : null; revenuePace[String(window)] = current && previous ? money((current.roomRevenue - previous.roomRevenue) / window) : null; }
@@ -234,9 +236,10 @@ export class RevenueForecastService {
       const signals = !current ? ['No authoritative data exists for this stay date and observation date.'] : [`OTB occupancy is ${occupancy}% of sellable rooms.`, pickup7 === null ? '7-day pickup is unavailable because the prior snapshot is missing.' : `7-day room pickup is ${pickup7}; negative pickup is retained.`, current.heldRooms ? `${current.heldRooms} room(s) are held separately from committed OTB.` : 'No held inventory is recorded.'];
       return { stayDate: dateKey(stayDate), daysToArrival, available: Boolean(current), sellableRooms: current?.sellableRooms ?? null, bookedRooms: current?.bookedRooms ?? null, heldRooms: current?.heldRooms ?? null, roomRevenue: current?.roomRevenue ?? null, adr: current?.adr ?? null, occupancyPercent: occupancy, projectedBookedRooms, demandSignal: signal, forecastDemandSignal, completion, forecast, paceComparison: { status: paceStatus, differenceRooms: paceDifferenceRooms, historicalMedianOtbAtLead: completion.historicalMedianOtbAtLead ?? null }, signals, pickup, pickupRevenue, pace, revenuePace };
     });
-    const availableRows = rows.filter((row) => row.available); const total = availableRows.reduce((sum, row) => ({ sellableRooms: sum.sellableRooms + (row.sellableRooms ?? 0), bookedRooms: sum.bookedRooms + (row.bookedRooms ?? 0), heldRooms: sum.heldRooms + (row.heldRooms ?? 0), roomRevenue: sum.roomRevenue + (row.roomRevenue ?? 0) }), { sellableRooms: 0, bookedRooms: 0, heldRooms: 0, roomRevenue: 0 }); const roomTypeRows = isLive ? (liveCalculation?.roomTypes ?? []).map((row) => ({ ...row, observationDate: observation })) : currentSnapshotRoomTypes; const headline = rows.find((row) => row.stayDate === dateKey(observation)) ?? rows[0] ?? null;
-    const headlineRateContext = isLive && headline ? await this.rateContext(hotel.id, parseDateOnly(headline.stayDate, 'stayDate')) : { available: false, reason: 'RATE_CONTEXT_NOT_REQUESTED_FOR_HISTORICAL_OBSERVATION' };
-    return { hotel: { id: hotel.id, name: hotel.name, timezoneName: hotel.timezoneName }, observationDate: dateKey(observation), observationSource: isLive ? 'LIVE' : 'SNAPSHOT', from: dateKey(from), to: dateKey(to), pickupWindows: windows, forecastPolicy: { formula: 'currentOtb / medianHistoricalCompletionRatio', minimumSampleSize: COMPLETION_MINIMUM_SAMPLE_SIZE, revenue: 'DEFERRED_UNTIL_RELIABLE_PRE_PROMO_RATE_POLICY' }, demandSignalRules: { highOccupancyPercent: 80, highPickupRoomsRatio: 0.1, mediumOccupancyPercent: 50, forecastCompressionOccupancyPercent: 90, forecastStrongOccupancyPercent: 75, forecastNormalOccupancyPercent: 50 }, rateContext: headlineRateContext, summary: { availableDateCount: availableRows.length, requestedDateCount: rows.length, sellableRooms: total.sellableRooms, bookedRooms: total.bookedRooms, heldRooms: total.heldRooms, roomRevenue: money(total.roomRevenue), occupancyPercent: total.sellableRooms ? money(total.bookedRooms / total.sellableRooms * 100) : null, headline }, roomTypes: this.aggregateRoomTypes(roomTypeRows as Snapshot[]), rows };
+     const recommendationRows = rows.map((row) => ({ ...row, recommendation: buildRevenueRecommendation({ daysToArrival: row.daysToArrival, sellableRooms: row.sellableRooms, occupancyPercent: row.occupancyPercent, forecast: row.forecast, completion: row.completion, pickup: row.pickup, paceStatus: row.paceComparison.status, demandSignal: row.forecastDemandSignal, rateContext: rateContexts.get(row.stayDate) }) }));
+     const availableRows = recommendationRows.filter((row) => row.available); const total = availableRows.reduce((sum, row) => ({ sellableRooms: sum.sellableRooms + (row.sellableRooms ?? 0), bookedRooms: sum.bookedRooms + (row.bookedRooms ?? 0), heldRooms: sum.heldRooms + (row.heldRooms ?? 0), roomRevenue: sum.roomRevenue + (row.roomRevenue ?? 0) }), { sellableRooms: 0, bookedRooms: 0, heldRooms: 0, roomRevenue: 0 }); const roomTypeRows = isLive ? (liveCalculation?.roomTypes ?? []).map((row) => ({ ...row, observationDate: observation })) : currentSnapshotRoomTypes; const headline = recommendationRows.find((row) => row.stayDate === dateKey(observation)) ?? recommendationRows[0] ?? null;
+     const headlineRateContext = isLive && headline ? rateContexts.get(headline.stayDate) : { available: false, reason: 'RATE_CONTEXT_NOT_REQUESTED_FOR_HISTORICAL_OBSERVATION' };
+     return { hotel: { id: hotel.id, name: hotel.name, timezoneName: hotel.timezoneName }, roomTypeId: query.roomTypeId ?? null, observationDate: dateKey(observation), observationSource: isLive ? 'LIVE' : 'SNAPSHOT', from: dateKey(from), to: dateKey(to), pickupWindows: windows, forecastPolicy: { formula: 'currentOtb / medianHistoricalCompletionRatio', minimumSampleSize: COMPLETION_MINIMUM_SAMPLE_SIZE, revenue: 'DEFERRED_UNTIL_RELIABLE_PRE_PROMO_RATE_POLICY' }, demandSignalRules: { highOccupancyPercent: 80, highPickupRoomsRatio: 0.1, mediumOccupancyPercent: 50, forecastCompressionOccupancyPercent: 90, forecastStrongOccupancyPercent: 75, forecastNormalOccupancyPercent: 50 }, rateContext: headlineRateContext, summary: { availableDateCount: availableRows.length, requestedDateCount: recommendationRows.length, sellableRooms: total.sellableRooms, bookedRooms: total.bookedRooms, heldRooms: total.heldRooms, roomRevenue: money(total.roomRevenue), occupancyPercent: total.sellableRooms ? money(total.bookedRooms / total.sellableRooms * 100) : null, headline }, roomTypes: this.aggregateRoomTypes(roomTypeRows as Snapshot[]), rows: recommendationRows };
   }
 
   async bookingCurve(userId: string, query: BookingCurveQueryDto) {
