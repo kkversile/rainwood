@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { FolioChargeCategory, Prisma, ReservationSettlementStatus, ReservationStatus, RoomOperationalStatus, StayStatus, SyncStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../common/prisma.service';
@@ -11,10 +11,12 @@ import { sha256 } from '../../common/security';
 import { serializable } from '../../common/transactions';
 import { assertReservationTransition } from './reservation-state';
 import { RateResolverService } from '../availability/rate-resolver';
+import { AvailabilityService } from '../availability/availability.service';
 import { calculateAgentBookingPaymentTerms, calculateReservationPaymentSchedule } from '../../common/agent-payment-terms';
 import { HousekeepingService } from '../housekeeping/housekeeping.service';
 import { GuestsService, guestArrivalContext } from '../guests/guests.service';
 import { assertActorCanManageHotel, getActorScope } from '../../common/role-scope';
+import { calculateSettlementTotals } from './settlement-totals';
 
 const checkoutInclude = {
   hotel: { select: { id: true, name: true, timezoneName: true } },
@@ -27,7 +29,7 @@ const checkoutInclude = {
 
 @Injectable()
 export class ReservationsService {
-  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService) {}
+  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService, @Optional() private readonly availability?: AvailabilityService) {}
 
   private operationalRoles = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'];
 
@@ -193,11 +195,7 @@ export class ReservationsService {
   }
 
   private settlementTotals(reservation: any) {
-    const reservationAmount = Number(reservation.totalAmount);
-    const incidentalAmount = (reservation.folioCharges ?? []).reduce((sum: number, charge: any) => sum + Number(charge.totalAmount), 0);
-    const paidAmount = (reservation.payments ?? []).filter((payment: any) => payment.verified !== false).reduce((sum: number, payment: any) => sum + Number(payment.amount), 0);
-    const grossAmount = reservationAmount + incidentalAmount;
-    return { reservationAmount, incidentalAmount, taxAmount: 0, paidAmount, grossAmount, outstandingAmount: Math.max(grossAmount - paidAmount, 0) };
+    return calculateSettlementTotals(reservation);
   }
 
   private finalFolioNumber(hotelTimezone = 'Asia/Kolkata', now = new Date()) { return `RW-FOLIO-${getHotelOperationalDate(hotelTimezone, now).getUTCFullYear()}-${randomUUID().slice(0, 10).toUpperCase()}`; }
@@ -244,20 +242,28 @@ export class ReservationsService {
       const liveHold = await tx.inventoryHold.updateMany({ where: { id: hold.id, status: 'ACTIVE', expiresAt: { gt: new Date() } }, data: { status: 'CONVERTED' } });
       if (liveHold.count !== 1) throw new BadRequestException('Hold expired or already converted');
       const hotelId = hold.hotelId;
+      const selectedCorporateAccountId = body.corporateAccountId ?? hold.corporateAccountId ?? undefined;
       let corporateAccount: { id: string; name: string; legalName: string | null; gstin: string | null; creditDays: number | null; creditLimit: any } | null = null;
-      if (body.corporateAccountId) {
+      if (selectedCorporateAccountId) {
         if (!user || !['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'].includes(user.role ?? '')) throw new ForbiddenException('Corporate account selection requires an authorised reservation user.');
-        corporateAccount = await tx.corporateAccount.findFirst({ where: { id: body.corporateAccountId, active: true, hotels: { some: { hotelId, active: true } } }, select: { id: true, name: true, legalName: true, gstin: true, creditDays: true, creditLimit: true } });
+        corporateAccount = await tx.corporateAccount.findFirst({ where: { id: selectedCorporateAccountId, active: true, hotels: { some: { hotelId, active: true } } }, select: { id: true, name: true, legalName: true, gstin: true, creditDays: true, creditLimit: true } });
         if (!corporateAccount) throw new BadRequestException('Corporate account is not linked to this hotel.');
       }
+      const pricingLines = selectedCorporateAccountId
+        ? await Promise.all(hold.lines.map(async (line) => {
+          if (!this.availability) throw new BadRequestException('Corporate pricing is unavailable.');
+          const quote = await this.availability.quoteSelection(tx, { hotelId, roomTypeId: line.roomTypeId, ratePlanId: line.ratePlanId, checkIn: toDateOnly(line.checkIn), checkOut: toDateOnly(line.checkOut), rooms: line.rooms, adults: line.adults, children: line.children, source: body.source ?? 'COMPANY', corporateAccountId: selectedCorporateAccountId }, { checkInventory: false, channel: body.source ?? 'COMPANY', corporateAccountId: selectedCorporateAccountId, actor: user });
+          return { ...line, quotedTotal: quote.total, quotedTax: quote.taxTotal, quotedBreakdown: quote.priceBreakdown };
+        }))
+        : hold.lines;
       const reservationReference = this.reference();
-      const bookingTotal = hold.lines.reduce((sum, line) => sum + Number(line.quotedTotal), 0);
+      const bookingTotal = pricingLines.reduce((sum, line) => sum + Number(line.quotedTotal), 0);
       const bookingCreatedAt = new Date();
       const walletBooking = user?.role === 'AGENT';
       const agent = walletBooking ? await tx.user.findFirst({ where: { id: user.id, role: 'AGENT', active: true }, select: { id: true, agentPaymentPolicy: true, bookingPaymentPercent: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } } } }) : null;
       if (walletBooking && !agent) throw new ForbiddenException('The agent account is not available for booking');
       const paymentTerms = walletBooking ? calculateAgentBookingPaymentTerms(bookingTotal, agent!, hold.lines[0].checkIn, bookingCreatedAt) : null;
-      const lineSnapshots = hold.lines.map((line) => ({
+      const lineSnapshots = pricingLines.map((line) => ({
         breakdown: Array.isArray(line.quotedBreakdown) ? line.quotedBreakdown as any[] : [],
         agentRatePlanId: Array.isArray(line.quotedBreakdown) ? (line.quotedBreakdown as any[]).find((night) => night.agentRatePlanId)?.agentRatePlanId ?? null : null,
       }));
@@ -281,18 +287,18 @@ export class ReservationsService {
           guestName: body.guestName,
           guestProfileId: guestResolution.guestProfileId ?? undefined,
           corporateAccountId: corporateAccount?.id,
-          corporateSnapshot: corporateAccount ? { id: corporateAccount.id, name: corporateAccount.name, legalName: corporateAccount.legalName, gstin: corporateAccount.gstin, creditDays: corporateAccount.creditDays, creditLimit: corporateAccount.creditLimit ? Number(corporateAccount.creditLimit) : null, capturedAt: bookingCreatedAt.toISOString() } : undefined,
+          corporateSnapshot: corporateAccount ? { account: { id: corporateAccount.id, name: corporateAccount.name, legalName: corporateAccount.legalName, gstin: corporateAccount.gstin, creditDays: corporateAccount.creditDays, creditLimit: corporateAccount.creditLimit ? Number(corporateAccount.creditLimit) : null }, agreements: lineSnapshots.flatMap((snapshot) => snapshot.breakdown.map((night: any) => night.corporateRateAgreement).filter(Boolean)), capturedAt: bookingCreatedAt.toISOString() } : undefined,
           email: body.email.toLowerCase(),
           mobile: body.mobile,
           address: body.address,
           gstin: body.gstin,
-          checkIn: hold.lines[0].checkIn,
-          checkOut: hold.lines[0].checkOut,
-          totalAmount: hold.lines.reduce((sum, line) => sum + Number(line.quotedTotal), 0),
-          taxAmount: hold.lines.reduce((sum, line) => sum + Number(line.quotedTax), 0),
+          checkIn: pricingLines[0].checkIn,
+          checkOut: pricingLines[0].checkOut,
+          totalAmount: pricingLines.reduce((sum, line) => sum + Number(line.quotedTotal), 0),
+          taxAmount: pricingLines.reduce((sum, line) => sum + Number(line.quotedTax), 0),
           advanceAmount: walletBooking ? paymentTerms!.requiredAtBooking : 0,
           balanceAmount: walletBooking ? paymentTerms!.balanceAtBooking : bookingTotal,
-          priceSnapshot: hold.lines.map((line, index) => ({ roomTypeId: line.roomTypeId, ratePlanId: line.ratePlanId, agentRatePlanId: lineSnapshots[index].agentRatePlanId, priceSource: 'RATE_PLAN', total: Number(line.quotedTotal), tax: Number(line.quotedTax), breakdown: line.quotedBreakdown })),
+          priceSnapshot: pricingLines.map((line, index) => ({ roomTypeId: line.roomTypeId, ratePlanId: line.ratePlanId, agentRatePlanId: lineSnapshots[index].agentRatePlanId, priceSource: selectedCorporateAccountId ? 'CORPORATE' : 'RATE_PLAN', total: Number(line.quotedTotal), tax: Number(line.quotedTax), breakdown: line.quotedBreakdown })),
           policySnapshot: { policySource: 'hold', capturedAt: new Date().toISOString(), freeCancellationHours: 48, firstNightPenalty: true },
           paymentTermsSnapshot: paymentTerms ? { agentId: agent!.id, policy: paymentTerms.policy, percentage: paymentTerms.percentage, bookingTotal, requiredAtBooking: paymentTerms.requiredAtBooking, balanceAtBooking: paymentTerms.balanceAtBooking, milestones: paymentTerms.milestones, capturedAt: bookingCreatedAt.toISOString() } : undefined,
           specialRequest: body.specialRequest,
@@ -301,7 +307,7 @@ export class ReservationsService {
           createdById: user?.id,
           ...(walletDebit && paymentTerms && paymentTerms.requiredAtBooking > 0 ? { payments: { create: { amount: paymentTerms.requiredAtBooking, mode: 'WALLET', provider: 'MANUAL', verified: true, verifiedById: user!.id, paidAt: new Date(), reference: `WALLET:${reservationReference}` } } } : {}),
           lines: {
-            create: hold.lines.map((line, index) => ({
+            create: pricingLines.map((line, index) => ({
               roomType: { connect: { id: line.roomTypeId } },
               ratePlan: { connect: { id: line.ratePlanId } },
               checkIn: line.checkIn,

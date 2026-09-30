@@ -52,4 +52,8 @@ export class AvailabilityQueryDto {
   @IsOptional()
   @IsString()
   promotionCode?: string;
+
+  @IsOptional()
+  @IsString()
+  corporateAccountId?: string;
 }

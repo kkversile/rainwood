@@ -54,6 +54,10 @@ export class HoldLineDto {
   @IsOptional()
   @IsString()
   promotionCode?: string;
+
+  @IsOptional()
+  @IsString()
+  corporateAccountId?: string;
 }
 
 export class HoldCreateDto extends HoldLineDto {

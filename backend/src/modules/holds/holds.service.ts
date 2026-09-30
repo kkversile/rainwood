@@ -13,8 +13,11 @@ type LockRow = { id: string; roomTypeId: string; date: Date; available: number; 
 export class HoldsService {
   constructor(private p: PrismaService, private availability: AvailabilityService, private c: ConfigService) {}
 
-  async create(input: HoldCreateDto, agentId?: string) {
+  async create(input: HoldCreateDto, agentId?: string, actor?: { id: string; role?: string }) {
     const lines = input.lines?.length ? input.lines : [input];
+    const corporateAccountIds = [...new Set(lines.map((line) => line.corporateAccountId).filter(Boolean))];
+    if (corporateAccountIds.length > 1) throw new BadRequestException('A multi-line hold must use one corporate account.');
+    const corporateAccountId = input.corporateAccountId ?? corporateAccountIds[0] ?? null;
     const sortedLines = [...lines].sort((a, b) => `${a.roomTypeId}:${a.checkIn}`.localeCompare(`${b.roomTypeId}:${b.checkIn}`));
     const rawToken = randomToken();
     const expiry = new Date(Date.now() + Number(this.c.get('HOLD_EXPIRY_MINUTES', this.c.get('HOLD_MINUTES', 15))) * 60_000);
@@ -23,7 +26,7 @@ export class HoldsService {
       await this.expireStaleHoldsForLockedRows(tx, lockRows);
       const quotes = [] as any[];
       for (const line of sortedLines) {
-        const quote = await this.availability.quoteSelection(tx, line, { checkInventory: true, agentId, channel: line.source, promotionCode: line.promotionCode });
+        const quote = await this.availability.quoteSelection(tx, line, { checkInventory: true, agentId, channel: line.source, promotionCode: line.promotionCode, corporateAccountId: line.corporateAccountId, actor });
         quotes.push(quote);
       }
       for (const line of sortedLines) {
@@ -41,6 +44,7 @@ export class HoldsService {
           hotelId: sortedLines[0].hotelId,
           agentId: agentId ?? null,
           guestEmail: input.guestEmail,
+          corporateAccountId,
           expiresAt: expiry,
           lines: {
             create: sortedLines.map((line, index) => {

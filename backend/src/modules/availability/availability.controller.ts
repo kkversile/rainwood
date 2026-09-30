@@ -12,6 +12,6 @@ export class AvailabilityController {
   @Get('search')
   @UseGuards(OptionalJwtAuthGuard, ActiveAgentGuard)
   search(@Query() query: AvailabilityQueryDto, @CurrentUser() user?: any) {
-    return this.service.search(query, user?.role === 'AGENT' ? user.id : undefined);
+    return this.service.search(query, user ? { id: user.id, role: user.role } : undefined);
   }
 }

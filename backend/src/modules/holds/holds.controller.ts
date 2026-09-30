@@ -11,7 +11,7 @@ export class HoldsController {
 
   @Post()
   @UseGuards(OptionalJwtAuthGuard, ActiveAgentGuard)
-  create(@Body() body: HoldCreateDto, @CurrentUser() user?: any) { return this.s.create(body, user?.role === 'AGENT' ? user.id : undefined); }
+  create(@Body() body: HoldCreateDto, @CurrentUser() user?: any) { return this.s.create(body, user?.role === 'AGENT' ? user.id : undefined, user ? { id: user.id, role: user.role } : undefined); }
 
   @Get(':token')
   @UseGuards(OptionalJwtAuthGuard, ActiveAgentGuard)

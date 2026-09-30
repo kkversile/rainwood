@@ -138,4 +138,24 @@ describe('availability restrictions and pricing', () => {
     expect(option.priceBreakdown.reduce((sum: number, item: any) => sum + item.discountAmount, 0)).toBe(100);
     expect(option.priceBreakdown.reduce((sum: number, item: any) => sum + item.totalAmount, 0)).toBe(option.total);
   });
+
+  it('applies fixed and percentage corporate rates after public pre-promotion pricing', () => {
+    const calculate = (service as any).calculate.bind(service);
+    const base = { ...room, inventory: room.inventory.map((day) => ({ ...day, available: 2 })) };
+    const fixed = calculate(base, plan, { rooms: 1, adults: 2, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2, undefined, [], [], 'COMPANY', undefined, 'UTC', [], [], { account: { id: 'corp-1', name: 'Synthetic Corp' }, agreements: [{ id: 'agreement-1', corporateAccountId: 'corp-1', hotelId: 'hotel', roomTypeId: 'room', ratePlanId: 'plan', validFrom: new Date('2099-01-01T00:00:00Z'), validTo: new Date('2099-12-31T00:00:00Z'), pricingType: 'FIXED', fixedRate: 700, discountPercent: null }] });
+    expect(fixed.total).toBe(1600);
+    expect(fixed.priceBreakdown[0].rooms[0]).toEqual(expect.objectContaining({ publicPrePromoRate: 1000, corporateEffectiveRate: 700, corporateAdjustment: -300 }));
+    const percentage = calculate(base, plan, { rooms: 1, adults: 2, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2, undefined, [], [], 'COMPANY', undefined, 'UTC', [], [], { account: { id: 'corp-1', name: 'Synthetic Corp' }, agreements: [{ id: 'agreement-2', corporateAccountId: 'corp-1', hotelId: 'hotel', roomTypeId: 'room', ratePlanId: 'plan', validFrom: new Date('2099-01-01T00:00:00Z'), validTo: new Date('2099-12-31T00:00:00Z'), pricingType: 'DISCOUNT_PERCENT', fixedRate: null, discountPercent: 15 }] });
+    expect(percentage.total).toBe(1900);
+  });
+
+  it('does not stack a public promotion on corporate pricing unless COMPANY is explicit', () => {
+    const calculate = (service as any).calculate.bind(service);
+    const corporate = { account: { id: 'corp-1', name: 'Synthetic Corp' }, agreements: [{ id: 'agreement-1', roomTypeId: 'room', ratePlanId: 'plan', validFrom: new Date('2099-01-01T00:00:00Z'), validTo: new Date('2099-12-31T00:00:00Z'), pricingType: 'FIXED', fixedRate: 900, discountPercent: null }] };
+    const publicPromotion = { id: 'promo-public', name: 'Public', discountType: 'PERCENT', discountValue: 20, channels: ['DIRECT'] };
+    const corporatePromotion = { id: 'promo-company', name: 'Company', discountType: 'PERCENT', discountValue: 10, channels: ['COMPANY'] };
+    const option = calculate(room, plan, { rooms: 1, adults: 2, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2, undefined, [], [publicPromotion, corporatePromotion], 'COMPANY', undefined, 'UTC', [], [], corporate);
+    expect(option.promotionApplied?.id).toBe('promo-company');
+    expect(option.total).toBe(1800);
+  });
 });

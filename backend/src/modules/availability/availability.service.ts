@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import { BookingSource, Prisma, SupplementaryChargeScope } from '@prisma/client';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BookingSource, Prisma, SupplementaryChargeScope, UserRole } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { addDays, eachNight, nightsBetween, parseDateOnly, todayUtc, toDateOnly } from '../../common/dates';
 import { getHotelOperationalDate } from '../../common/hotel-dates';
+import { assertActorCanManageHotel } from '../../common/role-scope';
 import { AvailabilityQueryDto } from './availability.dto';
 import { RateResolverService } from './rate-resolver';
 import { selectBestPromotion } from './promotion.utils';
@@ -10,7 +11,9 @@ import { resolvePrePromotionRate } from './pricing-context';
 
 type Database = PrismaService | Prisma.TransactionClient;
 export type RoomOccupancy = { adults: number; children: number };
-type Selection = { hotelId: string; roomTypeId: string; ratePlanId: string; checkIn: string; checkOut: string; rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[]; source?: BookingSource; promotionCode?: string };
+type PricingActor = { id: string; role?: string };
+type CorporateContext = { account: { id: string; name: string }; agreements: any[] };
+type Selection = { hotelId: string; roomTypeId: string; ratePlanId: string; checkIn: string; checkOut: string; rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[]; source?: BookingSource; promotionCode?: string; corporateAccountId?: string };
 
 export function supplementaryScopeFilter(agentId?: string) {
   return agentId ? { in: [SupplementaryChargeScope.AGENTS, SupplementaryChargeScope.ALL] } : SupplementaryChargeScope.ALL;
@@ -20,12 +23,13 @@ export function supplementaryScopeFilter(agentId?: string) {
 export class AvailabilityService {
   constructor(private prisma: PrismaService, private readonly rateResolver: RateResolverService) {}
 
-  async search(query: AvailabilityQueryDto, agentId?: string) {
+  async search(query: AvailabilityQueryDto, actor?: PricingActor) {
     const from = parseDateOnly(query.checkIn, 'checkIn');
     const to = parseDateOnly(query.checkOut, 'checkOut');
     const normalized = this.normalizeOccupancy(query);
     this.validateStay(from, to, normalized.rooms, normalized.adults, normalized.children, normalized.occupancies);
     const nights = nightsBetween(from, to);
+    const agentId = actor?.role === 'AGENT' ? actor.id : undefined;
     const hotels = await this.prisma.hotel.findMany({
       where: query.hotelId ? { id: query.hotelId, active: true } : { active: true },
       include: {
@@ -43,11 +47,15 @@ export class AvailabilityService {
       },
     });
     if (!hotels.length) throw new BadRequestException('Hotel is unavailable');
-    const options = hotels.flatMap((hotel) => hotel.rooms.flatMap((room) => room.ratePlans.map((plan) => this.calculate(room, plan, normalized, from, to, nights, agentId, hotel.supplementaryCharges, hotel.promotions, query.source, query.promotionCode, hotel.timezoneName, hotel.rateSeasons, hotel.yieldRules))));
+    if (query.corporateAccountId && !query.hotelId) throw new BadRequestException('hotelId is required when corporate pricing is selected.');
+    const options = (await Promise.all(hotels.map(async (hotel) => {
+      const corporate = query.corporateAccountId ? await this.resolveCorporateContext(this.prisma, query.corporateAccountId, hotel.id, actor, query.source, from, to) : null;
+      return hotel.rooms.flatMap((room) => room.ratePlans.map((plan) => this.calculate(room, plan, normalized, from, to, nights, actor?.role === 'AGENT' ? actor.id : undefined, hotel.supplementaryCharges, hotel.promotions, query.source, query.promotionCode, hotel.timezoneName, hotel.rateSeasons, hotel.yieldRules, corporate)));
+    }))).flat();
     return options.filter((option) => option.available).map(({ available, ...option }) => option);
   }
 
-  async quoteSelection(db: Database, input: Selection, options: { checkInventory?: boolean; agentId?: string; channel?: string; promotionCode?: string } = {}) {
+  async quoteSelection(db: Database, input: Selection, options: { checkInventory?: boolean; agentId?: string; channel?: string; promotionCode?: string; corporateAccountId?: string; actor?: PricingActor } = {}) {
     const from = parseDateOnly(input.checkIn, 'checkIn');
     const to = parseDateOnly(input.checkOut, 'checkOut');
     const normalized = this.normalizeOccupancy(input);
@@ -62,10 +70,28 @@ export class AvailabilityService {
     });
     const plan = room?.ratePlans[0];
     if (!room || !plan) throw new BadRequestException('Room or rate plan is unavailable');
-    const quote = this.calculate(room, plan, normalized, from, to, nightsBetween(from, to), options.agentId, room.hotel.supplementaryCharges, room.hotel.promotions, options.channel, options.promotionCode, room.hotel.timezoneName, room.hotel.rateSeasons, room.hotel.yieldRules);
+    const corporate = options.corporateAccountId || input.corporateAccountId ? await this.resolveCorporateContext(db, options.corporateAccountId ?? input.corporateAccountId!, input.hotelId, options.actor, options.channel ?? input.source, from, to, input.roomTypeId, input.ratePlanId) : null;
+    const quote = this.calculate(room, plan, normalized, from, to, nightsBetween(from, to), options.agentId, room.hotel.supplementaryCharges, room.hotel.promotions, options.channel ?? input.source, options.promotionCode ?? input.promotionCode, room.hotel.timezoneName, room.hotel.rateSeasons, room.hotel.yieldRules, corporate);
     if (!quote.available && options.checkInventory !== false) throw new BadRequestException('Inventory or restrictions are no longer available');
     const { available: _available, ...result } = quote;
     return result;
+  }
+
+  private async resolveCorporateContext(db: Database, accountId: string, hotelId: string, actor?: PricingActor, channel?: string, from?: Date, to?: Date, roomTypeId?: string, ratePlanId?: string): Promise<CorporateContext> {
+    const allowed: string[] = [UserRole.SUPER_ADMIN, UserRole.CORPORATE_ADMIN, UserRole.ADMIN, UserRole.RESERVATION];
+    if (!actor || !allowed.includes(actor.role ?? '')) throw new ForbiddenException('Corporate pricing requires an authorised reservation user.');
+    await assertActorCanManageHotel(db, actor.id, hotelId);
+    if (channel && channel !== BookingSource.COMPANY) throw new BadRequestException('Corporate pricing must use the COMPANY booking source.');
+    const account = await db.corporateAccount.findFirst({ where: { id: accountId, active: true, hotels: { some: { hotelId, active: true } } }, select: { id: true, name: true } });
+    if (!account) throw new BadRequestException('Corporate account is not active or linked to this hotel.');
+    const agreements = await db.corporateRateAgreement.findMany({ where: { corporateAccountId: accountId, hotelId, ...(roomTypeId ? { roomTypeId } : {}), ...(ratePlanId ? { ratePlanId } : {}), active: true, ...(from && to ? { validFrom: { lte: to }, validTo: { gte: from } } : {}) }, orderBy: [{ validFrom: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }] });
+    for (let index = 0; index < agreements.length; index += 1) {
+      for (let next = index + 1; next < agreements.length; next += 1) {
+        const left = agreements[index]; const right = agreements[next];
+        if (left.roomTypeId === right.roomTypeId && left.ratePlanId === right.ratePlanId && new Date(left.validFrom) <= new Date(right.validTo) && new Date(right.validFrom) <= new Date(left.validTo)) throw new ConflictException('Overlapping active corporate rate agreements must be resolved before quoting.');
+      }
+    }
+    return { account, agreements };
   }
 
   private validateStay(from: Date, to: Date, rooms: number, adults: number, children: number, occupancies?: RoomOccupancy[]) {
@@ -85,7 +111,7 @@ export class AvailabilityService {
     }
   }
 
-  private calculate(room: any, plan: any, input: { rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[] }, from: Date, to: Date, nights: number, agentId?: string, supplementaryCharges: any[] = [], promotions: any[] = [], channel?: string, promotionCode?: string, timezoneName = 'UTC', seasons: any[] = [], yieldRules: any[] = []) {
+  private calculate(room: any, plan: any, input: { rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[] }, from: Date, to: Date, nights: number, agentId?: string, supplementaryCharges: any[] = [], promotions: any[] = [], channel?: string, promotionCode?: string, timezoneName = 'UTC', seasons: any[] = [], yieldRules: any[] = [], corporate?: CorporateContext | null) {
     const occupiedNights = eachNight(from, to);
     const inventoryByDate = new Map<string, any>(room.inventory.map((day: any) => [toDateOnly(day.date), day]));
     const rateByDate = new Map<string, any>(plan.rates.map((day: any) => [toDateOnly(day.date), day]));
@@ -113,10 +139,14 @@ export class AvailabilityService {
         const commercialBase = hasManualOverride ? Number(rate.overrideAmount) : hasOccupancyPrice ? Number(occupancyPrices[occupancyKey]) : Number(rate?.baseAmount ?? rate?.amount ?? 0);
         const inventoryDay = inventoryByDate.get(toDateOnly(night));
         const pricing = resolvePrePromotionRate({ rate, commercialBase, date: toDateOnly(night), weekday: night.getUTCDay(), roomTypeId: room.id, ratePlanId: plan.id, inventoryDay, seasons, yieldRules });
-        const season = pricing.season; const yieldRule = pricing.yield; const occupancyPercent = pricing.occupancyPercent; const effectiveAmount = pricing.effectivePrePromoRate;
+        const season = pricing.season; const yieldRule = pricing.yield; const occupancyPercent = pricing.occupancyPercent; const publicPrePromoRate = pricing.effectivePrePromoRate;
+        const agreement = corporate?.agreements.find((candidate: any) => candidate.roomTypeId === room.id && candidate.ratePlanId === plan.id && toDateOnly(new Date(candidate.validFrom)) <= toDateOnly(night) && toDateOnly(new Date(candidate.validTo)) >= toDateOnly(night)) ?? null;
+        const corporateEffectiveRate = agreement ? agreement.pricingType === 'FIXED' ? Number(agreement.fixedRate) : Number((publicPrePromoRate * (1 - Number(agreement.discountPercent) / 100)).toFixed(2)) : publicPrePromoRate;
+        const corporateAdjustment = agreement ? Number((corporateEffectiveRate - publicPrePromoRate).toFixed(2)) : 0;
+        const effectiveAmount = corporateEffectiveRate;
         const seasonAdjustment = pricing.seasonAdjustedRate - commercialBase;
         const supplementAmount = hasOccupancyPrice || hasManualOverride ? 0 : Number(rate?.childAmount ?? 0) * occupancy.children + Number(rate?.extraAdultAmount ?? 0) * Math.max(0, occupancy.adults - 2);
-        return { roomIndex: index, adults: occupancy.adults, children: occupancy.children, occupancyKey, baseRate: Math.round(commercialBase * 100) / 100, baseAmount: Math.round(effectiveAmount * 100) / 100, supplementAmount, manualOverride: hasManualOverride ? Number(rate.overrideAmount) : null, seasonApplied: season ? { id: season.id, name: season.name, adjustment: Math.round(seasonAdjustment * 100) / 100 } : null, yieldRuleApplied: yieldRule ? { id: yieldRule.id, name: yieldRule.name, occupancyPercent: Math.round(occupancyPercent * 100) / 100, adjustment: Math.round((effectiveAmount - pricing.seasonAdjustedRate) * 100) / 100 } : null };
+        return { roomIndex: index, adults: occupancy.adults, children: occupancy.children, occupancyKey, baseRate: Math.round(commercialBase * 100) / 100, baseAmount: Math.round(effectiveAmount * 100) / 100, publicPrePromoRate: Math.round(publicPrePromoRate * 100) / 100, corporateAdjustment, corporateEffectiveRate: agreement ? Math.round(corporateEffectiveRate * 100) / 100 : null, corporateRateAgreement: agreement ? { id: agreement.id, pricingType: agreement.pricingType, fixedRate: agreement.fixedRate == null ? null : Number(agreement.fixedRate), discountPercent: agreement.discountPercent == null ? null : Number(agreement.discountPercent) } : null, supplementAmount, manualOverride: hasManualOverride ? Number(rate.overrideAmount) : null, seasonApplied: season ? { id: season.id, name: season.name, adjustment: Math.round(seasonAdjustment * 100) / 100 } : null, yieldRuleApplied: yieldRule ? { id: yieldRule.id, name: yieldRule.name, occupancyPercent: Math.round(occupancyPercent * 100) / 100, adjustment: Math.round((publicPrePromoRate - pricing.seasonAdjustedRate) * 100) / 100 } : null };
       });
       const occupancyKeys = roomBreakdown.map((item) => item.occupancyKey);
       const base = roomBreakdown.reduce((sum, item) => sum + item.baseAmount, 0);
@@ -129,7 +159,8 @@ export class AvailabilityService {
     });
     for (const item of breakdown) item.totalAmount = Math.round(Number(item.totalAmount) * 100) / 100;
     const subtotal = Math.round(breakdown.reduce((sum, item) => sum + item.totalAmount, 0) * 100) / 100;
-    const selectedPromotion = selectBestPromotion(promotions, { bookingDate: toDateOnly(getHotelOperationalDate(timezoneName)), stayDate: from, nights, subtotal, channel, code: promotionCode, roomTypeId: room.id, ratePlanId: plan.id });
+    const eligiblePromotions = corporate ? promotions.filter((promotion: any) => Array.isArray(promotion.channels) && promotion.channels.map((value: unknown) => String(value).trim().toUpperCase()).includes(BookingSource.COMPANY)) : promotions;
+    const selectedPromotion = selectBestPromotion(eligiblePromotions, { bookingDate: toDateOnly(getHotelOperationalDate(timezoneName)), stayDate: from, nights, subtotal, channel: corporate ? BookingSource.COMPANY : channel, code: promotionCode, roomTypeId: room.id, ratePlanId: plan.id });
     const discountAmount = Math.round(Math.min(subtotal, selectedPromotion?.discount ?? 0) * 100) / 100;
     const total = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100);
     if (discountAmount > 0 && subtotal > 0) {
@@ -171,6 +202,7 @@ export class AvailabilityService {
       taxTotal,
       supplementaryTotal,
       discountAmount,
+      corporateAccount: corporate ? { id: corporate.account.id, name: corporate.account.name } : null,
       promotionApplied: selectedPromotion ? { id: selectedPromotion.promotion.id, code: selectedPromotion.promotion.code ?? null, name: selectedPromotion.promotion.name, discountType: selectedPromotion.promotion.discountType, discountValue: Number(selectedPromotion.promotion.discountValue) } : null,
       available: inventoryAvailable && restrictionsValid && occupancyValid,
       availableRooms: inventoryComplete ? Math.min(...occupiedNights.map((night) => {

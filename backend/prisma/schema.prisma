@@ -201,6 +201,11 @@ enum InquiryFollowUpMethod {
   OTHER
 }
 
+enum DocumentSequenceType {
+  EXPENSE
+  INQUIRY
+}
+
 enum PaymentProvider {
   MOCK
   RAZORPAY
@@ -504,6 +509,7 @@ model Hotel {
   expenseCategories       ExpenseCategory[]
   vendors                 Vendor[]
   expenses                Expense[]
+  documentSequences       DocumentSequence[]
   corporateLinks          CorporateAccountHotel[]
   corporateRateAgreements CorporateRateAgreement[]
   inquiries               BookingInquiry[]
@@ -1115,6 +1121,8 @@ model InventoryHold {
   agent                  User?               @relation("AgentHolds", fields: [agentId], references: [id], onDelete: SetNull)
   status                 HoldStatus          @default(ACTIVE)
   guestEmail             String?
+  corporateAccountId     String?
+  corporateAccount       CorporateAccount?   @relation(fields: [corporateAccountId], references: [id], onDelete: SetNull)
   expiresAt              DateTime
   convertedReservationId String?             @unique
   lines                  InventoryHoldLine[]
@@ -1122,6 +1130,7 @@ model InventoryHold {
   updatedAt              DateTime            @updatedAt
 
   @@index([status, expiresAt])
+  @@index([corporateAccountId, createdAt])
 }
 
 model InventoryHoldLine {
@@ -1262,7 +1271,7 @@ model Expense {
   id               String          @id @default(cuid())
   hotelId          String
   hotel            Hotel           @relation(fields: [hotelId], references: [id], onDelete: Restrict)
-  expenseNo        String          @unique
+  expenseNo        String
   expenseDate      DateTime        @db.Date
   categoryId       String
   category         ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
@@ -1285,9 +1294,24 @@ model Expense {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
+  @@unique([hotelId, expenseNo])
   @@index([hotelId, expenseDate, status])
   @@index([categoryId, expenseDate])
   @@index([vendorId, expenseDate])
+}
+
+model DocumentSequence {
+  id         String               @id @default(cuid())
+  hotelId    String
+  hotel      Hotel                @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  type       DocumentSequenceType
+  year       Int
+  lastNumber Int                  @default(0)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  @@unique([hotelId, type, year])
+  @@index([hotelId, type, year])
 }
 
 model CorporateAccount {
@@ -1309,6 +1333,7 @@ model CorporateAccount {
   active         Boolean                  @default(true)
   hotels         CorporateAccountHotel[]
   reservations   Reservation[]
+  holds          InventoryHold[]
   rateAgreements CorporateRateAgreement[]
   createdAt      DateTime                 @default(now())
   updatedAt      DateTime                 @updatedAt
@@ -1356,7 +1381,7 @@ model BookingInquiry {
   id                     String            @id @default(cuid())
   hotelId                String
   hotel                  Hotel             @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  inquiryNo              String            @unique
+  inquiryNo              String
   guestName              String
   mobile                 String
   email                  String?
@@ -1383,6 +1408,7 @@ model BookingInquiry {
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
+  @@unique([hotelId, inquiryNo])
   @@index([hotelId, status, nextFollowUpAt])
   @@index([mobile, email])
 }

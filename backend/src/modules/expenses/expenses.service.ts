@@ -1,13 +1,15 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { ExpenseStatus, PaymentMode, Prisma, UserRole } from '@prisma/client';
+import { DocumentSequenceType, ExpenseStatus, PaymentMode, Prisma, UserRole } from '@prisma/client';
 import { AuditService } from '../../common/audit.service';
 import { PrismaService } from '../../common/prisma.service';
 import { getActorScope, resolveRequestedHotel, ActorScope } from '../../common/role-scope';
 import { ExpenseCategoryDto, ExpenseCreateDto, ExpenseListQueryDto, ExpenseUpdateDto, VendorDto } from './expenses.dto';
+import { nextDocumentNumber } from '../../common/document-sequences';
 
 const ACCESS: UserRole[] = [UserRole.SUPER_ADMIN, UserRole.CORPORATE_ADMIN, UserRole.ADMIN, UserRole.ACCOUNTS];
 const MANAGEMENT: UserRole[] = [UserRole.SUPER_ADMIN, UserRole.CORPORATE_ADMIN, UserRole.ADMIN];
 const money = (value: unknown) => Number(value ?? 0);
+const totalFor = (amount: number, taxAmount?: number | null) => Number((amount + (taxAmount ?? 0)).toFixed(2));
 
 @Injectable()
 export class ExpensesService {
@@ -70,8 +72,11 @@ export class ExpensesService {
 
   async create(userId: string, body: ExpenseCreateDto) {
     const scope = await this.scope(userId); await this.assertHotel(scope, body.hotelId); await this.validateReferences(body.hotelId, body.categoryId, body.vendorId);
-    const year = new Date(body.expenseDate).getUTCFullYear(); const count = await this.p.expense.count({ where: { hotelId: body.hotelId, expenseDate: { gte: new Date(`${year}-01-01`), lt: new Date(`${year + 1}-01-01`) } } });
-    const expenseNo = `EXP-${year}-${String(count + 1).padStart(6, '0')}`; const totalAmount = body.totalAmount ?? body.amount + (body.taxAmount ?? 0);
+    // expenseDate is a date-only business field, so its ISO calendar year is
+    // already the hotel's operational year; it must not depend on server UTC.
+    const year = Number(body.expenseDate.slice(0, 4));
+    const expenseNo = await nextDocumentNumber(this.p, body.hotelId, DocumentSequenceType.EXPENSE, year, 'EXP');
+    const totalAmount = totalFor(body.amount, body.taxAmount);
     const row = await this.p.expense.create({ data: { hotelId: body.hotelId, expenseNo, expenseDate: new Date(body.expenseDate), categoryId: body.categoryId, vendorId: body.vendorId || null, description: body.description.trim(), amount: body.amount, taxableAmount: body.taxableAmount ?? null, taxAmount: body.taxAmount ?? null, totalAmount, paymentMode: body.paymentMode, paymentReference: body.paymentReference?.trim() || null, notes: body.notes?.trim() || null, createdById: userId }, include: this.include });
     await this.audit.log({ actorUserId: userId, action: 'EXPENSE_CREATED', entityType: 'Expense', entityId: row.id, after: { hotelId: row.hotelId, expenseNo: row.expenseNo, totalAmount: row.totalAmount } });
     return this.view(row);
@@ -82,7 +87,9 @@ export class ExpensesService {
     if (!current || (scope.hotelId && current.hotelId !== scope.hotelId)) throw new NotFoundException('Expense not found.');
     if (current.status !== ExpenseStatus.DRAFT) throw new ConflictException('Only draft expenses can be edited.');
     if (body.categoryId || body.vendorId) await this.validateReferences(current.hotelId, body.categoryId ?? current.categoryId, body.vendorId ?? current.vendorId ?? undefined);
-    const data: Prisma.ExpenseUpdateInput = { expenseDate: body.expenseDate ? new Date(body.expenseDate) : undefined, category: body.categoryId ? { connect: { id: body.categoryId } } : undefined, vendor: body.vendorId === undefined ? undefined : body.vendorId ? { connect: { id: body.vendorId } } : { disconnect: true }, description: body.description?.trim(), amount: body.amount, taxableAmount: body.taxableAmount, taxAmount: body.taxAmount, totalAmount: body.totalAmount ?? (body.amount !== undefined ? body.amount + (body.taxAmount ?? 0) : undefined), paymentMode: body.paymentMode, paymentReference: body.paymentReference?.trim(), notes: body.notes?.trim() };
+    const effectiveAmount = body.amount ?? money(current.amount);
+    const effectiveTax = body.taxAmount ?? money(current.taxAmount);
+    const data: Prisma.ExpenseUpdateInput = { expenseDate: body.expenseDate ? new Date(body.expenseDate) : undefined, category: body.categoryId ? { connect: { id: body.categoryId } } : undefined, vendor: body.vendorId === undefined ? undefined : body.vendorId ? { connect: { id: body.vendorId } } : { disconnect: true }, description: body.description?.trim(), amount: body.amount, taxableAmount: body.taxableAmount, taxAmount: body.taxAmount, totalAmount: totalFor(effectiveAmount, effectiveTax), paymentMode: body.paymentMode, paymentReference: body.paymentReference?.trim(), notes: body.notes?.trim() };
     const row = await this.p.expense.update({ where: { id }, data, include: this.include }); await this.audit.log({ actorUserId: userId, action: 'EXPENSE_UPDATED', entityType: 'Expense', entityId: id, after: { fields: Object.keys(body) } }); return this.view(row);
   }
 
