@@ -47,3 +47,16 @@ export class RevenueForecastCaptureDto {
   @Max(REVENUE_FORECAST_HORIZON_DAYS)
   horizon = REVENUE_FORECAST_HORIZON_DAYS;
 }
+
+export class BookingCurveQueryDto {
+  @IsOptional()
+  @IsString()
+  hotelId?: string;
+
+  @IsDateString()
+  stayDate!: string;
+
+  @IsOptional()
+  @IsString()
+  roomTypeId?: string;
+}

@@ -75,4 +75,32 @@ describe('RevenueForecastService', () => {
   });
 
   it('keeps the official capture horizon at 90 days', () => expect(REVENUE_FORECAST_HORIZON_DAYS).toBe(90));
+
+  it('returns an ordered immutable booking curve and appends a live point without persisting it', async () => {
+    const today = current(); const stayDate = addDays(today, 5); const p: any = {
+      hotel: { findUnique: jest.fn().mockResolvedValue({ id: 'hotel-1', name: 'Demo Hotel', timezoneName: 'Asia/Kolkata', active: true }) },
+      roomType: { findUnique: jest.fn().mockResolvedValue({ id: 'room-type-1', hotelId: 'hotel-1' }), findMany: jest.fn().mockResolvedValue([{ id: 'room-type-1' }]) },
+      inventoryDay: { findMany: jest.fn().mockResolvedValue([{ roomTypeId: 'room-type-1', date: stayDate, available: 40, held: 2 }]) },
+      reservationRoomNight: { findMany: jest.fn().mockResolvedValue([{ date: stayDate, rooms: 30, totalAmount: 30000, reservationLine: { roomTypeId: 'room-type-1' } }]) },
+      revenueForecastSnapshot: { findMany: jest.fn().mockResolvedValue([{ observationDate: addDays(today, -2), stayDate, roomTypeId: null, sellableRooms: 40, bookedRooms: 26, heldRooms: 1, roomRevenue: 26000, adr: 1000 }, { observationDate: addDays(today, -5), stayDate, roomTypeId: null, sellableRooms: 40, bookedRooms: 20, heldRooms: 1, roomRevenue: 20000, adr: 1000 }]) },
+      hotelBusinessDay: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const result: any = await new RevenueForecastService(p).bookingCurve('user-1', { hotelId: 'hotel-1', stayDate: toDateOnly(stayDate) });
+    expect(result.observations.map((row: any) => row.observationDate)).toEqual([toDateOnly(addDays(today, -5)), toDateOnly(addDays(today, -2)), toDateOnly(today)]);
+    expect(result.observations.map((row: any) => row.daysBeforeArrival)).toEqual([10, 7, 5]); expect(result.observations.at(-1)).toMatchObject({ source: 'LIVE', bookedRooms: 30 }); expect(p.revenueForecastSnapshot.create).toBeUndefined();
+  });
+
+  it('uses five comparable closed dates, median completion, and transparent final-demand math', async () => {
+    const today = current(); const stayDate = addDays(today, 14); const finals = [40, 36, 44, 38, 42]; const booked = [30, 28, 32, 29, 31]; const historical = finals.map((_final, index) => addDays(today, -7 * (index + 1))); const p: any = {
+      hotel: { findUnique: jest.fn().mockResolvedValue({ id: 'hotel-1', name: 'Demo Hotel', timezoneName: 'Asia/Kolkata', active: true }) },
+      roomType: { findMany: jest.fn().mockResolvedValue([{ id: 'room-type-1' }]) },
+      inventoryDay: { findMany: jest.fn().mockResolvedValue([{ roomTypeId: 'room-type-1', date: stayDate, available: 40, held: 0 }]) },
+      reservationRoomNight: { findMany: jest.fn().mockResolvedValue([{ date: stayDate, rooms: 30, totalAmount: 30000, reservationLine: { roomTypeId: 'room-type-1' } }]) },
+      hotelBusinessDay: { findMany: jest.fn().mockResolvedValue(historical.map((businessDate, index) => ({ businessDate, summary: { occupancy: { occupiedRoomNights: finals[index] } } }))) },
+      rateSeason: { findMany: jest.fn().mockResolvedValue([]) },
+      revenueForecastSnapshot: { findMany: jest.fn().mockResolvedValue(historical.map((stayDateValue, index) => ({ observationDate: addDays(stayDateValue, -14), stayDate: stayDateValue, roomTypeId: null, sellableRooms: finals[index], bookedRooms: booked[index], heldRooms: 0, roomRevenue: booked[index] * 1000, adr: 1000 }))) },
+    };
+    const result: any = await new RevenueForecastService(p).forecast('user-1', { hotelId: 'hotel-1', observationDate: toDateOnly(today), from: toDateOnly(stayDate), to: toDateOnly(stayDate), pickupWindows: '7' } as any);
+    expect(result.rows[0].completion).toMatchObject({ available: true, ratio: 0.75, sampleSize: 5, confidence: 'LOW' }); expect(result.rows[0].forecast).toMatchObject({ finalRooms: 40, remainingDemandRooms: 10, occupancyPercent: 100, revenue: null }); expect(result.rows[0].paceComparison).toMatchObject({ status: 'ON_PACE', differenceRooms: 0, historicalMedianOtbAtLead: 30 });
+  });
 });
