@@ -11,8 +11,8 @@ const asAdminLinks = (role: string) => {
 test('grouped admin navigation keeps the requested information architecture', () => {
   const groups = buildNavigationGroups(asAdminLinks('SUPER_ADMIN'));
   assert.deepEqual(groups.map((group) => group.label), ['Operations', 'Reservations', 'Revenue', 'CRM & Sales', 'Reports', 'System']);
-  assert.deepEqual(groups[0].items.map((item) => item.label), ['Rooms & Inventory', 'Physical Rooms', 'Housekeeping', 'Maintenance', 'Supplementary Charges', 'Expenses']);
-  assert.deepEqual(groups[1].items.map((item) => item.label), ['Reservations', 'Arrivals', 'In-house', 'Payments', 'Contact Requests']);
+  assert.deepEqual(groups[0].items.map((item) => item.label), ['Rooms & Inventory', 'Physical Rooms', 'Housekeeping', 'Maintenance', 'Supplementary Charges', 'Expenses', 'Service Items']);
+  assert.deepEqual(groups[1].items.map((item) => item.label), ['Reservations', 'Arrivals', 'In-house', 'Lost & Found', 'Payments', 'Contact Requests']);
   assert.deepEqual(groups[2].items.map((item) => item.label), ['Revenue Forecast', 'Rate Plans', 'Rates', 'Rate Seasons', 'Yield Rules', 'Rate Simulator', 'Promotions', 'Rate Import']);
   assert.deepEqual(groups[3].items.map((item) => item.label), ['Guests', 'Agents', 'Corporates', 'Inquiries']);
   assert.deepEqual(groups[4].items.map((item) => item.label), ['Reports', 'Night Audit']);
