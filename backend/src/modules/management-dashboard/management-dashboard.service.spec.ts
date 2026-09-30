@@ -41,6 +41,16 @@ describe('ManagementDashboardService', () => {
     expect(paymentWhere.OR[0].paidAt.gte.toISOString()).toBe(`${toDateOnly(new Date(getHotelOperationalDate('Asia/Kolkata').getTime() - 86_400_000))}T18:30:00.000Z`);
   });
 
+  it('reports approved and paid operating expenses as a management contribution metric', async () => {
+    const { service, p } = setup();
+    p.expense.aggregate.mockResolvedValue({ _sum: { totalAmount: new Prisma.Decimal(50) } });
+    const result: any = await service.dashboard('admin-1', { hotelId: 'hotel-1' });
+    expect(result.kpis.operatingExpenses).toBe(50);
+    expect(result.kpis.operatingContribution).toBe(180);
+    expect(result.kpis.operatingContributionLabel).toContain('not statutory');
+    expect(p.expense.aggregate.mock.calls[0][0].where.status.in).toEqual(['APPROVED', 'PAID']);
+  });
+
   it('uses a closed immutable snapshot for historical dashboard days', async () => {
     const { service, p } = setup();
     const current = getHotelOperationalDate('Asia/Kolkata'); const historical = new Date(current.getTime() - 86_400_000); const snapshot = { occupancy: { occupiedRooms: 1, sellableRooms: 2 }, revenue: { roomRevenue: 1000, incidentalRevenue: 25 }, payments: { total: 400 }, stays: { arrivals: 3, departures: 2, inHouse: 1 }, operations: { dirtyRooms: 1, cleaningRooms: 0, outOfOrderRooms: 0, openMaintenanceTickets: 1 } };
