@@ -3,12 +3,13 @@ import { Prisma, RoomOperationalStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { normalizeOccupancyPrices, SUPPORTED_OCCUPANCY_KEYS } from '../../common/rate-pricing';
 import { parseDateOnly, parseExcelDateOnly } from '../../common/dates';
-import { AmenityDto, CopyRatePlanDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, PhysicalRoomDto, PromotionDto, RateBatchDto, RateBulkUpdateDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto } from './hotels.dto';
+import { AmenityDto, CopyRatePlanDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, PhysicalRoomDto, PromotionDto, RateBatchDto, RateBulkUpdateDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto, RateSeasonDto, YieldRuleDto } from './hotels.dto';
 import { FilesService } from '../files/files.service';
 import ExcelJS from 'exceljs';
 import { canonicalMealPlan, canonicalRatePlanCode } from './rate-plan.utils';
 import { mapImportedRateFields } from '../../common/excel-rate-fields';
 import { assertAdminRoomStatusTransition } from './room-operational-status';
+import { assertActorCanManageHotel } from '../../common/role-scope';
 
 function existingSupportedOccupancyPrices(value: unknown): Record<string, number> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -16,6 +17,42 @@ function existingSupportedOccupancyPrices(value: unknown): Record<string, number
     const amount = Number((value as Record<string, unknown>)[key]);
     return Number.isFinite(amount) && amount >= 0 ? [[key, amount]] : [];
   }));
+}
+
+function promotionCode(value: string | null | undefined) {
+  const normalized = value?.trim().toUpperCase();
+  return normalized || null;
+}
+
+function promotionDate(value: string | null | undefined, field: string) {
+  return value ? parseDateOnly(value, field) : null;
+}
+
+function validatePromotionState(state: { discountType: any; discountValue: number | string | Prisma.Decimal; bookingStart?: Date | null; bookingEnd?: Date | null; stayStart?: Date | null; stayEnd?: Date | null; minNights?: number | null; maxNights?: number | null }) {
+  const value = Number(state.discountValue);
+  if (!Number.isFinite(value) || value < 0 || (state.discountType === 'PERCENT' && value > 100)) throw new BadRequestException('Promotion discount value is invalid. Percent discounts must be between 0 and 100.');
+  if (state.bookingStart && state.bookingEnd && state.bookingStart > state.bookingEnd) throw new BadRequestException('Booking window is invalid.');
+  if (state.stayStart && state.stayEnd && state.stayStart > state.stayEnd) throw new BadRequestException('Stay window is invalid.');
+  if (state.minNights != null && state.maxNights != null && state.maxNights < state.minNights) throw new BadRequestException('maxNights cannot be lower than minNights.');
+}
+
+function normalizedChannels(channels?: string[] | null) {
+  return [...new Set((channels ?? []).map((channel) => channel.trim().toUpperCase()).filter(Boolean))];
+}
+
+function validateAdjustment(type: string, value: number) {
+  if (!Number.isFinite(value) || (type === 'PERCENT' && value < -100)) throw new BadRequestException('Adjustment value is invalid.');
+}
+
+function validateSeasonState(startDate: Date, endDate: Date, daysOfWeek: number[], adjustmentType: string, adjustmentValue: number) {
+  if (startDate > endDate) throw new BadRequestException('Season date range is invalid.');
+  if (daysOfWeek.some((day) => day < 0 || day > 6)) throw new BadRequestException('Season weekdays are invalid.');
+  validateAdjustment(adjustmentType, adjustmentValue);
+}
+
+function validateYieldState(from: number, to: number, adjustmentType: string, adjustmentValue: number) {
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from >= to || to > 100) throw new BadRequestException('Yield occupancy range must satisfy 0 <= from < to <= 100.');
+  validateAdjustment(adjustmentType, adjustmentValue);
 }
 
 @Injectable()
@@ -109,7 +146,7 @@ export class HotelsService {
     return this.prisma.hotel.update({ where: { id }, data: { ...body, slug: body.slug?.toLowerCase().trim() } });
   }
 
-  async policy(hotelId: string) { await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } }); return this.prisma.hotelPolicy.findUnique({ where: { hotelId } }); }
+  async policy(hotelId: string) { await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } }); return (await this.prisma.hotelPolicy.findUnique({ where: { hotelId } })) ?? {}; }
   async savePolicy(hotelId: string, body: HotelPolicyDto) {
     await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } });
     if (body.childMinAge !== undefined && body.childMaxAge !== undefined && body.childMinAge > body.childMaxAge) throw new BadRequestException('Child minimum age cannot be greater than maximum age');
@@ -647,8 +684,8 @@ export class HotelsService {
     return this.prisma.ratePlan.findUniqueOrThrow({ where: { id: assigned.id }, include: { roomType: true, master: true, rates: true } });
   }
 
-  ratePlans() {
-    return this.prisma.ratePlan.findMany({ orderBy: [{ active: 'desc' }, { name: 'asc' }], include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } }, _count: { select: { rates: true, lines: true, holdLines: true } } } });
+  ratePlans(hotelId?: string) {
+    return this.prisma.ratePlan.findMany({ where: hotelId ? { roomType: { hotelId } } : undefined, orderBy: [{ active: 'desc' }, { name: 'asc' }], include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } }, _count: { select: { rates: true, lines: true, holdLines: true } } } });
   }
 
   deleteRatePlan(id: string) {
@@ -689,11 +726,13 @@ export class HotelsService {
     return next;
   }
 
-  async previewBulkRates(hotelId: string, body: RateBulkUpdateDto) {
+  async previewBulkRates(hotelId: string, body: RateBulkUpdateDto, actorUserId?: string) {
+    if (actorUserId) await assertActorCanManageHotel(this.prisma, actorUserId, hotelId);
     return this.bulkRates(hotelId, body, undefined, false);
   }
 
   async updateBulkRates(hotelId: string, body: RateBulkUpdateDto, actorUserId: string) {
+    await assertActorCanManageHotel(this.prisma, actorUserId, hotelId);
     return this.bulkRates(hotelId, body, actorUserId, true);
   }
 
@@ -725,29 +764,155 @@ export class HotelsService {
     return { preview: false, affected: changes.length, changes: changes.slice(0, 500) };
   }
 
-  async promotions(hotelId: string) {
+  async promotions(hotelId: string, actorUserId: string) {
+    await assertActorCanManageHotel(this.prisma, actorUserId, hotelId);
     return this.prisma.promotion.findMany({ where: { hotelId }, orderBy: [{ active: 'desc' }, { name: 'asc' }], include: { roomTypes: { include: { roomType: { select: { id: true, name: true } } } }, ratePlans: { include: { ratePlan: { select: { id: true, name: true } } } } } });
   }
 
   async createPromotion(hotelId: string, body: PromotionDto, actorUserId: string) {
-    if (body.bookingStart && body.bookingEnd && body.bookingStart > body.bookingEnd) throw new BadRequestException('Booking window is invalid.');
-    if (body.stayStart && body.stayEnd && body.stayStart > body.stayEnd) throw new BadRequestException('Stay window is invalid.');
-    if (body.maxNights !== undefined && body.minNights !== undefined && body.maxNights !== null && body.minNights !== null && body.maxNights < body.minNights) throw new BadRequestException('maxNights cannot be lower than minNights.');
+    await assertActorCanManageHotel(this.prisma, actorUserId, hotelId);
+    const code = promotionCode(body.code);
+    const bookingStart = promotionDate(body.bookingStart, 'bookingStart');
+    const bookingEnd = promotionDate(body.bookingEnd, 'bookingEnd');
+    const stayStart = promotionDate(body.stayStart, 'stayStart');
+    const stayEnd = promotionDate(body.stayEnd, 'stayEnd');
+    validatePromotionState({ discountType: body.discountType, discountValue: body.discountValue, bookingStart, bookingEnd, stayStart, stayEnd, minNights: body.minNights ?? null, maxNights: body.maxNights ?? null });
+    if (code) {
+      const existing = await this.prisma.promotion.findMany({ where: { hotelId }, select: { code: true } });
+      if (existing.some((item) => promotionCode(item.code) === code)) throw new ConflictException('A promotion with this code already exists for the hotel.');
+    }
     const [roomTypes, ratePlans] = await Promise.all([
       this.prisma.roomType.findMany({ where: { hotelId, id: body.roomTypeIds?.length ? { in: body.roomTypeIds } : undefined }, select: { id: true } }),
       this.prisma.ratePlan.findMany({ where: { roomType: { hotelId }, id: body.ratePlanIds?.length ? { in: body.ratePlanIds } : undefined }, select: { id: true } }),
     ]);
     if ((body.roomTypeIds?.length ?? 0) !== roomTypes.length || (body.ratePlanIds?.length ?? 0) !== ratePlans.length) throw new BadRequestException('Promotion targets must belong to the selected hotel.');
-    const promotion = await this.prisma.promotion.create({ data: { hotelId, code: body.code?.trim() || null, name: body.name.trim(), discountType: body.discountType, discountValue: body.discountValue, bookingStart: body.bookingStart ? parseDateOnly(body.bookingStart, 'bookingStart') : null, bookingEnd: body.bookingEnd ? parseDateOnly(body.bookingEnd, 'bookingEnd') : null, stayStart: body.stayStart ? parseDateOnly(body.stayStart, 'stayStart') : null, stayEnd: body.stayEnd ? parseDateOnly(body.stayEnd, 'stayEnd') : null, minNights: body.minNights ?? null, maxNights: body.maxNights ?? null, channels: body.channels ?? [], active: body.active ?? true, roomTypes: { create: roomTypes.map((room) => ({ roomTypeId: room.id })) }, ratePlans: { create: ratePlans.map((plan) => ({ ratePlanId: plan.id })) } } });
+    const promotion = await this.prisma.promotion.create({ data: { hotelId, code, name: body.name.trim(), discountType: body.discountType, discountValue: body.discountValue, bookingStart, bookingEnd, stayStart, stayEnd, minNights: body.minNights ?? null, maxNights: body.maxNights ?? null, channels: normalizedChannels(body.channels), active: body.active ?? true, roomTypes: { create: roomTypes.map((room) => ({ roomTypeId: room.id })) }, ratePlans: { create: ratePlans.map((plan) => ({ ratePlanId: plan.id })) } } });
     await this.prisma.auditLog.create({ data: { actorUserId, action: 'PROMOTION_CREATED', entityType: 'Promotion', entityId: promotion.id, after: { hotelId, name: promotion.name, discountType: promotion.discountType, discountValue: Number(promotion.discountValue) } } });
     return promotion;
   }
 
   async updatePromotion(id: string, body: Partial<PromotionDto>, actorUserId: string) {
-    const current = await this.prisma.promotion.findUnique({ where: { id } });
+    const current = await this.prisma.promotion.findUnique({ where: { id }, include: { roomTypes: true, ratePlans: true } });
     if (!current) throw new NotFoundException('Promotion not found.');
-    const updated = await this.prisma.promotion.update({ where: { id }, data: { name: body.name?.trim(), code: body.code?.trim(), discountType: body.discountType, discountValue: body.discountValue, active: body.active, bookingStart: body.bookingStart === undefined ? undefined : body.bookingStart ? parseDateOnly(body.bookingStart, 'bookingStart') : null, bookingEnd: body.bookingEnd === undefined ? undefined : body.bookingEnd ? parseDateOnly(body.bookingEnd, 'bookingEnd') : null, stayStart: body.stayStart === undefined ? undefined : body.stayStart ? parseDateOnly(body.stayStart, 'stayStart') : null, stayEnd: body.stayEnd === undefined ? undefined : body.stayEnd ? parseDateOnly(body.stayEnd, 'stayEnd') : null, minNights: body.minNights, maxNights: body.maxNights, channels: body.channels } });
-    await this.prisma.auditLog.create({ data: { actorUserId, action: body.active === false ? 'PROMOTION_DISABLED' : 'PROMOTION_UPDATED', entityType: 'Promotion', entityId: id, before: { active: current.active, discountValue: Number(current.discountValue) }, after: { active: updated.active, discountValue: Number(updated.discountValue) } } });
+    await assertActorCanManageHotel(this.prisma, actorUserId, current.hotelId);
+    const code = body.code === undefined ? promotionCode(current.code) : promotionCode(body.code);
+    if (code) {
+      const existing = await this.prisma.promotion.findMany({ where: { hotelId: current.hotelId, NOT: { id } }, select: { code: true } });
+      if (existing.some((item) => promotionCode(item.code) === code)) throw new ConflictException('A promotion with this code already exists for the hotel.');
+    }
+    const effective = {
+      discountType: body.discountType ?? current.discountType,
+      discountValue: body.discountValue ?? current.discountValue,
+      bookingStart: body.bookingStart === undefined ? current.bookingStart : promotionDate(body.bookingStart, 'bookingStart'),
+      bookingEnd: body.bookingEnd === undefined ? current.bookingEnd : promotionDate(body.bookingEnd, 'bookingEnd'),
+      stayStart: body.stayStart === undefined ? current.stayStart : promotionDate(body.stayStart, 'stayStart'),
+      stayEnd: body.stayEnd === undefined ? current.stayEnd : promotionDate(body.stayEnd, 'stayEnd'),
+      minNights: body.minNights === undefined ? current.minNights : body.minNights,
+      maxNights: body.maxNights === undefined ? current.maxNights : body.maxNights,
+    };
+    validatePromotionState(effective);
+    const roomTypeIds = body.roomTypeIds === undefined ? undefined : [...new Set(body.roomTypeIds)];
+    const ratePlanIds = body.ratePlanIds === undefined ? undefined : [...new Set(body.ratePlanIds)];
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (roomTypeIds !== undefined) {
+        const rooms = await tx.roomType.findMany({ where: { hotelId: current.hotelId, id: { in: roomTypeIds } }, select: { id: true } });
+        if (rooms.length !== roomTypeIds.length) throw new BadRequestException('Promotion room targets must belong to the selected hotel.');
+        await tx.promotionRoomType.deleteMany({ where: { promotionId: id } });
+        if (roomTypeIds.length) await tx.promotionRoomType.createMany({ data: roomTypeIds.map((roomTypeId) => ({ promotionId: id, roomTypeId })) });
+      }
+      if (ratePlanIds !== undefined) {
+        const plans = await tx.ratePlan.findMany({ where: { roomType: { hotelId: current.hotelId }, id: { in: ratePlanIds } }, select: { id: true } });
+        if (plans.length !== ratePlanIds.length) throw new BadRequestException('Promotion rate-plan targets must belong to the selected hotel.');
+        await tx.promotionRatePlan.deleteMany({ where: { promotionId: id } });
+        if (ratePlanIds.length) await tx.promotionRatePlan.createMany({ data: ratePlanIds.map((ratePlanId) => ({ promotionId: id, ratePlanId })) });
+      }
+      return tx.promotion.update({ where: { id }, data: { name: body.name === undefined ? undefined : body.name.trim(), code, discountType: effective.discountType, discountValue: effective.discountValue, active: body.active, bookingStart: effective.bookingStart, bookingEnd: effective.bookingEnd, stayStart: effective.stayStart, stayEnd: effective.stayEnd, minNights: effective.minNights, maxNights: effective.maxNights, channels: body.channels === undefined ? undefined : normalizedChannels(body.channels) } });
+    });
+    await this.prisma.auditLog.create({ data: { actorUserId, action: body.active === false ? 'PROMOTION_DISABLED' : 'PROMOTION_UPDATED', entityType: 'Promotion', entityId: id, before: { active: current.active, code: current.code, discountType: current.discountType, discountValue: Number(current.discountValue), roomTypeIds: current.roomTypes.map((item) => item.roomTypeId), ratePlanIds: current.ratePlans.map((item) => item.ratePlanId) }, after: { active: updated.active, code: updated.code, discountType: updated.discountType, discountValue: Number(updated.discountValue), roomTypeIds: roomTypeIds ?? current.roomTypes.map((item) => item.roomTypeId), ratePlanIds: ratePlanIds ?? current.ratePlans.map((item) => item.ratePlanId) } } });
+    return updated;
+  }
+
+  async rateSeasons(hotelId: string, actorUserId: string) {
+    await assertActorCanManageHotel(this.prisma, actorUserId, hotelId);
+    return this.prisma.rateSeason.findMany({ where: { hotelId }, orderBy: [{ active: 'desc' }, { priority: 'desc' }, { startDate: 'asc' }], include: { roomTypes: { include: { roomType: { select: { id: true, name: true } } } }, ratePlans: { include: { ratePlan: { select: { id: true, name: true } } } } } });
+  }
+
+  async createRateSeason(hotelId: string, body: RateSeasonDto, actorUserId: string) {
+    await assertActorCanManageHotel(this.prisma, actorUserId, hotelId);
+    const startDate = parseDateOnly(body.startDate, 'startDate');
+    const endDate = parseDateOnly(body.endDate, 'endDate');
+    const daysOfWeek = [...new Set(body.daysOfWeek ?? [])];
+    validateSeasonState(startDate, endDate, daysOfWeek, body.adjustmentType, body.adjustmentValue);
+    const roomTypeIds = [...new Set(body.roomTypeIds ?? [])];
+    const ratePlanIds = [...new Set(body.ratePlanIds ?? [])];
+    const [rooms, plans] = await Promise.all([
+      roomTypeIds.length ? this.prisma.roomType.findMany({ where: { hotelId, id: { in: roomTypeIds } }, select: { id: true } }) : [],
+      ratePlanIds.length ? this.prisma.ratePlan.findMany({ where: { id: { in: ratePlanIds }, roomType: { hotelId } }, select: { id: true } }) : [],
+    ]);
+    if (rooms.length !== roomTypeIds.length || plans.length !== ratePlanIds.length) throw new BadRequestException('Season targets must belong to the selected hotel.');
+    const season = await this.prisma.rateSeason.create({ data: { hotelId, name: body.name.trim(), startDate, endDate, daysOfWeek, adjustmentType: body.adjustmentType, adjustmentValue: body.adjustmentValue, priority: body.priority ?? 0, active: body.active ?? true, roomTypes: { create: roomTypeIds.map((roomTypeId) => ({ roomTypeId })) }, ratePlans: { create: ratePlanIds.map((ratePlanId) => ({ ratePlanId })) } }, include: { roomTypes: true, ratePlans: true } });
+    await this.prisma.auditLog.create({ data: { actorUserId, action: 'RATE_SEASON_CREATED', entityType: 'RateSeason', entityId: season.id, after: { hotelId, name: season.name, startDate: season.startDate, endDate: season.endDate, adjustmentType: season.adjustmentType, adjustmentValue: Number(season.adjustmentValue), roomTypeIds, ratePlanIds } } });
+    return season;
+  }
+
+  async updateRateSeason(id: string, body: Partial<RateSeasonDto>, actorUserId: string) {
+    const current = await this.prisma.rateSeason.findUnique({ where: { id }, include: { roomTypes: true, ratePlans: true } });
+    if (!current) throw new NotFoundException('Rate season not found.');
+    await assertActorCanManageHotel(this.prisma, actorUserId, current.hotelId);
+    const startDate = body.startDate === undefined ? current.startDate : parseDateOnly(body.startDate, 'startDate');
+    const endDate = body.endDate === undefined ? current.endDate : parseDateOnly(body.endDate, 'endDate');
+    const daysOfWeek = body.daysOfWeek === undefined ? current.daysOfWeek : [...new Set(body.daysOfWeek)];
+    const adjustmentType = body.adjustmentType ?? current.adjustmentType;
+    const adjustmentValue = body.adjustmentValue ?? Number(current.adjustmentValue);
+    validateSeasonState(startDate, endDate, daysOfWeek, adjustmentType, adjustmentValue);
+    const roomTypeIds = body.roomTypeIds === undefined ? undefined : [...new Set(body.roomTypeIds)];
+    const ratePlanIds = body.ratePlanIds === undefined ? undefined : [...new Set(body.ratePlanIds)];
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (roomTypeIds !== undefined) {
+        const rooms = await tx.roomType.findMany({ where: { hotelId: current.hotelId, id: { in: roomTypeIds } }, select: { id: true } });
+        if (rooms.length !== roomTypeIds.length) throw new BadRequestException('Season room targets must belong to the selected hotel.');
+        await tx.rateSeasonRoomType.deleteMany({ where: { seasonId: id } });
+        if (roomTypeIds.length) await tx.rateSeasonRoomType.createMany({ data: roomTypeIds.map((roomTypeId) => ({ seasonId: id, roomTypeId })) });
+      }
+      if (ratePlanIds !== undefined) {
+        const plans = await tx.ratePlan.findMany({ where: { roomType: { hotelId: current.hotelId }, id: { in: ratePlanIds } }, select: { id: true } });
+        if (plans.length !== ratePlanIds.length) throw new BadRequestException('Season rate-plan targets must belong to the selected hotel.');
+        await tx.rateSeasonRatePlan.deleteMany({ where: { seasonId: id } });
+        if (ratePlanIds.length) await tx.rateSeasonRatePlan.createMany({ data: ratePlanIds.map((ratePlanId) => ({ seasonId: id, ratePlanId })) });
+      }
+      return tx.rateSeason.update({ where: { id }, data: { name: body.name?.trim(), startDate, endDate, daysOfWeek, adjustmentType, adjustmentValue, priority: body.priority, active: body.active } });
+    });
+    await this.prisma.auditLog.create({ data: { actorUserId, action: body.active === false ? 'RATE_SEASON_DISABLED' : 'RATE_SEASON_UPDATED', entityType: 'RateSeason', entityId: id, before: { active: current.active, adjustmentValue: Number(current.adjustmentValue), roomTypeIds: current.roomTypes.map((item) => item.roomTypeId), ratePlanIds: current.ratePlans.map((item) => item.ratePlanId) }, after: { active: updated.active, adjustmentValue: Number(updated.adjustmentValue), roomTypeIds: roomTypeIds ?? current.roomTypes.map((item) => item.roomTypeId), ratePlanIds: ratePlanIds ?? current.ratePlans.map((item) => item.ratePlanId) } } });
+    return updated;
+  }
+
+  async yieldRules(hotelId: string, actorUserId: string) {
+    await assertActorCanManageHotel(this.prisma, actorUserId, hotelId);
+    return this.prisma.yieldRule.findMany({ where: { hotelId }, orderBy: [{ active: 'desc' }, { priority: 'desc' }, { occupancyFrom: 'asc' }], include: { roomType: { select: { id: true, name: true } } } });
+  }
+
+  async createYieldRule(hotelId: string, body: YieldRuleDto, actorUserId: string) {
+    await assertActorCanManageHotel(this.prisma, actorUserId, hotelId);
+    validateYieldState(body.occupancyFrom, body.occupancyTo, body.adjustmentType, body.adjustmentValue);
+    if (body.roomTypeId && !(await this.prisma.roomType.count({ where: { id: body.roomTypeId, hotelId } }))) throw new BadRequestException('Yield room type must belong to the selected hotel.');
+    const rule = await this.prisma.yieldRule.create({ data: { hotelId, name: body.name.trim(), roomTypeId: body.roomTypeId || null, occupancyFrom: body.occupancyFrom, occupancyTo: body.occupancyTo, adjustmentType: body.adjustmentType, adjustmentValue: body.adjustmentValue, priority: body.priority ?? 0, active: body.active ?? true }, include: { roomType: { select: { id: true, name: true } } } });
+    await this.prisma.auditLog.create({ data: { actorUserId, action: 'YIELD_RULE_CREATED', entityType: 'YieldRule', entityId: rule.id, after: { hotelId, name: rule.name, occupancyFrom: rule.occupancyFrom, occupancyTo: rule.occupancyTo, adjustmentType: rule.adjustmentType, adjustmentValue: Number(rule.adjustmentValue), roomTypeId: rule.roomTypeId } } });
+    return rule;
+  }
+
+  async updateYieldRule(id: string, body: Partial<YieldRuleDto>, actorUserId: string) {
+    const current = await this.prisma.yieldRule.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException('Yield rule not found.');
+    await assertActorCanManageHotel(this.prisma, actorUserId, current.hotelId);
+    const occupancyFrom = body.occupancyFrom ?? current.occupancyFrom;
+    const occupancyTo = body.occupancyTo ?? current.occupancyTo;
+    const adjustmentType = body.adjustmentType ?? current.adjustmentType;
+    const adjustmentValue = body.adjustmentValue ?? Number(current.adjustmentValue);
+    validateYieldState(occupancyFrom, occupancyTo, adjustmentType, adjustmentValue);
+    const roomTypeId = body.roomTypeId === undefined ? current.roomTypeId : body.roomTypeId || null;
+    if (roomTypeId && !(await this.prisma.roomType.count({ where: { id: roomTypeId, hotelId: current.hotelId } }))) throw new BadRequestException('Yield room type must belong to the selected hotel.');
+    const updated = await this.prisma.yieldRule.update({ where: { id }, data: { name: body.name?.trim(), roomTypeId, occupancyFrom, occupancyTo, adjustmentType, adjustmentValue, priority: body.priority, active: body.active }, include: { roomType: { select: { id: true, name: true } } } });
+    await this.prisma.auditLog.create({ data: { actorUserId, action: body.active === false ? 'YIELD_RULE_DISABLED' : 'YIELD_RULE_UPDATED', entityType: 'YieldRule', entityId: id, before: { active: current.active, occupancyFrom: current.occupancyFrom, occupancyTo: current.occupancyTo, adjustmentValue: Number(current.adjustmentValue) }, after: { active: updated.active, occupancyFrom: updated.occupancyFrom, occupancyTo: updated.occupancyTo, adjustmentValue: Number(updated.adjustmentValue) } } });
     return updated;
   }
 

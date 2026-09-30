@@ -8,7 +8,7 @@ import { HotelsService } from '../hotels/hotels.service';
 import { HousekeepingAssignDto, HousekeepingBoardQueryDto, HousekeepingCancelDto, HousekeepingIssueDto, HousekeepingRoomStatusDto } from './housekeeping.dto';
 
 const ACTIVE_TASK_STATUSES: HousekeepingTaskStatus[] = [HousekeepingTaskStatus.PENDING, HousekeepingTaskStatus.ACCEPTED, HousekeepingTaskStatus.CLEANING];
-const MANAGEMENT_ROLES: UserRole[] = [UserRole.ADMIN, UserRole.SUPER_ADMIN];
+const MANAGEMENT_ROLES: UserRole[] = [UserRole.ADMIN, UserRole.CORPORATE_ADMIN, UserRole.SUPER_ADMIN];
 
 const taskInclude = {
   assignedTo: { select: { id: true, name: true } },

@@ -8,7 +8,7 @@ import { MaintenanceService } from './maintenance.service';
 
 @Controller('maintenance')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
 export class MaintenanceController {
   constructor(private service: MaintenanceService) {}
 

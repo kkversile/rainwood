@@ -6,7 +6,7 @@ import { Roles } from '../../common/roles.decorator';
 
 @Controller('jobs')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
 export class JobsController {
   constructor(private p: PrismaService) {}
 

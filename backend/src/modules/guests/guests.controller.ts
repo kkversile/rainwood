@@ -8,7 +8,7 @@ import { GuestsService } from './guests.service';
 
 @Controller('guests')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION')
+@Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION')
 export class GuestsController {
   constructor(private readonly guests: GuestsService) {}
   @Get() list(@CurrentUser() user: any, @Query() query: GuestListQueryDto) { return this.guests.list(user.id, query); }

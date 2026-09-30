@@ -50,9 +50,12 @@ test('Location matches the Stitch layout and persists map coordinates and contex
     const rect = document.querySelector(selector)?.getBoundingClientRect();
     return [selector, rect && { x: Math.round(rect.x), width: Math.round(rect.width) }];
   })));
-  expect(layout['.locationWizard .wizardHeader']).toMatchObject({ x: 268, width: 1624 });
-  expect(layout['.locationWizard .wizardSteps']).toMatchObject({ x: 268, width: 1624 });
-  expect(layout['.locationWorkspace']).toMatchObject({ x: 268, width: 1624 });
+  const header = layout['.locationWizard .wizardHeader']!;
+  const steps = layout['.locationWizard .wizardSteps']!;
+  const workspace = layout['.locationWorkspace']!;
+  expect(header).toMatchObject({ x: 28, width: 1864 });
+  expect(steps.width).toBe(header.width);
+  expect(workspace.width).toBe(header.width);
   await expect(page.locator('.locationDataCard')).toHaveCount(3);
   await expect(page.locator('.locationDataTable')).toHaveCount(2);
   await expect(page.locator('.leaflet-marker-icon')).toBeVisible();

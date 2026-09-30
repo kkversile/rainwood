@@ -4,6 +4,7 @@ import { addDays, parseDateOnly, toDateOnly } from '../../common/dates';
 import { getHotelBusinessDayUtcRange, getHotelOperationalDate } from '../../common/hotel-dates';
 import { PrismaService } from '../../common/prisma.service';
 import { ManagementDashboardQueryDto } from './management-dashboard.dto';
+import { getActorScope, resolveRequestedHotel } from '../../common/role-scope';
 
 const EXCLUDED: ReservationStatus[] = [ReservationStatus.CANCELLED, ReservationStatus.EXPIRED];
 const METRIC_KEYS = ['occupiedRoomNights', 'sellableRoomNights', 'roomRevenue', 'incidentalRevenue', 'payments', 'outstandingBalance', 'arrivals', 'departures', 'inHouse', 'roomsAvailable', 'dirtyRooms', 'cleaningRooms', 'outOfOrderRooms', 'openMaintenanceTickets'] as const;
@@ -23,11 +24,10 @@ export class ManagementDashboardService {
   constructor(private readonly p: PrismaService) {}
 
   private async resolveHotel(userId: string, requestedHotelId?: string) {
-    const admin = await this.p.user.findUnique({ where: { id: userId }, select: { role: true, staffHotelId: true } });
-    if (!admin || (admin.role !== UserRole.ADMIN && admin.role !== UserRole.SUPER_ADMIN)) throw new ForbiddenException('Management dashboard requires Admin or Super Admin access.');
-    if (admin.staffHotelId && requestedHotelId && admin.staffHotelId !== requestedHotelId) throw new NotFoundException('Hotel not found.');
-    const hotelId = admin.staffHotelId ?? requestedHotelId;
-    if (!hotelId) throw new BadRequestException('hotelId is required for a global Admin.');
+    const scope = await getActorScope(this.p, userId);
+    if (!['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN'].includes(scope.role)) throw new ForbiddenException('Management dashboard requires management access.');
+    const hotelId = resolveRequestedHotel(scope, requestedHotelId);
+    if (!hotelId) throw new BadRequestException('hotelId is required for a global administrator.');
     const hotel = await this.p.hotel.findUnique({ where: { id: hotelId }, select: { id: true, name: true, timezoneName: true, active: true } });
     if (!hotel?.active) throw new NotFoundException('Hotel not found.');
     return hotel;

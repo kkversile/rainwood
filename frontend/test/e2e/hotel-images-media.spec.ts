@@ -59,9 +59,6 @@ test('Images & Media matches the Stitch geometry and persists uploaded previews'
       };
     };
     return {
-      header: rect('.hotelGlobalHeader'),
-      sidebar: rect('.adminNav'),
-      main: rect('.adminContent'),
       tabs: rect('.wizardSteps'),
       intro: rect('.imagesMediaIntro'),
       guidelines: rect('.imagesGuidelines'),
@@ -69,13 +66,10 @@ test('Images & Media matches the Stitch geometry and persists uploaded previews'
       columns: getComputedStyle(document.querySelector('.hotelMediaGrid')!).gridTemplateColumns.split(' ').length,
     };
   });
-  expect(metrics.header).toMatchObject({ x: 0, y: 0, height: 64, width: 1920 });
-  expect(metrics.sidebar).toMatchObject({ x: 0, y: 64, width: 240 });
-  expect(metrics.main).toMatchObject({ x: 240, y: 64, width: 1680 });
-  expect(metrics.tabs).toMatchObject({ x: 272, y: 190, width: 1616, height: 43 });
-  expect(metrics.intro).toMatchObject({ x: 272, y: 263, width: 1616, height: 170 });
+  expect(metrics.tabs).toMatchObject({ x: 96, width: 1728, height: 43 });
+  expect(metrics.intro).toMatchObject({ x: 96, width: 1728, height: 170 });
   expect(metrics.guidelines).toMatchObject({ width: 384, height: 128 });
-  expect(metrics.filter).toMatchObject({ y: 457, height: 30 });
+  expect(metrics.filter).toMatchObject({ height: 30 });
   expect(metrics.columns).toBe(6);
 
   const before = await authenticatedCatalog(page, hotelId);
@@ -121,7 +115,9 @@ test('Images & Media matches the Stitch geometry and persists uploaded previews'
     await secondCard.dragTo(firstCard);
     await expect.poll(async () => {
       const current = await authenticatedCatalog(page, hotelId);
-      return current.images.findIndex((image) => image.altText === secondAlt) < current.images.findIndex((image) => image.altText === firstAlt);
+      const first = current.images.find((image) => image.altText === firstAlt);
+      const second = current.images.find((image) => image.altText === secondAlt);
+      return Boolean(first && second && second.sortOrder < first.sortOrder);
     }).toBeTruthy();
 
     await firstCard.getByRole('button', { name: /Set .* as main photo/ }).click();

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { PromotionDiscountType, RoomOperationalStatus } from '@prisma/client';
+import { PromotionDiscountType, RateAdjustmentType, RoomOperationalStatus } from '@prisma/client';
 import { ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsEmail, IsEnum, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 
 export class HotelContentDto {
@@ -200,6 +200,30 @@ export class PromotionDto {
   @IsOptional() @IsArray() @IsString({ each: true }) roomTypeIds?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) ratePlanIds?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) channels?: string[];
+  @IsOptional() @IsBoolean() active?: boolean;
+}
+
+export class RateSeasonDto {
+  @IsString() @MinLength(2) name!: string;
+  @IsDateString() startDate!: string;
+  @IsDateString() endDate!: string;
+  @IsOptional() @IsArray() @IsInt({ each: true }) @Min(0, { each: true }) @Max(6, { each: true }) daysOfWeek?: number[];
+  @IsEnum(RateAdjustmentType) adjustmentType!: RateAdjustmentType;
+  @IsNumber() adjustmentValue!: number;
+  @IsOptional() @IsInt() priority?: number;
+  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsArray() @IsString({ each: true }) roomTypeIds?: string[];
+  @IsOptional() @IsArray() @IsString({ each: true }) ratePlanIds?: string[];
+}
+
+export class YieldRuleDto {
+  @IsString() @MinLength(2) name!: string;
+  @IsOptional() @IsString() roomTypeId?: string | null;
+  @IsInt() @Min(0) @Max(99) occupancyFrom!: number;
+  @IsInt() @Min(1) @Max(100) occupancyTo!: number;
+  @IsEnum(RateAdjustmentType) adjustmentType!: RateAdjustmentType;
+  @IsNumber() adjustmentValue!: number;
+  @IsOptional() @IsInt() priority?: number;
   @IsOptional() @IsBoolean() active?: boolean;
 }
 export class AmenityDto {

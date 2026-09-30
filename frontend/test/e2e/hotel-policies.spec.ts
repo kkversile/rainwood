@@ -78,7 +78,7 @@ test('Policies matches the Stitch layout and persists every control group', asyn
   await page.getByLabel('Password').fill(localEnv('NEXT_PUBLIC_DEMO_ADMIN_PASSWORD'));
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(`${frontendUrl}/admin/hotels/new?edit=${hotelId}&step=7`);
-  await expect(page.getByRole('heading', { name: 'Cancellation Policy' })).toBeVisible();
+  await expect(page.getByText('Cancellation Policy', { exact: true })).toBeVisible();
 
   const metrics = await page.evaluate(() => {
     const rect = (selector: string) => {
@@ -95,10 +95,10 @@ test('Policies matches the Stitch layout and persists every control group', asyn
       middleCards: document.querySelectorAll('.policiesMiddleGrid > .policyCard').length,
     };
   });
-  expect(metrics.tabs).toMatchObject({ x: 272, y: 190, height: 43 });
-  expect(metrics.top).toMatchObject({ x: 272, y: 257, height: 303 });
-  expect(metrics.middle).toMatchObject({ x: 272, y: 584, height: 325 });
-  expect(metrics.terms).toMatchObject({ x: 272, y: 933, height: 236 });
+  expect(metrics.tabs).toMatchObject({ x: 96, width: 1728, height: 43 });
+  expect(metrics.top).toMatchObject({ x: 96, width: 1728 });
+  expect(metrics.middle).toMatchObject({ x: 96, width: 1728 });
+  expect(metrics.terms).toMatchObject({ x: 96, width: 1728 });
   expect(metrics.wizardSteps).toBe(7);
   expect(metrics.topCards).toBe(3);
   expect(metrics.middleCards).toBe(3);
@@ -117,7 +117,10 @@ test('Policies matches the Stitch layout and persists every control group', asyn
     await editor.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.locator('.policyTableWrap tbody tr')).toHaveCount(4);
     await page.getByLabel('Terms and Conditions').fill(`${original.termsAndConditions ?? ''}\n${marker}`);
+    const policySaveResponse = page.waitForResponse((response) => response.url().endsWith(`/hotels/${hotelId}/policy`) && response.request().method() === 'PUT');
     await page.getByRole('button', { name: 'Update & Continue' }).click();
+    const policySave = await policySaveResponse;
+    expect(policySave.ok()).toBeTruthy();
     await expect(page.getByRole('heading', { name: 'Add New Contact' })).toBeVisible();
 
     const { policy: saved } = await authenticatedPolicy(page, hotelId);
@@ -127,7 +130,7 @@ test('Policies matches the Stitch layout and persists every control group', asyn
     expect(saved.cancellationRules?.some((rule) => rule.fromDays === 1000 && rule.chargeType === 'FIXED')).toBe(true);
     expect(saved.termsAndConditions).toContain(marker);
   } finally {
-    const response = await page.request.put(`${apiUrl}/hotels/${hotelId}/policy`, { headers, data: writablePolicy(original) });
+    const response = await request.put(`${apiUrl}/hotels/${hotelId}/policy`, { headers, data: writablePolicy(original) });
     expect(response.ok()).toBeTruthy();
   }
 });

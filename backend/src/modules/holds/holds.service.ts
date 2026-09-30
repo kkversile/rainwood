@@ -71,7 +71,7 @@ export class HoldsService {
   async get(rawToken: string, user?: { id: string; role?: string }) {
     const hold = await this.p.inventoryHold.findUnique({ where: { tokenHash: sha256(rawToken) }, include: { lines: { include: { nights: true, roomType: true, ratePlan: true } }, hotel: true } });
     if (!hold) throw new NotFoundException('Hold not found');
-    const authorizedAdmin = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION'].includes(user?.role ?? '');
+    const authorizedAdmin = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'].includes(user?.role ?? '');
     if (hold.agentId && (!user || (user.id !== hold.agentId && !authorizedAdmin))) throw new ForbiddenException('This agent hold belongs to another agent.');
     if (hold.status === 'ACTIVE' && hold.expiresAt <= new Date()) {
       await this.release(hold.id, 'EXPIRED');

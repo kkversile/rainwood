@@ -10,6 +10,7 @@ datasource db {
 
 enum UserRole {
   SUPER_ADMIN
+  CORPORATE_ADMIN
   ADMIN
   RESERVATION
   ACCOUNTS
@@ -54,6 +55,11 @@ enum BookingSource {
 }
 
 enum PromotionDiscountType {
+  PERCENT
+  FIXED
+}
+
+enum RateAdjustmentType {
   PERCENT
   FIXED
 }
@@ -456,6 +462,8 @@ model Hotel {
   waitlist             WaitlistEntry[]
   businessDays         HotelBusinessDay[]
   promotions           Promotion[]
+  rateSeasons          RateSeason[]
+  yieldRules           YieldRule[]
   createdAt            DateTime                   @default(now())
   updatedAt            DateTime                   @updatedAt
 
@@ -671,28 +679,28 @@ model HotelAmenity {
 }
 
 model RoomType {
-  id                     String              @id @default(cuid())
+  id                     String               @id @default(cuid())
   hotelId                String
-  hotel                  Hotel               @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  hotel                  Hotel                @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   code                   String
   name                   String
   roomTypeTitle          String?
-  roomsAvailable         Int                 @default(0)
-  preferredFor           String              @default("")
-  acAvailable            Boolean             @default(false)
+  roomsAvailable         Int                  @default(0)
+  preferredFor           String               @default("")
+  acAvailable            Boolean              @default(false)
   description            String?
-  maxAdults              Int                 @default(2)
-  maxChildren            Int                 @default(1)
-  maxOccupancy           Int                 @default(3)
+  maxAdults              Int                  @default(2)
+  maxChildren            Int                  @default(1)
+  maxOccupancy           Int                  @default(3)
   checkInTime            String?
   checkOutTime           String?
-  gstType                String              @default("Included")
-  gstPercentage          String              @default("GST - 0%")
-  inbuiltAmenities       String              @default("")
-  breakfastIncluded      Boolean             @default(false)
-  lunchIncluded          Boolean             @default(false)
-  dinnerIncluded         Boolean             @default(false)
-  active                 Boolean             @default(true)
+  gstType                String               @default("Included")
+  gstPercentage          String               @default("GST - 0%")
+  inbuiltAmenities       String               @default("")
+  breakfastIncluded      Boolean              @default(false)
+  lunchIncluded          Boolean              @default(false)
+  dinnerIncluded         Boolean              @default(false)
+  active                 Boolean              @default(true)
   axisRoomId             String?
   images                 RoomImage[]
   ratePlans              RatePlan[]
@@ -701,8 +709,10 @@ model RoomType {
   holdLines              InventoryHoldLine[]
   waitlist               WaitlistEntry[]
   physicalRooms          Room[]
-  guestPreferredProfiles GuestProfile[]      @relation("GuestPreferredRoomType")
+  guestPreferredProfiles GuestProfile[]       @relation("GuestPreferredRoomType")
   promotionRooms         PromotionRoomType[]
+  seasonRooms            RateSeasonRoomType[]
+  yieldRules             YieldRule[]
 
   @@unique([hotelId, code])
   @@unique([hotelId, axisRoomId])
@@ -722,16 +732,16 @@ model RoomImage {
 }
 
 model RatePlan {
-  id                String              @id @default(cuid())
+  id                String               @id @default(cuid())
   roomTypeId        String
-  roomType          RoomType            @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  roomType          RoomType             @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
   masterId          String
-  master            RatePlanMaster      @relation(fields: [masterId], references: [id], onDelete: Restrict)
+  master            RatePlanMaster       @relation(fields: [masterId], references: [id], onDelete: Restrict)
   code              String
   name              String
   mealPlan          String
   description       String?
-  active            Boolean             @default(true)
+  active            Boolean              @default(true)
   axisRatePlanId    String?
   rates             RateDay[]
   lines             ReservationLine[]
@@ -739,6 +749,7 @@ model RatePlan {
   cancellationRules CancellationRule[]
   assignedAgents    AgentRatePlan[]
   promotionRates    PromotionRatePlan[]
+  seasonRates       RateSeasonRatePlan[]
 
   @@unique([roomTypeId, code])
   @@unique([roomTypeId, masterId])
@@ -966,6 +977,66 @@ model PromotionRatePlan {
 
   @@id([promotionId, ratePlanId])
   @@index([ratePlanId])
+}
+
+model RateSeason {
+  id              String               @id @default(cuid())
+  hotelId         String
+  hotel           Hotel                @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  name            String
+  startDate       DateTime             @db.Date
+  endDate         DateTime             @db.Date
+  daysOfWeek      Int[]                @default([])
+  adjustmentType  RateAdjustmentType
+  adjustmentValue Decimal              @db.Decimal(12, 2)
+  priority        Int                  @default(0)
+  active          Boolean              @default(true)
+  roomTypes       RateSeasonRoomType[]
+  ratePlans       RateSeasonRatePlan[]
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([hotelId, active, startDate, endDate, priority])
+}
+
+model RateSeasonRoomType {
+  seasonId   String
+  roomTypeId String
+  season     RateSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  roomType   RoomType   @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@id([seasonId, roomTypeId])
+  @@index([roomTypeId])
+}
+
+model RateSeasonRatePlan {
+  seasonId   String
+  ratePlanId String
+  season     RateSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  ratePlan   RatePlan   @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+
+  @@id([seasonId, ratePlanId])
+  @@index([ratePlanId])
+}
+
+model YieldRule {
+  id              String             @id @default(cuid())
+  hotelId         String
+  hotel           Hotel              @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  name            String
+  roomTypeId      String?
+  roomType        RoomType?          @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  occupancyFrom   Int
+  occupancyTo     Int
+  adjustmentType  RateAdjustmentType
+  adjustmentValue Decimal            @db.Decimal(12, 2)
+  priority        Int                @default(0)
+  active          Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([hotelId, active, occupancyFrom, occupancyTo, priority])
+  @@index([roomTypeId])
 }
 
 model InventoryHold {

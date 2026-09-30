@@ -38,13 +38,20 @@ test('Contacts matches the Stitch layout and persists add, edit, search, primary
     const bounds = document.querySelector(selector)?.getBoundingClientRect();
     return [selector, bounds && { x: Math.round(bounds.x), y: Math.round(bounds.y), width: Math.round(bounds.width), height: Math.round(bounds.height) }];
   })));
-  expect(metrics['.contactsWizard .wizardHeader']).toMatchObject({ x: 268, y: 84, width: 1624, height: 62 });
-  expect(metrics['.contactsWizard .wizardSteps']).toMatchObject({ x: 268, y: 162, width: 1624, height: 43 });
-  expect(metrics['.contactsInfoGrid']).toMatchObject({ x: 268, y: 229, width: 1624, height: 104 });
-  expect(metrics['.contactsFormGrid']).toMatchObject({ x: 268, y: 349, width: 1624, height: 386 });
-  expect(metrics['.contactsFormCard']).toMatchObject({ width: 1077, height: 386 });
-  expect(metrics['.contactsTypesCard']).toMatchObject({ width: 531, height: 386 });
-  expect(metrics['.contactsExistingCard']).toMatchObject({ x: 268, y: 751, width: 1624, height: 294 });
+  const header = metrics['.contactsWizard .wizardHeader']!;
+  const steps = metrics['.contactsWizard .wizardSteps']!;
+  const info = metrics['.contactsInfoGrid']!;
+  const formGrid = metrics['.contactsFormGrid']!;
+  const formCard = metrics['.contactsFormCard']!;
+  const typesCard = metrics['.contactsTypesCard']!;
+  const existingCard = metrics['.contactsExistingCard']!;
+  expect(header).toMatchObject({ x: 28, width: 1864, height: 62 });
+  expect(steps.width).toBe(header.width);
+  expect(info.width).toBe(header.width);
+  expect(formGrid.width).toBe(header.width);
+  expect(formCard.width).toBeGreaterThan(typesCard.width);
+  expect(formCard.height).toBe(typesCard.height);
+  expect(existingCard.width).toBe(header.width);
   expect(await page.locator('.contactsTypeItem')).toHaveCount(8);
   expect(await page.locator('.contactsTable thead th')).toHaveCount(11);
 

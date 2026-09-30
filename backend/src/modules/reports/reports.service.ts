@@ -12,16 +12,17 @@ function flag(value: unknown) {
 
 @Injectable()
 export class ReportsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(public readonly prisma: PrismaService) {}
 
-  async dashboard() {
+  async dashboard(hotelId?: string) {
+    const hotelWhere = hotelId ? { hotelId } : {};
     const [bookings, pendingSync, pendingPayments, revenue, arrivals, failedJobs] = await Promise.all([
-      this.prisma.reservation.count({ where: { status: { not: 'CANCELLED' } } }),
-      this.prisma.reservation.count({ where: { syncStatus: { in: ['PENDING', 'RETRY', 'FAILED', 'MANUAL_ACTION_REQUIRED', 'DEAD_LETTER'] } } }),
-      this.prisma.reservation.aggregate({ _sum: { balanceAmount: true }, where: { balanceAmount: { gt: 0 }, status: { not: 'CANCELLED' } } }),
-      this.prisma.reservation.aggregate({ _sum: { totalAmount: true }, where: { status: { in: ['CONFIRMED', 'COMPLETED', 'MODIFIED'] } } }),
-      this.dashboardArrivals(),
-      this.prisma.outboxJob.count({ where: { status: { in: ['FAILED', 'DEAD_LETTER'] } } }),
+      this.prisma.reservation.count({ where: { ...hotelWhere, status: { not: 'CANCELLED' } } }),
+      this.prisma.reservation.count({ where: { ...hotelWhere, syncStatus: { in: ['PENDING', 'RETRY', 'FAILED', 'MANUAL_ACTION_REQUIRED', 'DEAD_LETTER'] } } }),
+      this.prisma.reservation.aggregate({ _sum: { balanceAmount: true }, where: { ...hotelWhere, balanceAmount: { gt: 0 }, status: { not: 'CANCELLED' } } }),
+      this.prisma.reservation.aggregate({ _sum: { totalAmount: true }, where: { ...hotelWhere, status: { in: ['CONFIRMED', 'COMPLETED', 'MODIFIED'] } } }),
+      this.dashboardArrivals(hotelId),
+      this.dashboardFailedJobs(hotelId),
     ]);
     return { bookings, pendingSync, balancePending: Number(pendingPayments._sum.balanceAmount ?? 0), revenue: Number(revenue._sum.totalAmount ?? 0), arrivals, failedJobs };
   }
@@ -108,7 +109,7 @@ export class ReportsService {
       orderBy: [{ checkIn: 'asc' }, { hotel: { name: 'asc' } }, { createdAt: 'asc' }],
       take: 5000,
     }) : [];
-    const canSeeInternalRemarks = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION'].includes(user?.role ?? '');
+    const canSeeInternalRemarks = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'].includes(user?.role ?? '');
     const dateValue = (value: Date | null | undefined) => value ? value.toISOString().slice(0, 10) : null;
     const reservationItems = reservations.map((reservation) => {
       const roomTypes = new Map<string, { id: string; name: string; rooms: number }>();
@@ -201,9 +202,19 @@ export class ReportsService {
     return hotel ? getHotelOperationalDate(hotel.timezoneName) : todayUtc();
   }
 
-  private async dashboardArrivals() {
-    const hotels = await this.prisma.hotel.findMany({ where: { active: true }, select: { id: true, timezoneName: true } });
+  private async dashboardArrivals(hotelId?: string) {
+    const hotels = await this.prisma.hotel.findMany({ where: { id: hotelId ?? undefined, active: true }, select: { id: true, timezoneName: true } });
     const counts = await Promise.all(hotels.map((hotel) => this.prisma.reservation.count({ where: { hotelId: hotel.id, status: 'CONFIRMED', checkIn: getHotelOperationalDate(hotel.timezoneName) } })));
     return counts.reduce((sum, count) => sum + count, 0);
+  }
+
+  private async dashboardFailedJobs(hotelId?: string) {
+    const where: any = { status: { in: ['FAILED', 'DEAD_LETTER'] } };
+    if (hotelId) {
+      const reservations = await this.prisma.reservation.findMany({ where: { hotelId }, select: { id: true } });
+      where.aggregateType = 'Reservation';
+      where.aggregateId = { in: reservations.map((reservation) => reservation.id) };
+    }
+    return this.prisma.outboxJob.count({ where });
   }
 }

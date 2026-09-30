@@ -27,9 +27,7 @@ export function setAccessToken(token: string | null, role?: string) {
     if (token) window.localStorage.setItem('rainwood_access_token', token);
     else {
       window.localStorage.removeItem('rainwood_access_token');
-      window.localStorage.removeItem('rainwood_user_role');
     }
-    if (token && role) window.localStorage.setItem('rainwood_user_role', role);
     window.dispatchEvent(new Event('rainwood-auth-change'));
   }
 }

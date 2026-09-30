@@ -24,6 +24,7 @@ function money(value: unknown) { return value == null ? '—' : `INR ${Number(va
 
 export default function RatesPage() {
   const [hotels, setHotels] = useState<Hotel[]>([]);
+  const [profile, setProfile] = useState<{ role: string; staffHotelId?: string | null }>({ role: '' });
   const [hotelId, setHotelId] = useState('');
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [selectedRoomIds, setSelectedRoomIds] = useState<string[]>([]);
@@ -39,7 +40,7 @@ export default function RatesPage() {
   const [busy, setBusy] = useState(false);
   const range = useMemo(() => dates(fromDate, toDate), [fromDate, toDate]);
 
-  useEffect(() => { apiRequest<Hotel[]>('/hotels').then((items) => { setHotels(items); if (!hotelId && items[0]) setHotelId(items[0].id); }).catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load hotels')); }, []);
+  useEffect(() => { apiRequest<{ user: { role: string; staffHotelId?: string | null } }>('/auth/me').then(({ user }) => { setProfile(user); return apiRequest<Hotel[]>('/hotels').then((items) => { const visible = user.role === 'ADMIN' && user.staffHotelId ? items.filter((item) => item.id === user.staffHotelId) : items; setHotels(visible); if (!hotelId && visible[0]) setHotelId(user.role === 'ADMIN' && user.staffHotelId ? user.staffHotelId : visible[0].id); }); }).catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load hotels')); }, []);
   useEffect(() => { if (!hotelId) return; const query = fromDate && toDate ? `?startDate=${fromDate}&endDate=${toDate}` : ''; apiRequest<Catalog>(`/hotels/${hotelId}/catalog${query}`).then(setCatalog).catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load rates')); }, [hotelId, fromDate, toDate]);
 
   const rateRows = (catalog?.rooms ?? []).flatMap((room) => room.ratePlans.map((plan) => ({ room, plan })));

@@ -44,7 +44,6 @@ test('rate plan import opens a locked modal and waits for explicit import', asyn
   await dialog.locator('input[type=file]').setInputFiles({ name: 'rates.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('test workbook') });
   await expect(dialog.getByText('rates.xlsx', { exact: true })).toBeVisible();
   await expect(importButton).toBeEnabled();
-  await page.waitForTimeout(300);
   expect(postCount).toBe(0);
 
   await importButton.click();

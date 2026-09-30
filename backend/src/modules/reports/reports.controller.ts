@@ -1,23 +1,32 @@
-import { Controller, Get, Header, Query, UseGuards } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Header, Query, UseGuards } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { ReportQueryDto } from './reports.dto';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
 import { CurrentUser } from '../../common/current-user.decorator';
+import { getActorScope } from '../../common/role-scope';
 
 @Controller('reports')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTS', 'RESERVATION', 'VIEWER')
+@Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'ACCOUNTS', 'RESERVATION', 'VIEWER')
 export class ReportsController {
   constructor(private service: ReportsService) {}
-  @Get('dashboard') dashboard() { return this.service.dashboard(); }
-  @Get('reservations') reservations(@Query() query: ReportQueryDto) { return this.service.reservations(query); }
-  @Get('summary') summary(@Query() query: ReportQueryDto) { return this.service.summary(query); }
-  @Get('expected-arrivals') expectedArrivals(@Query() query: ReportQueryDto, @CurrentUser() user: any) { return this.service.expectedArrivals(query, user); }
-  @Get('arrivals') arrivals(@Query() query: ReportQueryDto) { return this.service.arrivals(query); }
-  @Get('departures') departures(@Query() query: ReportQueryDto) { return this.service.departures(query); }
-  @Get('payments') payments(@Query() query: ReportQueryDto) { return this.service.payments(query); }
-  @Get('cancellations') cancellations(@Query() query: ReportQueryDto) { return this.service.cancellations(query); }
-  @Get('reservations.csv') @Header('content-type', 'text/csv; charset=utf-8') export(@Query() query: ReportQueryDto) { return this.service.exportCsv(query); }
+  @Get('dashboard') async dashboard(@CurrentUser() user: any) { const scope = await getActorScope(this.service.prisma, user.id); return this.service.dashboard(scope.isGlobal ? undefined : scope.hotelId!); }
+  @Get('reservations') async reservations(@Query() query: ReportQueryDto, @CurrentUser() user: any) { return this.service.reservations(await this.scopedQuery(query, user)); }
+  @Get('summary') async summary(@Query() query: ReportQueryDto, @CurrentUser() user: any) { return this.service.summary(await this.scopedQuery(query, user)); }
+  @Get('expected-arrivals') async expectedArrivals(@Query() query: ReportQueryDto, @CurrentUser() user: any) { const scoped = await this.scopedQuery(query, user); return this.service.expectedArrivals(scoped, user); }
+  @Get('arrivals') async arrivals(@Query() query: ReportQueryDto, @CurrentUser() user: any) { return this.service.arrivals(await this.scopedQuery(query, user)); }
+  @Get('departures') async departures(@Query() query: ReportQueryDto, @CurrentUser() user: any) { return this.service.departures(await this.scopedQuery(query, user)); }
+  @Get('payments') async payments(@Query() query: ReportQueryDto, @CurrentUser() user: any) { return this.service.payments(await this.scopedQuery(query, user)); }
+  @Get('cancellations') async cancellations(@Query() query: ReportQueryDto, @CurrentUser() user: any) { return this.service.cancellations(await this.scopedQuery(query, user)); }
+  @Get('reservations.csv') @Header('content-type', 'text/csv; charset=utf-8') async export(@Query() query: ReportQueryDto, @CurrentUser() user: any) { return this.service.exportCsv(await this.scopedQuery(query, user)); }
+
+  private async scopedQuery(query: ReportQueryDto, user: any) {
+    const scope = await getActorScope(this.service.prisma, user.id);
+    if (scope.isGlobal) return query;
+    const requested = [...(query.hotelIds ?? []), ...(query.hotelId ? [query.hotelId] : [])];
+    if (requested.some((hotelId) => hotelId !== scope.hotelId)) throw new ForbiddenException('Hotel scope does not allow this report.');
+    return { ...query, hotelId: scope.hotelId!, hotelIds: [scope.hotelId!] };
+  }
 }

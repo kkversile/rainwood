@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 
 export type RateValue = {
   amount: number;
+  baseAmount: number;
+  overrideAmount: number | null;
   taxAmount: number;
   childAmount: number;
   extraAdultAmount: number;
@@ -24,8 +26,12 @@ function occupancyMap(value: unknown) {
 @Injectable()
 export class RateResolverService {
   resolve(base: any, agentRatePlanId?: string): RateValue {
+    const baseAmount = numberOr(base?.baseAmount ?? base?.amount, 0);
+    const overrideAmount = base?.overrideAmount == null ? null : numberOr(base.overrideAmount, baseAmount);
     return {
-      amount: numberOr(base?.overrideAmount ?? base?.baseAmount ?? base?.amount, 0),
+      amount: overrideAmount ?? baseAmount,
+      baseAmount,
+      overrideAmount,
       taxAmount: numberOr(base?.taxAmount, 0),
       childAmount: numberOr(base?.childAmount, 0),
       extraAdultAmount: numberOr(base?.extraAdultAmount, 0),

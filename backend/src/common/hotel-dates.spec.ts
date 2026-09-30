@@ -23,4 +23,8 @@ describe('hotel date utilities', () => {
   it('returns the current operational calendar date', () => {
     expect(toDateOnly(getHotelOperationalDate('Asia/Kolkata'))).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
+
+  it('uses the hotel-local date at a UTC boundary', () => {
+    expect(toDateOnly(getHotelOperationalDate('Asia/Kolkata', new Date('2026-09-27T20:00:00.000Z')))).toBe('2026-09-28');
+  });
 });

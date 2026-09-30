@@ -5,7 +5,7 @@ import { ManagementDashboardService } from './management-dashboard.service';
 
 function setup(overrides: Record<string, any> = {}) {
   const hotel = { id: 'hotel-1', name: 'RainWood Demo', timezoneName: 'Asia/Kolkata', active: true };
-  const admin = { role: 'ADMIN', staffHotelId: null };
+  const admin = { role: 'CORPORATE_ADMIN', staffHotelId: null, staffHotel: null };
   const night = { rooms: 2, totalAmount: new Prisma.Decimal(200), reservationLine: { roomType: { id: 'type-1', name: 'Deluxe' }, reservation: { id: 'reservation-1', source: 'DIRECT' } } };
   const p: any = {
     user: { findUnique: jest.fn().mockResolvedValue(admin) }, hotel: { findUnique: jest.fn().mockResolvedValue(hotel) },
@@ -76,7 +76,7 @@ describe('ManagementDashboardService', () => {
   });
 
   it('enforces hotel scope and date range safety', async () => {
-    const { service } = setup({ user: { findUnique: jest.fn().mockResolvedValue({ role: 'ADMIN', staffHotelId: 'hotel-own' }) } });
+    const { service } = setup({ user: { findUnique: jest.fn().mockResolvedValue({ role: 'ADMIN', staffHotelId: 'hotel-own', staffHotel: { id: 'hotel-own', active: true } }) } });
     await expect(service.dashboard('admin-1', { hotelId: 'hotel-other' })).rejects.toThrow('Hotel not found');
     const global = setup();
     await expect(global.service.dashboard('admin-1', { hotelId: 'hotel-1', from: '2025-01-01', to: '2026-12-31' })).rejects.toThrow('cannot exceed 366 days');

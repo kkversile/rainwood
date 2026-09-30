@@ -38,7 +38,7 @@ export class AgentsController {
   addDocument(@CurrentUser() user: any, @Body() body: { documentType?: string; description?: string; fileId?: string }) { return this.s.addDocument(user.id, body); }
 
   @Patch(':agentId/documents/:id')
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
   review(@Param('agentId') agentId: string, @Param('id') id: string, @Body() body: { status?: string; reviewRemark?: string }) {
     if (!body.status) throw new BadRequestException('Document status is required');
     return this.s.reviewDocument(agentId, id, body.status, body.reviewRemark);

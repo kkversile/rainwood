@@ -8,7 +8,7 @@ import { RolesGuard } from '../../common/roles.guard';
 
 @Controller('supplementary-charges')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
 export class SupplementaryChargesController {
   constructor(private service: SupplementaryChargesService) {}
   @Get() list(@Query('hotelId') hotelId?: string) { return this.service.list(hotelId); }

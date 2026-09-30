@@ -6,7 +6,7 @@ describe('RateResolverService', () => {
 
   it('resolves the selected RateDay without an agent price source', () => {
     const result = resolver.resolve(base, 'agent-plan-1');
-    expect(result).toEqual({ amount: 5000, taxAmount: 500, childAmount: 200, extraAdultAmount: 300, occupancyPrices: { double: 5000, triple: 6200 }, priceSource: 'RATE_PLAN', agentRatePlanId: 'agent-plan-1' });
+    expect(result).toEqual({ amount: 5000, baseAmount: 5000, overrideAmount: null, taxAmount: 500, childAmount: 200, extraAdultAmount: 300, occupancyPrices: { double: 5000, triple: 6200 }, priceSource: 'RATE_PLAN', agentRatePlanId: 'agent-plan-1' });
   });
 
   it('uses the RateDay for an active agent assignment', () => {

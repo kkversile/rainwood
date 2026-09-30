@@ -12,11 +12,11 @@ export class SiteSettingsController {
 
   @Get('admin')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   adminSettings() { return this.service.adminSettings(); }
 
   @Put('logo')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   saveLogo(@Body() body: { logoUrl?: string | null }) { return this.service.saveLogo(body.logoUrl?.trim() || null); }
 }

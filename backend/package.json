@@ -13,6 +13,7 @@
     "housekeeping:integrity": "tsx scripts/check-housekeeping-integrity.ts",
     "guests:backfill": "tsx scripts/backfill-guest-profiles.ts",
     "guests:identity-check": "tsx scripts/check-guest-identity-integrity.ts",
+    "roles:scope-check": "tsx scripts/check-role-scope-integrity.ts",
     "test": "jest --runInBand",
     "test:e2e": "jest --config test/jest-e2e.json --runInBand",
     "lint": "eslint src prisma --max-warnings 0",

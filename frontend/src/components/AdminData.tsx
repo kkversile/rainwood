@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { createContext, FormEvent, useContext, useEffect, useState } from 'react';
 import { apiRequest, setAccessToken } from '../lib/api';
 import { useDialog } from './ReactDialog';
 import { ReservationPaymentSchedule, type PaymentSchedule } from './ReservationPaymentSchedule';
@@ -8,6 +8,11 @@ import { ReservationPaymentSchedule, type PaymentSchedule } from './ReservationP
 let refreshInFlight: Promise<string> | null = null;
 let staffSessionCheckedAt = 0;
 const STAFF_SESSION_CACHE_MS = 5 * 60 * 1000;
+
+export type AdminProfile = { id: string; name: string; email: string; role: string; staffHotelId?: string | null; staffDepartment?: string | null; jobTitle?: string | null; staffHotel?: { id: string; name: string } | null };
+const AdminProfileContext = createContext<{ profile: AdminProfile | null; loading: boolean }>({ profile: null, loading: true });
+
+export function useAdminProfile() { return useContext(AdminProfileContext); }
 
 function refreshStaffSession() {
   if (staffSessionCheckedAt && Date.now() - staffSessionCheckedAt < STAFF_SESSION_CACHE_MS) {
@@ -26,11 +31,12 @@ export function invalidateStaffSession() { staffSessionCheckedAt = 0; }
 
 export function AdminAuthGate({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
+  const [profile, setProfile] = useState<AdminProfile | null>(null);
   useEffect(() => {
-    refreshStaffSession().then(() => setReady(true)).catch((reason) => { setAccessToken(null); window.location.href = reason instanceof Error && reason.message === 'AGENT_SESSION' ? `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/agent` : reason instanceof Error && reason.message === 'SERVICE_STAFF_SESSION' ? `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/staff` : `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login?next=${encodeURIComponent(window.location.pathname)}`; });
+    refreshStaffSession().then(() => apiRequest<{ user: AdminProfile }>('/auth/me')).then((body) => { setProfile(body.user); setReady(true); }).catch((reason) => { setAccessToken(null); window.location.href = reason instanceof Error && reason.message === 'AGENT_SESSION' ? `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/agent` : reason instanceof Error && reason.message === 'SERVICE_STAFF_SESSION' ? `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/staff` : `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login?next=${encodeURIComponent(window.location.pathname)}`; });
   }, []);
   if (!ready) return <main className="page"><p className="loading">Checking staff session - </p></main>;
-  return <>{children}</>;
+  return <AdminProfileContext.Provider value={{ profile, loading: false }}>{children}</AdminProfileContext.Provider>;
 }
 
 function useData<T>(path: string) {
@@ -102,7 +108,7 @@ export function JobsData() {
   return <section className="panel"><div className="tableScroll"><table><thead><tr><th>Job</th><th>Aggregate</th><th>Attempts</th><th>Status</th><th>Next run</th></tr></thead><tbody>{data.map((row) => <tr key={row.id}><td>{row.type}</td><td>{row.aggregateId}</td><td>{row.attempts}</td><td>{row.status}</td><td>{new Date(row.availableAt).toLocaleString()}</td></tr>)}{!data.length && <tr><td colSpan={5}><p className="empty">No background jobs are queued.</p></td></tr>}</tbody></table></div></section>;
 }
 
-export function UsersData() {
+function LegacyUsersData() {
   type UserRow = { id: string; name: string; email: string; mobile?: string | null; role: string; active: boolean; staffDepartment?: string | null; jobTitle?: string | null; staffHotel?: { id: string; name: string } | null };
   type Hotel = { id: string; name: string };
   const [reload, setReload] = useState(0); const [showStaffForm, setShowStaffForm] = useState(false); const [busy, setBusy] = useState(false); const [formError, setFormError] = useState('');
@@ -112,6 +118,24 @@ export function UsersData() {
   if (error || hotelError) return <p className="error">{error || hotelError}</p>;
   if (!data) return <p className="loading">Loading users - </p>;
   return <><section className="panel usersAdminPanel"><div className="rangeSectionHeader"><div><span className="eyebrow">Access control</span><h2>Users</h2></div><button className="smallBtn" type="button" onClick={() => { setShowStaffForm((value) => !value); setFormError(''); }}>{showStaffForm ? 'Close' : 'Add service staff'}</button></div>{showStaffForm && <form className="formCard staffAdminForm" onSubmit={createStaff}><h3>New service staff account</h3><p className="muted">Assign one active hotel and a department. Staff accounts only see operational guest stays and their permitted folio categories.</p><div className="two"><label>Name<input required minLength={2} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label>Email<input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label></div><div className="two"><label>Mobile<input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} /></label><label>Password<input required minLength={12} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></label></div><div className="three"><label>Department<select value={form.staffDepartment} onChange={(e) => setForm({ ...form, staffDepartment: e.target.value })}><option value="FOOD_BEVERAGE">Food & beverage</option><option value="HOUSEKEEPING">Housekeeping</option><option value="ROOM_SERVICE">Room service</option><option value="FRONT_OFFICE">Front office</option><option value="OTHER">Other</option></select></label><label>Job title<input required minLength={2} value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} placeholder="e.g. Restaurant captain" /></label><label>Assigned hotel<select required value={form.staffHotelId} onChange={(e) => setForm({ ...form, staffHotelId: e.target.value })}><option value="">Select active hotel</option>{hotels?.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label></div>{formError && <p className="error" role="alert">{formError}</p>}<div className="formActions"><button className="smallBtn secondary" type="button" onClick={() => setShowStaffForm(false)}>Cancel</button><button className="smallBtn" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create staff account'}</button></div></form>}<div className="tableScroll"><table><thead><tr><th>Name</th><th>Contact</th><th>Role</th><th>Department / job</th><th>Hotel</th><th>Status</th></tr></thead><tbody>{data.map((row) => <tr key={row.id}><td>{row.name}</td><td>{row.email}<br />{row.mobile || ' - '}</td><td>{row.role}</td><td>{row.staffDepartment ? `${row.staffDepartment.replace(/_/g, ' ')} / ${row.jobTitle || ' - '}` : ' - '}</td><td>{row.staffHotel?.name || ' - '}</td><td><span className={`status ${row.active ? 'ok' : 'err'}`}>{row.active ? 'Active' : 'Inactive'}</span></td></tr>)}{!data.length && <tr><td colSpan={6}><p className="empty">No users found.</p></td></tr>}</tbody></table></div></section></>;
+}
+
+export function UsersData() {
+  type UserRow = { id: string; name: string; email: string; mobile?: string | null; role: string; active: boolean; staffDepartment?: string | null; jobTitle?: string | null; staffHotel?: { id: string; name: string } | null };
+  type Hotel = { id: string; name: string };
+  const { profile } = useAdminProfile();
+  const [reload, setReload] = useState(0); const [open, setOpen] = useState(false); const [busy, setBusy] = useState(false); const [formError, setFormError] = useState('');
+  const [form, setForm] = useState({ name: '', email: '', mobile: '', password: '', role: 'SERVICE_STAFF', staffDepartment: 'FOOD_BEVERAGE', jobTitle: '', staffHotelId: '' });
+  const { data, error } = useData<UserRow[]>(`/users?refresh=${reload}`); const { data: hotels, error: hotelError } = useData<Hotel[]>('/hotels');
+  const roleOptions = profile?.role === 'SUPER_ADMIN' ? ['ADMIN', 'CORPORATE_ADMIN', 'RESERVATION', 'SERVICE_STAFF', 'ACCOUNTS', 'VIEWER'] : profile?.role === 'CORPORATE_ADMIN' ? ['ADMIN', 'RESERVATION', 'SERVICE_STAFF', 'ACCOUNTS', 'VIEWER'] : profile?.role === 'ADMIN' ? ['RESERVATION', 'SERVICE_STAFF'] : [];
+  const canManage = roleOptions.length > 0;
+  const visibleHotels = profile?.role === 'ADMIN' && profile.staffHotelId ? (hotels ?? []).filter((hotel) => hotel.id === profile.staffHotelId) : (hotels ?? []);
+  const needsHotel = !['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ACCOUNTS', 'VIEWER'].includes(form.role);
+  const needsStaffMetadata = form.role === 'SERVICE_STAFF';
+  async function createUser(event: FormEvent) { event.preventDefault(); setBusy(true); setFormError(''); try { const staffHotelId = profile?.role === 'ADMIN' ? profile.staffHotelId : needsHotel ? form.staffHotelId : null; const payload: Record<string, unknown> = { name: form.name, email: form.email, mobile: form.mobile || undefined, password: form.password, role: form.role, staffHotelId }; if (needsStaffMetadata) { payload.staffDepartment = form.staffDepartment; payload.jobTitle = form.jobTitle; } await apiRequest('/users', { method: 'POST', body: JSON.stringify(payload) }); setForm({ name: '', email: '', mobile: '', password: '', role: roleOptions[0] ?? 'SERVICE_STAFF', staffDepartment: 'FOOD_BEVERAGE', jobTitle: '', staffHotelId: '' }); setOpen(false); setReload((value) => value + 1); } catch (reason) { setFormError(reason instanceof Error ? reason.message : 'Could not create user.'); } finally { setBusy(false); } }
+  if (error || hotelError) return <p className="error">{error || hotelError}</p>;
+  if (!data || !profile) return <p className="loading">Loading users - </p>;
+  return <><section className="panel usersAdminPanel"><div className="rangeSectionHeader"><div><span className="eyebrow">Access control</span><h2>Users</h2></div>{canManage && <button className="smallBtn" type="button" onClick={() => { setOpen((value) => !value); setFormError(''); }}>{open ? 'Close' : 'Add user'}</button>}</div>{open && <form className="formCard staffAdminForm" onSubmit={createUser}><h3>New {form.role.replace(/_/g, ' ').toLowerCase()} account</h3><p className="muted">Create only roles permitted by your account. Property-scoped accounts are limited to one active hotel.</p><div className="two"><label>Name<input required minLength={2} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label>Email<input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label></div><div className="three"><label>Role<select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value, staffDepartment: 'FOOD_BEVERAGE', jobTitle: '' })}>{roleOptions.map((role) => <option key={role} value={role}>{role.replace(/_/g, ' ')}</option>)}</select></label><label>Mobile<input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} /></label><label>Password<input required minLength={12} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></label></div>{needsStaffMetadata && <div className="three"><label>Department<select value={form.staffDepartment} onChange={(e) => setForm({ ...form, staffDepartment: e.target.value })}><option value="FOOD_BEVERAGE">Food & beverage</option><option value="HOUSEKEEPING">Housekeeping</option><option value="ROOM_SERVICE">Room service</option><option value="FRONT_OFFICE">Front office</option><option value="OTHER">Other</option></select></label><label>Job title<input required minLength={2} value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} placeholder="e.g. Restaurant captain" /></label></div>}{needsHotel && <label>Assigned hotel{profile.role === 'ADMIN' && profile.staffHotel ? <input readOnly value={profile.staffHotel.name} /> : <select required value={form.staffHotelId} onChange={(e) => setForm({ ...form, staffHotelId: e.target.value })}><option value="">Select active hotel</option>{visibleHotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select>}</label>}{formError && <p className="error" role="alert">{formError}</p>}<div className="formActions"><button className="smallBtn secondary" type="button" onClick={() => setOpen(false)}>Cancel</button><button className="smallBtn" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create user'}</button></div></form>}<div className="tableScroll"><table><thead><tr><th>Name</th><th>Contact</th><th>Role</th><th>Department / job</th><th>Hotel</th><th>Status</th></tr></thead><tbody>{data.map((row) => <tr key={row.id}><td>{row.name}</td><td>{row.email}<br />{row.mobile || ' - '}</td><td>{row.role}</td><td>{row.staffDepartment ? `${row.staffDepartment.replace(/_/g, ' ')} / ${row.jobTitle || ' - '}` : ' - '}</td><td>{row.staffHotel?.name || ' - '}</td><td><span className={`status ${row.active ? 'ok' : 'err'}`}>{row.active ? 'Active' : 'Inactive'}</span></td></tr>)}{!data.length && <tr><td colSpan={6}><p className="empty">No users found.</p></td></tr>}</tbody></table></div></section></>;
 }
 
 export function AuditData() {

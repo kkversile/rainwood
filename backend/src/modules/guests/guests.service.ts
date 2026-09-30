@@ -33,7 +33,7 @@ export class GuestsService {
 
   private async authorisedUser(userId: string) {
     const user = await this.p.user.findUnique({ where: { id: userId }, select: { role: true, staffHotelId: true } });
-    if (!user || !([UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.RESERVATION] as any).includes(user.role)) throw new ForbiddenException('Guest CRM access is restricted to authorised staff.');
+    if (!user || !([UserRole.ADMIN, UserRole.CORPORATE_ADMIN, UserRole.SUPER_ADMIN, UserRole.RESERVATION] as any).includes(user.role)) throw new ForbiddenException('Guest CRM access is restricted to authorised staff.');
     return user;
   }
 
@@ -103,10 +103,10 @@ export class GuestsService {
 
   async addNote(userId: string, id: string, body: CreateGuestNoteDto) {
     const { user, hotelId: scope } = await this.assertGuestAccessibleForHotel(userId, id, 'note');
-    if (body.visibility === GuestNoteVisibility.MANAGEMENT_ONLY) { const user = await this.p.user.findUnique({ where: { id: userId }, select: { role: true } }); if (!user || !([UserRole.ADMIN, UserRole.SUPER_ADMIN] as any).includes(user.role)) throw new ForbiddenException('Management notes require Admin access.'); }
+    if (body.visibility === GuestNoteVisibility.MANAGEMENT_ONLY) { const user = await this.p.user.findUnique({ where: { id: userId }, select: { role: true } }); if (!user || !([UserRole.ADMIN, UserRole.CORPORATE_ADMIN, UserRole.SUPER_ADMIN] as any).includes(user.role)) throw new ForbiddenException('Management notes require Admin access.'); }
     if (!body.note.trim()) throw new BadRequestException('Note cannot be empty.');
     const hotelId = scope ?? body.hotelId ?? null;
-    if (!scope && hotelId && user.role !== UserRole.SUPER_ADMIN && user.role !== UserRole.ADMIN) throw new ForbiddenException('Only global Admin users may choose a note hotel.');
+    if (!scope && hotelId && user.role !== UserRole.SUPER_ADMIN && user.role !== UserRole.CORPORATE_ADMIN && user.role !== UserRole.ADMIN) throw new ForbiddenException('Only global Admin users may choose a note hotel.');
     return this.p.guestNote.create({ data: { guestProfileId: id, category: body.category, visibility: body.visibility, note: body.note.trim(), hotelId, createdById: userId }, select: { id: true, category: true, visibility: true, note: true, hotelId: true, createdAt: true } });
   }
 }

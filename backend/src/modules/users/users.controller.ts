@@ -11,6 +11,7 @@ import { AgentPaymentMilestonesDto, PaymentMilestoneDto } from './users.dto';
 import { AgentsService } from '../agents/agents.service';
 import { AgentDocumentStatus, AgentPaymentPolicy, StaffDepartment, UserRole } from '@prisma/client';
 import { legacyPaymentMilestones, paymentMilestonesForAgent, validateAgentPaymentTerms, validatePaymentMilestones } from '../../common/agent-payment-terms';
+import { assertActorCanManageHotel, getActorScope, validateUserRoleScope } from '../../common/role-scope';
 
 class CreateUserDto {
   @IsEmail() email!: string;
@@ -20,7 +21,7 @@ class CreateUserDto {
   @IsString() @MinLength(12) password!: string;
   @IsOptional() @IsEnum(StaffDepartment) staffDepartment?: StaffDepartment;
   @IsOptional() @IsString() @MinLength(2) jobTitle?: string;
-  @IsOptional() @IsString() staffHotelId?: string;
+  @IsOptional() @IsString() staffHotelId?: string | null;
   @IsOptional() @IsEnum(AgentPaymentPolicy) agentPaymentPolicy?: AgentPaymentPolicy;
   @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) bookingPaymentPercent?: number;
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => PaymentMilestoneDto) paymentMilestones?: PaymentMilestoneDto[];
@@ -34,7 +35,7 @@ class UpdateUserDto {
   @IsOptional() @IsBoolean() revokeSessions?: boolean;
   @IsOptional() @IsEnum(StaffDepartment) staffDepartment?: StaffDepartment;
   @IsOptional() @IsString() @MinLength(2) jobTitle?: string;
-  @IsOptional() @IsString() staffHotelId?: string;
+  @IsOptional() @IsString() staffHotelId?: string | null;
 }
 
 class AgentRatePlanMappingDto {
@@ -57,22 +58,29 @@ class AgentApprovalDto {
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
 export class UsersController {
   constructor(private p: PrismaService, @Optional() private agentsService?: AgentsService) {}
-  @Get('') list() { return this.p.user.findMany({ select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } }, createdAt: true } }); }
-  @Get('agents') agents() { return this.p.user.findMany({ where: { role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, agentDocuments: { select: { status: true } }, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } }, orderBy: { createdAt: 'asc' } }); }
-  @Get('agents/:agentId') agent(@Param('agentId') agentId: string) { return this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, agentDocuments: { include: { file: { select: { originalName: true, mimeType: true, size: true } } }, orderBy: { createdAt: 'desc' } }, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } } }); }
-  @Post('') async create(@Body() d: CreateUserDto) {
-    const role = d.role || UserRole.RESERVATION;
-    if (role === UserRole.SERVICE_STAFF) {
-      if (!d.staffDepartment || !d.jobTitle || !d.staffHotelId) throw new BadRequestException('Service staff require department, job title, and assigned hotel.');
-      const hotel = await this.p.hotel.findUnique({ where: { id: d.staffHotelId }, select: { id: true, active: true } });
-      if (!hotel?.active) throw new BadRequestException('Assigned hotel is not active.');
-    }
-    return this.p.user.create({ data: { email: d.email.toLowerCase(), name: d.name, mobile: d.mobile, role, passwordHash: await bcrypt.hash(d.password, 12), active: true, staffDepartment: role === UserRole.SERVICE_STAFF ? d.staffDepartment : null, jobTitle: role === UserRole.SERVICE_STAFF ? d.jobTitle : null, staffHotelId: role === UserRole.SERVICE_STAFF ? d.staffHotelId : null }, select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } } } });
+  @Get('') async list(@CurrentUser() actor: any) {
+    const scope = await getActorScope(this.p, actor.id);
+    return this.p.user.findMany({ where: scope.isGlobal ? { role: { not: 'AGENT' } } : { staffHotelId: scope.hotelId, role: { not: 'AGENT' } }, select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } }, createdAt: true } });
   }
-  @Post('agents') async createAgent(@Body() d: CreateUserDto) {
+  @Get('agents')
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
+  agents() { return this.p.user.findMany({ where: { role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, agentDocuments: { select: { status: true } }, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } }, orderBy: { createdAt: 'asc' } }); }
+  @Get('agents/:agentId') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
+  agent(@Param('agentId') agentId: string) { return this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, agentDocuments: { include: { file: { select: { originalName: true, mimeType: true, size: true } } }, orderBy: { createdAt: 'desc' } }, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } } }); }
+  @Post('') async create(@Body() d: CreateUserDto, @CurrentUser() actor: any) {
+    const scope = await getActorScope(this.p, actor.id);
+    const role = d.role || UserRole.RESERVATION;
+    this.assertRoleCreationAllowed(scope.role, role);
+    if (role === UserRole.ADMIN && !scope.isGlobal) throw new BadRequestException('Property Admin cannot create another Admin.');
+    const staffHotelId = scope?.role === UserRole.ADMIN ? scope.hotelId : d.staffHotelId ?? null;
+    validateUserRoleScope(role, staffHotelId, d.staffDepartment, d.jobTitle);
+    if (staffHotelId) await assertActorCanManageHotel(this.p, actor.id, staffHotelId);
+    return this.p.user.create({ data: { email: d.email.toLowerCase(), name: d.name, mobile: d.mobile, role, passwordHash: await bcrypt.hash(d.password, 12), active: true, staffDepartment: role === UserRole.SERVICE_STAFF ? d.staffDepartment : null, jobTitle: role === UserRole.SERVICE_STAFF ? d.jobTitle : null, staffHotelId }, select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } } } });
+  }
+  @Post('agents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async createAgent(@Body() d: CreateUserDto) {
     const milestones = d.paymentMilestones?.length ? validatePaymentMilestones(d.paymentMilestones) : paymentMilestonesForAgent({ agentPaymentPolicy: d.agentPaymentPolicy, bookingPaymentPercent: d.bookingPaymentPercent });
     const legacy = d.paymentMilestones?.length ? { policy: null, percentage: null } : validateAgentPaymentTerms({ agentPaymentPolicy: d.agentPaymentPolicy, bookingPaymentPercent: d.bookingPaymentPercent }, true);
     return this.p.$transaction(async (tx) => {
@@ -80,26 +88,31 @@ export class UsersController {
       return user;
     });
   }
-  @Patch(':id') async update(@Param('id') id: string, @Body() d: UpdateUserDto) {
-    const current = await this.p.user.findUnique({ where: { id }, select: { role: true, staffDepartment: true, jobTitle: true, staffHotelId: true } });
+  @Patch(':id') async update(@Param('id') id: string, @Body() d: UpdateUserDto, @CurrentUser() actor: any) {
+    const scope = await getActorScope(this.p, actor.id);
+    const current = await this.p.user.findUnique({ where: { id }, select: { role: true, staffDepartment: true, jobTitle: true, staffHotelId: true, active: true } });
     const role = d.role ?? current?.role;
     if (!current) throw new BadRequestException('User not found');
+    if (id === actor.id && d.role && d.role !== current.role) throw new BadRequestException('You cannot change your own role.');
+    if (!scope.isGlobal && current.staffHotelId !== scope.hotelId) throw new BadRequestException('You can manage users only within your assigned hotel.');
+    this.assertRoleCreationAllowed(scope.role, role!);
     const effectiveStaffDepartment = d.staffDepartment ?? current.staffDepartment;
     const effectiveJobTitle = d.jobTitle ?? current.jobTitle;
-    const effectiveStaffHotelId = d.staffHotelId ?? current.staffHotelId;
-    if (role === UserRole.SERVICE_STAFF) {
-      if (!effectiveStaffDepartment || !effectiveJobTitle || !effectiveStaffHotelId) throw new BadRequestException('Service staff require department, job title, and assigned hotel.');
-      const hotel = await this.p.hotel.findUnique({ where: { id: effectiveStaffHotelId }, select: { id: true, active: true } });
-      if (!hotel?.active) throw new BadRequestException('Assigned hotel is not active.');
-    }
-    return this.p.user.update({ where: { id }, data: { name: d.name, mobile: d.mobile, role, active: d.active, staffDepartment: role === UserRole.SERVICE_STAFF ? effectiveStaffDepartment : null, jobTitle: role === UserRole.SERVICE_STAFF ? effectiveJobTitle : null, staffHotelId: role === UserRole.SERVICE_STAFF ? effectiveStaffHotelId : null, tokenVersion: d.revokeSessions ? { increment: 1 } : undefined }, select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } } } });
+    if (scope.role === UserRole.ADMIN && d.staffHotelId && d.staffHotelId !== scope.hotelId) throw new BadRequestException('You can manage users only within your assigned hotel.');
+    const effectiveStaffHotelId = scope.role === UserRole.ADMIN ? scope.hotelId : d.staffHotelId ?? current.staffHotelId;
+    if (role === UserRole.ADMIN && !scope.isGlobal && current.role !== UserRole.ADMIN) throw new BadRequestException('Property Admin cannot promote users to Admin.');
+    validateUserRoleScope(role!, effectiveStaffHotelId, effectiveStaffDepartment, effectiveJobTitle);
+    if (effectiveStaffHotelId) await assertActorCanManageHotel(this.p, actor.id, effectiveStaffHotelId);
+    const roleChanged = role !== current.role;
+    const hotelChanged = effectiveStaffHotelId !== current.staffHotelId;
+    return this.p.user.update({ where: { id }, data: { name: d.name, mobile: d.mobile, role, active: d.active, staffDepartment: role === UserRole.SERVICE_STAFF ? effectiveStaffDepartment : null, jobTitle: role === UserRole.SERVICE_STAFF ? effectiveJobTitle : null, staffHotelId: effectiveStaffHotelId, tokenVersion: d.revokeSessions || roleChanged || hotelChanged || d.active === false ? { increment: 1 } : undefined }, select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } } } });
   }
-  @Patch('agents/:id') async updateAgent(@Param('id') id: string, @Body() d: UpdateUserDto) {
+  @Patch('agents/:id') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async updateAgent(@Param('id') id: string, @Body() d: UpdateUserDto) {
     const current = await this.p.user.findFirstOrThrow({ where: { id, role: 'AGENT' }, include: { paymentMilestones: { orderBy: { sortOrder: 'asc' } } } });
     if (d.active === true && !current.paymentMilestones?.length && !current.agentPaymentPolicy) throw new BadRequestException('Assign payment milestones before activating this agent');
     return this.p.user.update({ where: { id, role: 'AGENT' }, data: { name: d.name, active: d.active, tokenVersion: d.revokeSessions ? { increment: 1 } : undefined }, select: { id: true, email: true, name: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true } });
   }
-  @Patch('agents/:agentId/approval') async approveAgent(@Param('agentId') agentId: string, @Body() body: AgentApprovalDto, @CurrentUser() actor: any) {
+  @Patch('agents/:agentId/approval') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async approveAgent(@Param('agentId') agentId: string, @Body() body: AgentApprovalDto, @CurrentUser() actor: any) {
     const current = await this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, include: { paymentMilestones: { orderBy: { sortOrder: 'asc' } } } });
     const existingMilestones = current.paymentMilestones ?? [];
     const hasNewMilestones = body.paymentMilestones !== undefined;
@@ -131,14 +144,14 @@ export class UsersController {
     });
     return updated;
   }
-  @Get('agents/:agentId/payment-terms')
+  @Get('agents/:agentId/payment-terms') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
   async paymentTerms(@Param('agentId') agentId: string) {
     const agent = await this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { paymentMilestones: { orderBy: { sortOrder: 'asc' } }, agentPaymentPolicy: true, bookingPaymentPercent: true } });
     const milestones = agent.paymentMilestones.length ? agent.paymentMilestones : agent.agentPaymentPolicy ? paymentMilestonesForAgent(agent) : [];
     return { milestones };
   }
 
-  @Put('agents/:agentId/payment-terms')
+  @Put('agents/:agentId/payment-terms') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
   async updatePaymentTerms(@Param('agentId') agentId: string, @Body() body: AgentPaymentMilestonesDto, @CurrentUser() actor: any) {
     const agent = await this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, agentPaymentPolicy: true, bookingPaymentPercent: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } } } });
     const milestones = validatePaymentMilestones(body.milestones);
@@ -151,17 +164,17 @@ export class UsersController {
     });
   }
 
-  @Get('agents/:agentId/documents') agentDocuments(@Param('agentId') agentId: string) { return this.agentsService!.listDocuments(agentId); }
-  @Patch('agents/:agentId/documents/:id') reviewAgentDocument(@Param('agentId') agentId: string, @Param('id') id: string, @Body() body: { status?: string; reviewRemark?: string }) { return this.agentsService!.reviewDocument(agentId, id, body.status ?? '', body.reviewRemark); }
-  @Put('agents/:id/hotel-rate-plan') async assignHotelRatePlan(@Param('id') id: string, @Body() body: AgentHotelRatePlanDto, @CurrentUser() actor: any) {
+  @Get('agents/:agentId/documents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') agentDocuments(@Param('agentId') agentId: string) { return this.agentsService!.listDocuments(agentId); }
+  @Patch('agents/:agentId/documents/:id') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') reviewAgentDocument(@Param('agentId') agentId: string, @Param('id') id: string, @Body() body: { status?: string; reviewRemark?: string }) { return this.agentsService!.reviewDocument(agentId, id, body.status ?? '', body.reviewRemark); }
+  @Put('agents/:id/hotel-rate-plan') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async assignHotelRatePlan(@Param('id') id: string, @Body() body: AgentHotelRatePlanDto, @CurrentUser() actor: any) {
     if (!this.agentsService) throw new BadRequestException('Agent rate-plan service is unavailable.');
     return this.agentsService.assignAgentHotelRatePlan(id, body.hotelId, body.masterId, actor.id);
   }
-  @Delete('agents/:agentId/rate-plan-masters/:masterId') async removeHotelRatePlan(@Param('agentId') agentId: string, @Param('masterId') masterId: string, @CurrentUser() actor: any) {
+  @Delete('agents/:agentId/rate-plan-masters/:masterId') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async removeHotelRatePlan(@Param('agentId') agentId: string, @Param('masterId') masterId: string, @CurrentUser() actor: any) {
     if (!this.agentsService) throw new BadRequestException('Agent rate-plan service is unavailable.');
     return this.agentsService.removeAgentHotelRatePlan(agentId, masterId, actor.id);
   }
-  @Put('agents/:id/rate-plans') async mapRatePlans(@Param('id') id: string, @Body() d: AgentRatePlanMappingDto, @CurrentUser() actor?: any) {
+  @Put('agents/:id/rate-plans') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async mapRatePlans(@Param('id') id: string, @Body() d: AgentRatePlanMappingDto, @CurrentUser() actor: any) {
     const agent = await this.p.user.findFirstOrThrow({ where: { id, role: 'AGENT' }, select: { id: true } });
     const ratePlanIds = [...new Set(d.ratePlanIds ?? [])];
     const validPlans = await this.p.ratePlan.findMany({ where: { id: { in: ratePlanIds }, active: true, master: { active: true } }, select: { id: true, masterId: true, roomType: { select: { hotelId: true } } } });
@@ -183,9 +196,16 @@ export class UsersController {
     await this.p.$transaction(async (tx) => {
       await Promise.all(normalizedRatePlanIds.map((ratePlanId) => tx.agentRatePlan.upsert({ where: { agentId_ratePlanId: { agentId: agent.id, ratePlanId } }, create: { agentId: agent.id, ratePlanId, active: true }, update: { active: true } })));
       await tx.agentRatePlan.updateMany({ where: { agentId: agent.id, ratePlanId: { notIn: [...selected] }, ...(d.hotelId ? { ratePlan: { roomType: { hotelId: d.hotelId } } } : {}) }, data: { active: false } });
-      if (tx.auditLog?.create) await tx.auditLog.create({ data: { actorUserId: actor?.id, action: 'AGENT_RATE_PLANS_UPDATED', entityType: 'User', entityId: agent.id, before: { ratePlanIds: [...currentIds] }, after: { addedRatePlanIds: normalizedRatePlanIds.filter((ratePlanId) => !currentIds.has(ratePlanId)), removedRatePlanIds: [...currentIds].filter((ratePlanId) => !selected.has(ratePlanId)), ratePlanIds: normalizedRatePlanIds } } });
+      if (tx.auditLog?.create) await tx.auditLog.create({ data: { actorUserId: actor.id, action: 'AGENT_RATE_PLANS_UPDATED', entityType: 'User', entityId: agent.id, before: { ratePlanIds: [...currentIds] }, after: { addedRatePlanIds: normalizedRatePlanIds.filter((ratePlanId) => !currentIds.has(ratePlanId)), removedRatePlanIds: [...currentIds].filter((ratePlanId) => !selected.has(ratePlanId)), ratePlanIds: normalizedRatePlanIds } } });
     });
     return this.p.user.findFirstOrThrow({ where: { id: agent.id }, select: { id: true, email: true, name: true, role: true, active: true, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } } });
+  }
+
+  private assertRoleCreationAllowed(actorRole: UserRole, targetRole: UserRole) {
+    if (actorRole === UserRole.SUPER_ADMIN) return;
+    if (actorRole === UserRole.CORPORATE_ADMIN && ([UserRole.ADMIN, UserRole.RESERVATION, UserRole.SERVICE_STAFF, UserRole.ACCOUNTS, UserRole.VIEWER] as UserRole[]).includes(targetRole)) return;
+    if (actorRole === UserRole.ADMIN && ([UserRole.RESERVATION, UserRole.SERVICE_STAFF] as UserRole[]).includes(targetRole)) return;
+    throw new BadRequestException(`${actorRole} cannot create or promote ${targetRole}.`);
   }
 
 }

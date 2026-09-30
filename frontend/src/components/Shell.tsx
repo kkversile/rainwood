@@ -3,11 +3,23 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { BedDouble } from 'lucide-react';
-import { AdminAuthGate, invalidateStaffSession } from './AdminData';
+import { AdminAuthGate, invalidateStaffSession, useAdminProfile } from './AdminData';
 import { apiAssetUrl, apiRequest, clearAccessToken } from '../lib/api';
 
 const links = [['/', 'Home'], ['/hotels', 'Hotels'], ['/booking', 'Book'], ['/contact', 'Contact'], ['/agent/login', 'Agent Login']];
-const adminLinks = [['/admin/dashboard', 'Dashboard'], ['/admin/hotels', 'Manage Hotels'], ['/admin/rooms-inventory', 'Rooms & Inventory'], ['/admin/rooms', 'Physical Rooms'], ['/admin/housekeeping', 'Housekeeping'], ['/admin/maintenance', 'Maintenance'], ['/admin/rate-plans', 'Rate Plans'], ['/admin/rates', 'Rates'], ['/admin/promotions', 'Promotions'], ['/admin/base-rate-import', 'Rate Import'], ['/admin/supplementary-charges', 'Supplementary Charges'], ['/admin/agents', 'Agents'], ['/admin/reservations', 'Reservations'], ['/admin/arrivals', 'Arrivals'], ['/admin/in-house', 'In-house'], ['/admin/guests', 'Guests'], ['/admin/night-audit', 'Night Audit'], ['/admin/contact-requests', 'Contact Requests'], ['/admin/payments', 'Payments'], ['/admin/reports', 'Reports'], ['/admin/axisrooms', 'AxisRooms'], ['/admin/jobs', 'Jobs'], ['/admin/users', 'Users'], ['/admin/settings', 'Site Settings'], ['/admin/audit-logs', 'Audit Logs']];
+const adminLinks = [['/admin/dashboard', 'Dashboard'], ['/admin/hotels', 'Manage Hotels'], ['/admin/rooms-inventory', 'Rooms & Inventory'], ['/admin/rooms', 'Physical Rooms'], ['/admin/housekeeping', 'Housekeeping'], ['/admin/maintenance', 'Maintenance'], ['/admin/rate-plans', 'Rate Plans'], ['/admin/rates', 'Rates'], ['/admin/rate-seasons', 'Rate Seasons'], ['/admin/yield-rules', 'Yield Rules'], ['/admin/rate-simulator', 'Rate Simulator'], ['/admin/promotions', 'Promotions'], ['/admin/base-rate-import', 'Rate Import'], ['/admin/supplementary-charges', 'Supplementary Charges'], ['/admin/agents', 'Agents'], ['/admin/reservations', 'Reservations'], ['/admin/arrivals', 'Arrivals'], ['/admin/in-house', 'In-house'], ['/admin/guests', 'Guests'], ['/admin/night-audit', 'Night Audit'], ['/admin/contact-requests', 'Contact Requests'], ['/admin/payments', 'Payments'], ['/admin/reports', 'Reports'], ['/admin/axisrooms', 'AxisRooms'], ['/admin/jobs', 'Jobs'], ['/admin/users', 'Users'], ['/admin/settings', 'Site Settings'], ['/admin/audit-logs', 'Audit Logs']] as const;
+const reservationLinks = new Set(['/admin/dashboard', '/admin/reservations', '/admin/arrivals', '/admin/in-house', '/admin/guests', '/admin/payments', '/admin/reports']);
+const propertyHiddenLinks = new Set(['/admin/hotels', '/admin/settings', '/admin/axisrooms', '/admin/jobs', '/admin/audit-logs']);
+export function linksForRole(role?: string | null) {
+  if (!role) return [];
+  if (role === 'SUPER_ADMIN') return adminLinks;
+  if (role === 'RESERVATION') return adminLinks.filter(([href]) => reservationLinks.has(href));
+  if (role === 'ADMIN') return adminLinks.filter(([href]) => !propertyHiddenLinks.has(href));
+  if (role === 'CORPORATE_ADMIN') return adminLinks.filter(([href]) => href !== '/admin/settings');
+  if (role === 'ACCOUNTS') return adminLinks.filter(([href]) => ['/admin/dashboard', '/admin/payments', '/admin/reports'].includes(href));
+  if (role === 'VIEWER') return adminLinks.filter(([href]) => ['/admin/dashboard', '/admin/reports'].includes(href));
+  return [];
+}
 const fallbackLogoUrl = 'https://rainwoodhotels.com/wp-content/webp-express/webp-images/uploads/2023/09/rwh-logo.png.webp';
 function UiIcon({ name, size = 17 }: { name: 'search' | 'bell' | 'chevron' | 'grid'; size?: number }) {
   const paths = { search: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></>, bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>, chevron: <path d="m7 10 5 5 5-5" />, grid: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></> };
@@ -36,15 +48,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
 function StaffDashboardLink() {
   const [signedIn, setSignedIn] = useState(false);
-  useEffect(() => { const sync = () => setSignedIn(Boolean(window.localStorage.getItem('rainwood_access_token'))); sync(); window.addEventListener('rainwood-auth-change', sync); window.addEventListener('storage', sync); return () => { window.removeEventListener('rainwood-auth-change', sync); window.removeEventListener('storage', sync); }; }, []);
-  const role = typeof window !== 'undefined' ? window.localStorage.getItem('rainwood_user_role') : null;
+  const [role, setRole] = useState<string | null>(null);
+  useEffect(() => { const sync = () => { apiRequest<{ user: { role: string } }>('/auth/me').then((body) => { setSignedIn(true); setRole(body.user.role); }).catch(() => { setSignedIn(false); setRole(null); }); }; sync(); window.addEventListener('rainwood-auth-change', sync); return () => window.removeEventListener('rainwood-auth-change', sync); }, []);
   return <Link href={signedIn ? (role === 'AGENT' ? '/agent' : role === 'SERVICE_STAFF' ? '/staff' : '/admin/dashboard') : '/login'}>{signedIn ? 'Dashboard' : 'Staff Login'}</Link>;
 }
 
 export function AdminNav() {
   const pathname = usePathname();
+  const { profile } = useAdminProfile();
+  const role = profile?.role;
   async function signOut() { try { await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({ allDevices: false }) }); } catch { /* The local session is still cleared below. */ } finally { invalidateStaffSession(); clearAccessToken(); window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login`; } }
-  return <aside className="adminNav" aria-label="Operations navigation">{adminLinks.map(([href, label]) => { const active = pathname === href || (href !== '/admin/dashboard' && pathname.startsWith(`${href}/`)); return <Link key={href} href={href} className={active ? 'active' : undefined} aria-current={active ? 'page' : undefined}>{label === 'Rooms & Inventory' ? <BedDouble size={15} aria-hidden="true" /> : <UiIcon name="grid" size={15} />}<span>{label}</span></Link>; })}<button className="adminSignOut" type="button" onClick={() => void signOut()}>Sign out</button></aside>;
+  return <aside className="adminNav" aria-label="Operations navigation">{linksForRole(role).map(([href, label]) => { const active = pathname === href || (href !== '/admin/dashboard' && pathname.startsWith(`${href}/`)); return <Link key={href} href={href} className={active ? 'active' : undefined} aria-current={active ? 'page' : undefined}>{label === 'Rooms & Inventory' ? <BedDouble size={15} aria-hidden="true" /> : <UiIcon name="grid" size={15} />}<span>{label}</span></Link>; })}<button className="adminSignOut" type="button" onClick={() => void signOut()}>Sign out</button></aside>;
 }
 
 function LegacyAgentShell({ title, user, onLogout, children }: { title: string; user: { name: string; email: string }; onLogout: () => void; children: React.ReactNode }) {
@@ -65,9 +79,14 @@ export function AgentShell({ title, user, onLogout, children }: { title: string;
 
 function AdminTopShell({ title, editClass, children }: { title: string; editClass: string; children: React.ReactNode }) {
   const pathname = usePathname();
+  const { profile } = useAdminProfile();
+  const role = profile?.role;
+  const visibleAdminLinks = linksForRole(role);
   const active = (href: string) => href === '/admin/dashboard' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
   async function signOut() { try { await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({ allDevices: false }) }); } catch { /* Local session is cleared below. */ } finally { invalidateStaffSession(); clearAccessToken(); window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login`; } }
-  return <main className={`legacyAgentShell adminTopShell${editClass}`}><header className="legacyAgentHeader"><div className="legacyAgentBrand"><span className="legacyAgentLogo">RW</span><b>RAINWOOD</b><small>HOTELS</small></div><div className="legacyAgentGreeting">Hi, Admin<span>RainWood Hotels</span></div><div className="legacyAgentHeaderLinks"><Link href="/admin/dashboard">Profile</Link><Link href="/admin/contact-requests">Announcements</Link><Link href="/agent/login">Agent Login</Link><button type="button" onClick={() => void signOut()}>Sign out</button></div></header><nav className="legacyAgentNav adminTopNav" aria-label="Admin navigation">{adminLinks.map(([href, label]) => <Link key={href} className={active(href) ? 'active' : undefined} href={href}>{label}</Link>)}</nav><div className="legacyAgentSectionTitle">{title}</div><section className="adminContent legacyAgentContent legacyAgentPortalContent adminTopContent">{children}</section></main>;
+  const greeting = profile?.name ?? 'Staff';
+  const organization = profile?.role === 'CORPORATE_ADMIN' ? 'Corporate Administration' : profile?.staffHotel?.name ?? (profile?.role === 'RESERVATION' ? 'Front Office' : 'RainWood Hotels');
+  return <main className={`legacyAgentShell adminTopShell${editClass}`}><header className="legacyAgentHeader"><div className="legacyAgentBrand"><span className="legacyAgentLogo">RW</span><b>RAINWOOD</b><small>HOTELS</small></div><div className="legacyAgentGreeting">Hi, {greeting}<span>{organization}</span></div><div className="legacyAgentHeaderLinks"><Link href="/admin/dashboard">Profile</Link><Link href="/admin/contact-requests">Announcements</Link>{role !== 'RESERVATION' && <Link href="/agent/login">Agent Login</Link>}<button type="button" onClick={() => void signOut()}>Sign out</button></div></header><nav className="legacyAgentNav adminTopNav" aria-label="Admin navigation">{visibleAdminLinks.map(([href, label]) => <Link key={href} className={active(href) ? 'active' : undefined} href={href}>{label}</Link>)}</nav><div className="legacyAgentSectionTitle">{title}</div><section className="adminContent legacyAgentContent legacyAgentPortalContent adminTopContent">{children}</section></main>;
 }
 
 export function AdminLayout({ title, children }: { title: string; children: React.ReactNode }) {
@@ -75,5 +94,13 @@ export function AdminLayout({ title, children }: { title: string; children: Reac
   const editClass = hotelLayout ? ' hotelEditShell' : '';
   const oldHeaderLinks = [['/', 'Home'], ['/hotels', 'Hotels'], ['/booking', 'Book'], ['/contact', 'Contact'], ['/policies', 'Policies']];
   if (process.env.NEXT_PUBLIC_ADMIN_TOP_NAV !== 'false') return <AdminAuthGate><AdminTopShell title={title} editClass={editClass}>{children}</AdminTopShell></AdminAuthGate>;
-  return <AdminAuthGate><main className={`adminShell adminAppShell${editClass}`}><header className="hotelGlobalHeader"><Link className="hotelHeaderBrand" href="/"><img src={fallbackLogoUrl} alt="RainWood Hotels" /><span className="hotelBrandFallback"><b>RAINWOOD</b><small>HOTELS</small></span></Link><label className="hotelHeaderSearch"><UiIcon name="search" size={17} /><input placeholder="Search by hotel name, code or city..." /></label><div className="hotelHeaderUser"><span className="hotelBell"><UiIcon name="bell" size={20} /><i>3</i></span><span className="hotelAvatar">A</span><span className="hotelUserText"><b>Admin</b><small>Hotel Manager</small></span><details className="hotelLinksMenu"><summary aria-label="Open website links"><UiIcon name="chevron" size={15} /></summary><div>{oldHeaderLinks.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}<Link href="/login">Staff Login</Link></div></details></div></header><AdminNav /><section className="adminContent"><div className="pageTitle"><div><span>Operations</span><h1>{title}</h1></div></div>{children}</section></main></AdminAuthGate>;
+  return <AdminAuthGate><main className={`adminShell adminAppShell${editClass}`}><header className="hotelGlobalHeader"><Link className="hotelHeaderBrand" href="/"><img src={fallbackLogoUrl} alt="RainWood Hotels" /><span className="hotelBrandFallback"><b>RAINWOOD</b><small>HOTELS</small></span></Link><label className="hotelHeaderSearch"><UiIcon name="search" size={17} /><input placeholder="Search by hotel name, code or city..." /></label><div className="hotelHeaderUser"><span className="hotelBell"><UiIcon name="bell" size={20} /><i>3</i></span><LegacyAdminIdentity /><details className="hotelLinksMenu"><summary aria-label="Open website links"><UiIcon name="chevron" size={15} /></summary><div>{oldHeaderLinks.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}<Link href="/login">Staff Login</Link></div></details></div></header><AdminNav /><section className="adminContent"><div className="pageTitle"><div><span>Operations</span><h1>{title}</h1></div></div>{children}</section></main></AdminAuthGate>;
+}
+
+function LegacyAdminIdentity() {
+  const { profile } = useAdminProfile();
+  const name = profile?.name ?? 'Staff';
+  const role = profile?.role?.replace(/_/g, ' ') ?? 'Staff';
+  const hotel = profile?.role === 'CORPORATE_ADMIN' ? 'Corporate Administration' : profile?.staffHotel?.name ?? 'RainWood Hotels';
+  return <><span className="hotelAvatar">{name.slice(0, 1).toUpperCase()}</span><span className="hotelUserText"><b>{name}</b><small>{role} · {hotel}</small></span></>;
 }

@@ -8,7 +8,7 @@ import { HousekeepingService } from './housekeeping.service';
 
 @Controller('housekeeping')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
 export class HousekeepingController {
   constructor(private service: HousekeepingService) {}
 

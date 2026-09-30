@@ -5,6 +5,7 @@ import { getHotelBusinessDayUtcRange, getHotelOperationalDate } from '../../comm
 import { PrismaService } from '../../common/prisma.service';
 import { serializable } from '../../common/transactions';
 import { NightAuditCloseDto, NightAuditPreviewQueryDto } from './night-audit.dto';
+import { getActorScope, resolveRequestedHotel } from '../../common/role-scope';
 
 const ACTIVE_HOUSEKEEPING = ['PENDING', 'ACCEPTED', 'CLEANING'];
 const ACTIVE_MAINTENANCE: MaintenanceTicketStatus[] = [MaintenanceTicketStatus.OPEN, MaintenanceTicketStatus.ASSIGNED, MaintenanceTicketStatus.IN_PROGRESS];
@@ -17,16 +18,15 @@ export class NightAuditService {
   constructor(private readonly p: PrismaService) {}
 
   private async admin(userId: string, client: any = this.p) {
-    const user = await client.user.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true, staffHotelId: true } });
-    if (!user || (user.role !== UserRole.ADMIN && user.role !== UserRole.SUPER_ADMIN)) throw new ForbiddenException('Night Audit requires Admin or Super Admin access.');
-    return user;
+    const scope = await getActorScope(client, userId);
+    if (!['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN'].includes(scope.role)) throw new ForbiddenException('Night Audit requires management access.');
+    return { id: scope.userId, role: scope.role, hotelId: scope.hotelId, staffHotelId: scope.hotelId, isGlobal: scope.isGlobal, name: '' };
   }
 
   private async hotelFor(adminUserId: string, requestedHotelId: string | undefined, client: any = this.p) {
     const admin = await this.admin(adminUserId, client);
-    if (admin.staffHotelId && requestedHotelId && admin.staffHotelId !== requestedHotelId) throw new NotFoundException('Hotel not found.');
-    const hotelId = admin.staffHotelId ?? requestedHotelId;
-    if (!hotelId) throw new BadRequestException('hotelId is required for a global Admin.');
+    const hotelId = resolveRequestedHotel(admin as any, requestedHotelId);
+    if (!hotelId) throw new BadRequestException('hotelId is required for a global administrator.');
     const hotel = await client.hotel.findUnique({ where: { id: hotelId }, select: { id: true, name: true, timezoneName: true, active: true } });
     if (!hotel || !hotel.active) throw new NotFoundException('Hotel not found.');
     return { admin, hotel };

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { BookingSource, Prisma, SupplementaryChargeScope } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { addDays, eachNight, nightsBetween, parseDateOnly, todayUtc, toDateOnly } from '../../common/dates';
+import { getHotelOperationalDate } from '../../common/hotel-dates';
 import { AvailabilityQueryDto } from './availability.dto';
 import { RateResolverService } from './rate-resolver';
 import { selectBestPromotion } from './promotion.utils';
@@ -12,6 +13,22 @@ type Selection = { hotelId: string; roomTypeId: string; ratePlanId: string; chec
 
 export function supplementaryScopeFilter(agentId?: string) {
   return agentId ? { in: [SupplementaryChargeScope.AGENTS, SupplementaryChargeScope.ALL] } : SupplementaryChargeScope.ALL;
+}
+
+function applyAdjustment(amount: number, type: 'PERCENT' | 'FIXED', value: number) {
+  return Math.max(0, type === 'PERCENT' ? amount + amount * value / 100 : amount + value);
+}
+
+function targetMatches(targets: Array<{ roomTypeId?: string; ratePlanId?: string }> | undefined, id: string) {
+  return !targets?.length || targets.some((target) => target.roomTypeId === id || target.ratePlanId === id);
+}
+
+function selectedSeason(seasons: any[], date: string, weekday: number, roomTypeId: string, ratePlanId: string) {
+  return seasons.find((season) => date >= toDateOnly(season.startDate) && date <= toDateOnly(season.endDate) && (!season.daysOfWeek?.length || season.daysOfWeek.includes(weekday)) && targetMatches(season.roomTypes, roomTypeId) && targetMatches(season.ratePlans, ratePlanId));
+}
+
+function selectedYieldRule(rules: any[], occupancyPercent: number, roomTypeId: string) {
+  return rules.find((rule) => occupancyPercent >= rule.occupancyFrom && (occupancyPercent < rule.occupancyTo || (rule.occupancyTo === 100 && occupancyPercent <= 100)) && (!rule.roomTypeId || rule.roomTypeId === roomTypeId));
 }
 
 @Injectable()
@@ -29,6 +46,8 @@ export class AvailabilityService {
       include: {
         supplementaryCharges: { where: { active: true, scope: supplementaryScopeFilter(agentId), startDate: { lte: to }, endDate: { gte: from } } },
         promotions: { where: { active: true }, include: { roomTypes: true, ratePlans: true } },
+        rateSeasons: { where: { active: true, startDate: { lte: to }, endDate: { gte: from } }, include: { roomTypes: true, ratePlans: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] },
+        yieldRules: { where: { active: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }] },
         rooms: {
           where: { active: true },
           include: {
@@ -39,7 +58,7 @@ export class AvailabilityService {
       },
     });
     if (!hotels.length) throw new BadRequestException('Hotel is unavailable');
-    const options = hotels.flatMap((hotel) => hotel.rooms.flatMap((room) => room.ratePlans.map((plan) => this.calculate(room, plan, normalized, from, to, nights, agentId, hotel.supplementaryCharges, hotel.promotions, query.source, query.promotionCode))));
+    const options = hotels.flatMap((hotel) => hotel.rooms.flatMap((room) => room.ratePlans.map((plan) => this.calculate(room, plan, normalized, from, to, nights, agentId, hotel.supplementaryCharges, hotel.promotions, query.source, query.promotionCode, hotel.timezoneName, hotel.rateSeasons, hotel.yieldRules))));
     return options.filter((option) => option.available).map(({ available, ...option }) => option);
   }
 
@@ -51,14 +70,14 @@ export class AvailabilityService {
     const room = await db.roomType.findFirst({
       where: { id: input.roomTypeId, hotelId: input.hotelId, active: true, hotel: { active: true } },
       include: {
-        hotel: { include: { supplementaryCharges: { where: { active: true, scope: supplementaryScopeFilter(options.agentId), startDate: { lte: to }, endDate: { gte: from } } }, promotions: { where: { active: true }, include: { roomTypes: true, ratePlans: true } } } },
+        hotel: { include: { supplementaryCharges: { where: { active: true, scope: supplementaryScopeFilter(options.agentId), startDate: { lte: to }, endDate: { gte: from } } }, promotions: { where: { active: true }, include: { roomTypes: true, ratePlans: true } }, rateSeasons: { where: { active: true, startDate: { lte: to }, endDate: { gte: from } }, include: { roomTypes: true, ratePlans: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] }, yieldRules: { where: { active: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] } } },
         inventory: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } },
           ratePlans: { where: { id: input.ratePlanId, active: true, master: { active: true }, ...(options.agentId ? { assignedAgents: { some: { agentId: options.agentId, active: true } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, ...(options.agentId ? { assignedAgents: { where: { agentId: options.agentId, active: true } } } : {}) } },
       },
     });
     const plan = room?.ratePlans[0];
     if (!room || !plan) throw new BadRequestException('Room or rate plan is unavailable');
-    const quote = this.calculate(room, plan, normalized, from, to, nightsBetween(from, to), options.agentId, room.hotel.supplementaryCharges, room.hotel.promotions, options.channel, options.promotionCode);
+    const quote = this.calculate(room, plan, normalized, from, to, nightsBetween(from, to), options.agentId, room.hotel.supplementaryCharges, room.hotel.promotions, options.channel, options.promotionCode, room.hotel.timezoneName, room.hotel.rateSeasons, room.hotel.yieldRules);
     if (!quote.available && options.checkInventory !== false) throw new BadRequestException('Inventory or restrictions are no longer available');
     const { available: _available, ...result } = quote;
     return result;
@@ -81,7 +100,7 @@ export class AvailabilityService {
     }
   }
 
-  private calculate(room: any, plan: any, input: { rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[] }, from: Date, to: Date, nights: number, agentId?: string, supplementaryCharges: any[] = [], promotions: any[] = [], channel?: string, promotionCode?: string) {
+  private calculate(room: any, plan: any, input: { rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[] }, from: Date, to: Date, nights: number, agentId?: string, supplementaryCharges: any[] = [], promotions: any[] = [], channel?: string, promotionCode?: string, timezoneName = 'UTC', seasons: any[] = [], yieldRules: any[] = []) {
     const occupiedNights = eachNight(from, to);
     const inventoryByDate = new Map<string, any>(room.inventory.map((day: any) => [toDateOnly(day.date), day]));
     const rateByDate = new Map<string, any>(plan.rates.map((day: any) => [toDateOnly(day.date), day]));
@@ -104,10 +123,18 @@ export class AvailabilityService {
       const roomBreakdown = occupancies.map((occupancy, index) => {
         const occupancyKey = this.occupancyKey(occupancy.adults + occupancy.children);
         const occupancyPrices = rate?.occupancyPrices && typeof rate.occupancyPrices === 'object' ? rate.occupancyPrices as Record<string, unknown> : {};
-        const hasOccupancyPrice = Object.prototype.hasOwnProperty.call(occupancyPrices, occupancyKey) && Number.isFinite(Number(occupancyPrices[occupancyKey]));
-        const baseAmount = hasOccupancyPrice ? Number(occupancyPrices[occupancyKey]) : Number(rate?.amount ?? 0);
-        const supplementAmount = hasOccupancyPrice ? 0 : Number(rate?.childAmount ?? 0) * occupancy.children + Number(rate?.extraAdultAmount ?? 0) * Math.max(0, occupancy.adults - 2);
-        return { roomIndex: index, adults: occupancy.adults, children: occupancy.children, occupancyKey, baseAmount, supplementAmount };
+        const hasManualOverride = rate?.overrideAmount != null;
+        const hasOccupancyPrice = !hasManualOverride && Object.prototype.hasOwnProperty.call(occupancyPrices, occupancyKey) && Number.isFinite(Number(occupancyPrices[occupancyKey]));
+        const commercialBase = hasManualOverride ? Number(rate.overrideAmount) : hasOccupancyPrice ? Number(occupancyPrices[occupancyKey]) : Number(rate?.baseAmount ?? rate?.amount ?? 0);
+        const season = hasManualOverride ? null : selectedSeason(seasons, toDateOnly(night), night.getUTCDay(), room.id, plan.id);
+        const inventoryDay = inventoryByDate.get(toDateOnly(night));
+        const occupancyPercent = inventoryDay?.available > 0 ? Math.min(100, Math.max(0, (Number(inventoryDay.held ?? 0) + Number(inventoryDay.sold ?? 0)) / Number(inventoryDay.available) * 100)) : 100;
+        const yieldRule = hasManualOverride ? null : selectedYieldRule(yieldRules, occupancyPercent, room.id);
+        const seasonAmount = season ? applyAdjustment(commercialBase, season.adjustmentType, Number(season.adjustmentValue)) : commercialBase;
+        const effectiveAmount = yieldRule ? applyAdjustment(seasonAmount, yieldRule.adjustmentType, Number(yieldRule.adjustmentValue)) : seasonAmount;
+        const seasonAdjustment = effectiveAmount - commercialBase - (yieldRule ? effectiveAmount - seasonAmount : 0);
+        const supplementAmount = hasOccupancyPrice || hasManualOverride ? 0 : Number(rate?.childAmount ?? 0) * occupancy.children + Number(rate?.extraAdultAmount ?? 0) * Math.max(0, occupancy.adults - 2);
+        return { roomIndex: index, adults: occupancy.adults, children: occupancy.children, occupancyKey, baseRate: Math.round(commercialBase * 100) / 100, baseAmount: Math.round(effectiveAmount * 100) / 100, supplementAmount, manualOverride: hasManualOverride ? Number(rate.overrideAmount) : null, seasonApplied: season ? { id: season.id, name: season.name, adjustment: Math.round(seasonAdjustment * 100) / 100 } : null, yieldRuleApplied: yieldRule ? { id: yieldRule.id, name: yieldRule.name, occupancyPercent: Math.round(occupancyPercent * 100) / 100, adjustment: Math.round((effectiveAmount - seasonAmount) * 100) / 100 } : null };
       });
       const occupancyKeys = roomBreakdown.map((item) => item.occupancyKey);
       const base = roomBreakdown.reduce((sum, item) => sum + item.baseAmount, 0);
@@ -116,17 +143,32 @@ export class AvailabilityService {
       const applicableCharges = supplementaryCharges.filter((charge) => toDateOnly(charge.startDate) <= toDateOnly(night) && toDateOnly(charge.endDate) >= toDateOnly(night));
       const supplementaryChargeLines = applicableCharges.map((charge) => ({ id: charge.id, name: charge.name, amountPerRoomNight: Number(charge.amountPerRoomNight), rooms: input.rooms, amount: Math.round(Number(charge.amountPerRoomNight) * input.rooms * 100) / 100 }));
       const supplementaryAmount = supplementaryChargeLines.reduce((sum, charge) => sum + charge.amount, 0);
-      return { date: toDateOnly(night), rooms: roomBreakdown, occupancy: occupancyKeys, baseAmount: base, taxAmount: tax, extrasAmount: extras, supplementaryCharges: supplementaryChargeLines, supplementaryAmount, totalAmount: base + tax + extras + supplementaryAmount, priceSource: rate?.priceSource ?? 'RATE_PLAN', agentRatePlanId: rate?.agentRatePlanId ?? null };
+      return { date: toDateOnly(night), rooms: roomBreakdown, occupancy: occupancyKeys, baseRate: roomBreakdown.reduce((sum, item) => sum + item.baseRate, 0), baseAmount: base, manualOverride: roomBreakdown.length === 1 ? roomBreakdown[0].manualOverride : null, seasonApplied: roomBreakdown.length === 1 ? roomBreakdown[0].seasonApplied : null, yieldRuleApplied: roomBreakdown.length === 1 ? roomBreakdown[0].yieldRuleApplied : null, taxAmount: tax, extrasAmount: extras, supplementaryCharges: supplementaryChargeLines, supplementaryAmount, prePromotionAmount: base + tax + extras + supplementaryAmount, totalAmount: base + tax + extras + supplementaryAmount, priceSource: rate?.priceSource ?? 'RATE_PLAN', agentRatePlanId: rate?.agentRatePlanId ?? null };
     });
-    const subtotal = breakdown.reduce((sum, item) => sum + item.totalAmount, 0);
-    const selectedPromotion = selectBestPromotion(promotions, { bookingDate: new Date(), stayDate: from, nights, subtotal, channel, code: promotionCode, roomTypeId: room.id, ratePlanId: plan.id });
-    const discountAmount = selectedPromotion?.discount ?? 0;
-    const total = Math.max(0, subtotal - discountAmount);
-    if (discountAmount > 0 && subtotal > 0) for (const item of breakdown) {
-      const itemDiscount = Math.round(discountAmount * (item.totalAmount / subtotal) * 100) / 100;
-      item.discountAmount = itemDiscount;
-      item.totalAmount = Math.max(0, item.totalAmount - itemDiscount);
-      item.promotionApplied = { id: selectedPromotion!.promotion.id, code: selectedPromotion!.promotion.code ?? null, name: selectedPromotion!.promotion.name, discountType: selectedPromotion!.promotion.discountType, discountValue: Number(selectedPromotion!.promotion.discountValue) };
+    for (const item of breakdown) item.totalAmount = Math.round(Number(item.totalAmount) * 100) / 100;
+    const subtotal = Math.round(breakdown.reduce((sum, item) => sum + item.totalAmount, 0) * 100) / 100;
+    const selectedPromotion = selectBestPromotion(promotions, { bookingDate: toDateOnly(getHotelOperationalDate(timezoneName)), stayDate: from, nights, subtotal, channel, code: promotionCode, roomTypeId: room.id, ratePlanId: plan.id });
+    const discountAmount = Math.round(Math.min(subtotal, selectedPromotion?.discount ?? 0) * 100) / 100;
+    const total = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100);
+    if (discountAmount > 0 && subtotal > 0) {
+      const itemCents = breakdown.map((item) => Math.max(0, Math.round(item.totalAmount * 100)));
+      const discounts = itemCents.map((cents, index) => index === itemCents.length - 1 ? 0 : Math.min(cents, Math.round(discountAmount * (cents / Math.round(subtotal * 100)) * 100)));
+      let remainingCents = Math.round(discountAmount * 100) - discounts.reduce((sum, cents) => sum + cents, 0);
+      discounts[discounts.length - 1] = Math.min(itemCents[itemCents.length - 1], remainingCents);
+      remainingCents -= discounts[discounts.length - 1];
+      for (let index = discounts.length - 2; index >= 0 && remainingCents > 0; index -= 1) {
+        const capacity = itemCents[index] - discounts[index];
+        const extra = Math.min(capacity, remainingCents);
+        discounts[index] += extra;
+        remainingCents -= extra;
+      }
+      for (let index = 0; index < breakdown.length; index += 1) {
+        const item = breakdown[index];
+        const itemDiscount = discounts[index] / 100;
+        item.discountAmount = itemDiscount;
+        item.totalAmount = Math.max(0, (itemCents[index] - discounts[index]) / 100);
+        item.promotionApplied = { id: selectedPromotion!.promotion.id, code: selectedPromotion!.promotion.code ?? null, name: selectedPromotion!.promotion.name, discountType: selectedPromotion!.promotion.discountType, discountValue: Number(selectedPromotion!.promotion.discountValue) };
+      }
     }
     const taxTotal = breakdown.reduce((sum, item) => sum + item.taxAmount, 0);
     const supplementaryTotal = breakdown.reduce((sum, item) => sum + Number(item.supplementaryAmount ?? 0), 0);

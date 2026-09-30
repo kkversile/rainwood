@@ -15,8 +15,19 @@ describe('promotion eligibility', () => {
 
   it('honours minimum stay, channel, target, and explicit code filters', () => {
     const promotion = { id: 'direct', name: 'Direct', code: 'DIRECT10', discountType: 'PERCENT' as const, discountValue: 10, minNights: 2, channels: ['DIRECT'], roomTypes: [{ roomTypeId: 'room-1' }], ratePlans: [{ ratePlanId: 'plan-1' }] };
+    expect(selectBestPromotion([promotion], base)).toBeNull();
     expect(selectBestPromotion([promotion], { ...base, channel: 'WEBSITE', code: 'DIRECT10' })).toBeNull();
     expect(selectBestPromotion([promotion], { ...base, channel: 'DIRECT', code: 'DIRECT10', nights: 1 })).toBeNull();
     expect(selectBestPromotion([promotion], { ...base, channel: 'DIRECT', code: 'DIRECT10' })?.discount).toBe(1000);
+    expect(selectBestPromotion([promotion], { ...base, channel: 'DIRECT', code: 'direct10' })?.discount).toBe(1000);
+    expect(selectBestPromotion([promotion], { ...base, code: 'WRONG20', channel: 'DIRECT' })).toBeNull();
+  });
+
+  it('allows an automatic promotion without a code and requires a channel for restricted offers', () => {
+    const automatic = { id: 'auto', name: 'Automatic', discountType: 'PERCENT' as const, discountValue: 5 };
+    const direct = { id: 'direct', name: 'Direct', discountType: 'PERCENT' as const, discountValue: 10, channels: ['DIRECT'] };
+    expect(selectBestPromotion([automatic], base)?.promotion.id).toBe('auto');
+    expect(selectBestPromotion([direct], base)).toBeNull();
+    expect(selectBestPromotion([direct], { ...base, channel: 'DIRECT' })?.promotion.id).toBe('direct');
   });
 });

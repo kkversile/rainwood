@@ -8,7 +8,7 @@ import { ManagementDashboardService } from './management-dashboard.service';
 
 @Controller('management')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
 export class ManagementDashboardController {
   constructor(private readonly service: ManagementDashboardService) {}
   @Get('dashboard') dashboard(@CurrentUser() user: any, @Query() query: ManagementDashboardQueryDto) { return this.service.dashboard(user.id, query); }

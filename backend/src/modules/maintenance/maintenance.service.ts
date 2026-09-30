@@ -8,7 +8,7 @@ import { HotelsService } from '../hotels/hotels.service';
 import { MaintenanceAssignDto, MaintenanceBoardQueryDto, MaintenanceCreateDto, MaintenanceImpactDto, MaintenanceResolveDto, MaintenanceStaffQueryDto, MaintenanceUpdateDto } from './maintenance.dto';
 
 const ACTIVE_STATUSES: MaintenanceTicketStatus[] = [MaintenanceTicketStatus.OPEN, MaintenanceTicketStatus.ASSIGNED, MaintenanceTicketStatus.IN_PROGRESS];
-const MANAGEMENT_ROLES: UserRole[] = [UserRole.ADMIN, UserRole.SUPER_ADMIN];
+const MANAGEMENT_ROLES: UserRole[] = [UserRole.ADMIN, UserRole.CORPORATE_ADMIN, UserRole.SUPER_ADMIN];
 const ticketInclude = {
   room: { select: { id: true, roomNumber: true, floor: true, wing: true, hotelId: true, status: true, roomType: { select: { name: true } } } },
   reportedBy: { select: { id: true, name: true } },

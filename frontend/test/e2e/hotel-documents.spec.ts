@@ -26,9 +26,9 @@ test('Documents matches the Stitch layout and persists upload, preview, edit, do
     const rect = document.querySelector(selector)?.getBoundingClientRect();
     return [selector, rect && { x: Math.round(rect.x), width: Math.round(rect.width) }];
   })));
-  expect(geometry['.documentsOverviewCard']).toMatchObject({ x: 272, width: 1616 });
-  expect(geometry['.documentsUploadGrid']).toMatchObject({ x: 272, width: 1616 });
-  expect(geometry['.documentsListCard']).toMatchObject({ x: 272, width: 1616 });
+  expect(geometry['.documentsOverviewCard']).toMatchObject({ x: 96, width: 1728 });
+  expect(geometry['.documentsUploadGrid']).toMatchObject({ x: 96, width: 1728 });
+  expect(geometry['.documentsListCard']).toMatchObject({ x: 96, width: 1728 });
 
   const suffix = Date.now();
   const uploadCases = [

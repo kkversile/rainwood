@@ -104,4 +104,38 @@ describe('availability restrictions and pricing', () => {
     expect(supplementaryScopeFilter('agent-1')).toEqual({ in: ['AGENTS', 'ALL'] });
     expect(supplementaryScopeFilter()).toBe('ALL');
   });
+
+  it('applies one targeted season then yield per night after the season', () => {
+    const calculate = (service as any).calculate.bind(service);
+    const seasonalRoom = { ...room, inventory: [{ ...room.inventory[0], available: 2, sold: 1 }, { ...room.inventory[1], available: 2, sold: 1 }] };
+    const seasonalPlan = { ...plan, rates: plan.rates.map((rate) => ({ ...rate, amount: 5000, taxAmount: 0 })) };
+    const season = { id: 'season-1', name: 'Christmas Peak', startDate: new Date('2099-01-01T00:00:00Z'), endDate: new Date('2099-01-31T00:00:00Z'), daysOfWeek: [], adjustmentType: 'PERCENT', adjustmentValue: 20, priority: 10, roomTypes: [], ratePlans: [] };
+    const yieldRule = { id: 'yield-1', name: 'Medium demand', occupancyFrom: 40, occupancyTo: 70, adjustmentType: 'PERCENT', adjustmentValue: 10, priority: 1, roomTypeId: null };
+    const option = calculate(seasonalRoom, seasonalPlan, { rooms: 1, adults: 2, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2, undefined, [], [], 'DIRECT', undefined, 'UTC', [season], [yieldRule]);
+    expect(option.priceBreakdown[0].rooms[0].seasonApplied.name).toBe('Christmas Peak');
+    expect(option.priceBreakdown[0].rooms[0].yieldRuleApplied.occupancyPercent).toBe(50);
+    expect(option.priceBreakdown[0].baseAmount).toBe(6600);
+    expect(option.total).toBe(13200);
+  });
+
+  it('suppresses season and yield when a manual override exists', () => {
+    const calculate = (service as any).calculate.bind(service);
+    const overridePlan = { ...plan, rates: plan.rates.map((rate) => ({ ...rate, amount: 5000, baseAmount: 5000, overrideAmount: 5800, taxAmount: 0 })) };
+    const option = calculate(room, overridePlan, { rooms: 1, adults: 2, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2, undefined, [], [], 'DIRECT', undefined, 'UTC', [{ id: 'season-1', name: 'Peak', startDate: new Date('2099-01-01T00:00:00Z'), endDate: new Date('2099-01-31T00:00:00Z'), daysOfWeek: [], adjustmentType: 'PERCENT', adjustmentValue: 20, roomTypes: [], ratePlans: [] }], [{ id: 'yield-1', name: 'Yield', occupancyFrom: 0, occupancyTo: 100, adjustmentType: 'PERCENT', adjustmentValue: 30, roomTypeId: null }]);
+    expect(option.priceBreakdown[0].rooms[0].manualOverride).toBe(5800);
+    expect(option.priceBreakdown[0].rooms[0].seasonApplied).toBeNull();
+    expect(option.priceBreakdown[0].rooms[0].yieldRuleApplied).toBeNull();
+    expect(option.total).toBe(11600);
+  });
+
+  it('allocates promotion cents so nightly discounts and final totals reconcile', () => {
+    const calculate = (service as any).calculate.bind(service);
+    const dates = ['2099-01-10', '2099-01-11', '2099-01-12'];
+    const roundingRoom = { ...room, inventory: dates.map((date) => ({ ...room.inventory[0], date: new Date(`${date}T00:00:00Z`) })) };
+    const roundingPlan = { ...plan, rates: dates.map((date, index) => ({ ...plan.rates[0], date: new Date(`${date}T00:00:00Z`), amount: [333.33, 333.33, 333.34][index], taxAmount: 0 })) };
+    const option = calculate(roundingRoom, roundingPlan, { rooms: 1, adults: 2, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-13T00:00:00Z'), 3, undefined, [], [{ id: 'fixed', name: 'Fixed', discountType: 'FIXED', discountValue: 100 }], 'DIRECT');
+    expect(option.discountAmount).toBe(100);
+    expect(option.priceBreakdown.reduce((sum: number, item: any) => sum + item.discountAmount, 0)).toBe(100);
+    expect(option.priceBreakdown.reduce((sum: number, item: any) => sum + item.totalAmount, 0)).toBe(option.total);
+  });
 });

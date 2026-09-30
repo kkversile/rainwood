@@ -11,7 +11,7 @@ const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 async function main() {
   const seedPassword = process.env.SEED_ADMIN_PASSWORD ?? 'change_me_after_seed';
   const passwordHash = await bcrypt.hash(seedPassword, 12);
-  const admin = await prisma.user.upsert({ where: { email: 'admin@rainwood.demo' }, update: { active: true, role: 'SUPER_ADMIN' }, create: { email: 'admin@rainwood.demo', name: 'RainWood Admin', passwordHash, role: 'SUPER_ADMIN' } });
+  const admin = await prisma.user.upsert({ where: { email: 'admin@rainwood.demo' }, update: { active: true, role: 'SUPER_ADMIN', passwordHash, failedLoginCount: 0, lockedUntil: null }, create: { email: 'admin@rainwood.demo', name: 'RainWood Admin', passwordHash, role: 'SUPER_ADMIN' } });
   await prisma.user.upsert({ where: { email: 'reservation@rainwood.demo' }, update: { active: true, role: 'RESERVATION' }, create: { email: 'reservation@rainwood.demo', name: 'Reservation Desk', passwordHash, role: 'RESERVATION' } });
   await prisma.user.upsert({ where: { email: 'accounts@rainwood.demo' }, update: { active: true, role: 'ACCOUNTS' }, create: { email: 'accounts@rainwood.demo', name: 'Accounts Team', passwordHash, role: 'ACCOUNTS' } });
 
@@ -22,15 +22,44 @@ async function main() {
     ['PAYMENT_VERIFY', 'Verify manual payments'],
     ['CONTENT_MANAGE', 'Manage public hotel content'],
     ['REPORT_READ', 'Read operational reports'],
+    ['HOTEL_OPERATIONS_READ', 'Read hotel operations'],
+    ['RATE_MANAGE', 'Manage rates and promotions'],
+    ['HOUSEKEEPING_MANAGE', 'Manage housekeeping'],
+    ['MAINTENANCE_MANAGE', 'Manage maintenance'],
+    ['NIGHT_AUDIT_READ', 'Read and run night audit'],
+    ['CRM_READ', 'Read guest CRM'],
+    ['HOTEL_CREATE', 'Create global hotels'],
+    ['SYSTEM_SETTINGS', 'Manage system settings'],
+    ['SYSTEM_SECURITY', 'Manage system security'],
+    ['GLOBAL_AUDIT_READ', 'Read global audit logs'],
+    ['JOBS_RETRY', 'Retry global integration jobs'],
+    ['USER_MANAGE', 'Manage internal users'],
   ] as const;
   for (const [code, description] of permissions) await prisma.permission.upsert({ where: { code }, update: { description }, create: { code, description } });
-  const roleCodes: Record<string, string[]> = { SUPER_ADMIN: permissions.map(([code]) => code), ADMIN: permissions.map(([code]) => code), RESERVATION: ['RESERVATION_READ', 'RESERVATION_WRITE', 'REPORT_READ'], ACCOUNTS: ['RESERVATION_READ', 'PAYMENT_RECORD', 'PAYMENT_VERIFY', 'REPORT_READ'], VIEWER: ['RESERVATION_READ', 'REPORT_READ'], AGENT: ['RESERVATION_READ', 'RESERVATION_WRITE'] };
-  for (const role of Object.keys(roleCodes) as UserRole[]) for (const code of roleCodes[role]) {
-    const permission = await prisma.permission.findUniqueOrThrow({ where: { code } });
-    await prisma.rolePermission.upsert({ where: { role_permissionId: { role, permissionId: permission.id } }, update: {}, create: { role, permissionId: permission.id } });
+  // RolePermission is advisory metadata; @Roles plus hotel-scope service checks remain authoritative.
+  const business = ['RESERVATION_READ', 'RESERVATION_WRITE', 'PAYMENT_RECORD', 'PAYMENT_VERIFY', 'CONTENT_MANAGE', 'REPORT_READ', 'HOTEL_OPERATIONS_READ', 'RATE_MANAGE', 'HOUSEKEEPING_MANAGE', 'MAINTENANCE_MANAGE', 'NIGHT_AUDIT_READ', 'CRM_READ'];
+  const roleCodes: Record<string, string[]> = {
+    SUPER_ADMIN: permissions.map(([code]) => code),
+    CORPORATE_ADMIN: business.concat(['USER_MANAGE']),
+    ADMIN: business.concat(['USER_MANAGE']),
+    RESERVATION: ['RESERVATION_READ', 'RESERVATION_WRITE', 'REPORT_READ', 'HOTEL_OPERATIONS_READ'],
+    ACCOUNTS: ['RESERVATION_READ', 'PAYMENT_RECORD', 'PAYMENT_VERIFY', 'REPORT_READ'],
+    VIEWER: ['RESERVATION_READ', 'REPORT_READ', 'HOTEL_OPERATIONS_READ'],
+    SERVICE_STAFF: ['HOTEL_OPERATIONS_READ'],
+    AGENT: ['RESERVATION_READ', 'RESERVATION_WRITE'],
+  };
+  for (const role of Object.keys(roleCodes) as UserRole[]) {
+    await prisma.rolePermission.deleteMany({ where: { role } });
+    for (const code of roleCodes[role]) {
+      const permission = await prisma.permission.findUniqueOrThrow({ where: { code } });
+      await prisma.rolePermission.upsert({ where: { role_permissionId: { role, permissionId: permission.id } }, update: {}, create: { role, permissionId: permission.id } });
+    }
   }
 
   const hotel = await prisma.hotel.upsert({ where: { code: 'RW-KODAI' }, update: { active: true, name: 'RainWood Aurum Kodaikanal', city: 'Kodaikanal', description: 'A calm RainWood property with valley views and direct reservation support.', seoTitle: 'RainWood Aurum Kodaikanal | Direct Booking', seoDescription: 'Book RainWood Aurum Kodaikanal directly for transparent rates and secure confirmation.', canonicalPath: '/hotels/rainwood-aurum-kodaikanal', axisPropertyId: 'AXIS-RW-KODAI' }, create: { code: 'RW-KODAI', name: 'RainWood Aurum Kodaikanal', slug: 'rainwood-aurum-kodaikanal', city: 'Kodaikanal', description: 'A calm RainWood property with valley views and direct reservation support.', seoTitle: 'RainWood Aurum Kodaikanal | Direct Booking', seoDescription: 'Book RainWood Aurum Kodaikanal directly for transparent rates and secure confirmation.', canonicalPath: '/hotels/rainwood-aurum-kodaikanal', axisPropertyId: 'AXIS-RW-KODAI' } });
+  await prisma.user.updateMany({ where: { email: 'reservation@rainwood.demo', role: 'RESERVATION' }, data: { staffHotelId: hotel.id, active: true, tokenVersion: { increment: 1 } } });
+  await prisma.user.upsert({ where: { email: 'corporate@rainwood.demo' }, update: { name: 'RainWood Corporate Admin', passwordHash, role: 'CORPORATE_ADMIN', staffHotelId: null, active: true }, create: { email: 'corporate@rainwood.demo', name: 'RainWood Corporate Admin', passwordHash, role: 'CORPORATE_ADMIN', active: true } });
+  await prisma.user.upsert({ where: { email: 'hotel.admin@rainwood.demo' }, update: { name: 'RainWood Property Admin', passwordHash, role: 'ADMIN', staffHotelId: hotel.id, active: true }, create: { email: 'hotel.admin@rainwood.demo', name: 'RainWood Property Admin', passwordHash, role: 'ADMIN', staffHotelId: hotel.id, active: true } });
   for (const amenityValue of [['WIFI', 'High-speed Wi-Fi'], ['BREAKFAST', 'Breakfast available'], ['PARKING', 'On-site parking']] as const) {
     const amenity = await prisma.amenity.upsert({ where: { code: amenityValue[0] }, update: { name: amenityValue[1] }, create: { code: amenityValue[0], name: amenityValue[1] } });
     await prisma.hotelAmenity.upsert({ where: { hotelId_amenityId: { hotelId: hotel.id, amenityId: amenity.id } }, update: {}, create: { hotelId: hotel.id, amenityId: amenity.id } });

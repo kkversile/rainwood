@@ -14,6 +14,7 @@ import { RateResolverService } from '../availability/rate-resolver';
 import { calculateAgentBookingPaymentTerms, calculateReservationPaymentSchedule } from '../../common/agent-payment-terms';
 import { HousekeepingService } from '../housekeeping/housekeeping.service';
 import { GuestsService, guestArrivalContext } from '../guests/guests.service';
+import { assertActorCanManageHotel, getActorScope } from '../../common/role-scope';
 
 const checkoutInclude = {
   hotel: { select: { id: true, name: true, timezoneName: true } },
@@ -28,13 +29,22 @@ const checkoutInclude = {
 export class ReservationsService {
   constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService) {}
 
-  private operationalRoles = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION'];
+  private operationalRoles = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'];
 
   private assertOperationalRole(role?: string) {
     if (!this.operationalRoles.includes(role ?? '')) throw new ForbiddenException('Front-office permission is required for this action.');
   }
 
-  async availableRooms(reference: string) {
+  private async assertReservationScope(reference: string, userId: string) {
+    if (!this.p.user?.findUnique || !this.p.hotel?.findUnique) return;
+    const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { hotelId: true } });
+    if (!reservation) throw new NotFoundException('Reservation not found');
+    await assertActorCanManageHotel(this.p, userId, reservation.hotelId);
+    return reservation;
+  }
+
+  async availableRooms(reference: string, userId?: string) {
+    if (userId) await this.assertReservationScope(reference, userId);
     const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, hotelId: true, checkIn: true, checkOut: true, hotel: { select: { id: true, name: true } }, lines: { select: { id: true, rooms: true, roomType: { select: { id: true, name: true } } } } } });
     if (!reservation) throw new NotFoundException('Reservation not found');
     const requirements = await Promise.all(reservation.lines.map(async (line) => {
@@ -49,6 +59,7 @@ export class ReservationsService {
 
   async checkIn(reference: string, body: CheckInDto, user: { id: string; role?: string }) {
     this.assertOperationalRole(user.role);
+    await this.assertReservationScope(reference, user.id);
     return serializable(this.p, async (tx) => {
       const reservation = await tx.reservation.findUnique({ where: { reference }, include: { hotel: { select: { id: true, name: true, timezoneName: true } }, lines: { include: { roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, include: { room: true } } } });
       if (!reservation) throw new NotFoundException('Reservation not found');
@@ -89,6 +100,7 @@ export class ReservationsService {
 
   async roomChange(reference: string, body: RoomChangeDto, user: { id: string; role?: string }) {
     this.assertOperationalRole(user.role);
+    await this.assertReservationScope(reference, user.id);
     const reason = body.reason.trim();
     return serializable(this.p, async (tx) => {
       const reservation = await tx.reservation.findUnique({ where: { reference }, include: { roomAssignments: { where: { unassignedAt: null }, include: { room: true } }, hotel: { select: { id: true, name: true } } } });
@@ -114,6 +126,7 @@ export class ReservationsService {
 
   async checkOut(reference: string, body: CheckOutDto, user: { id: string; role?: string; name?: string }) {
     this.assertOperationalRole(user.role);
+    await this.assertReservationScope(reference, user.id);
     return serializable(this.p, async (tx) => {
       const actor = await tx.user.findUnique({ where: { id: user.id }, select: { id: true, name: true, role: true } });
       if (!actor) throw new ForbiddenException('The authenticated user is no longer available.');
@@ -125,7 +138,7 @@ export class ReservationsService {
       const totals = this.settlementTotals(reservation);
       const allowOutstanding = Boolean(body.allowOutstanding || body.force);
       if (totals.outstandingAmount > 0.005 && !allowOutstanding) throw new ConflictException({ code: 'OUTSTANDING_BALANCE', message: `Outstanding balance is INR ${totals.outstandingAmount.toFixed(2)}. Record payment or provide an authorized checkout override.`, totalOutstanding: totals.outstandingAmount });
-      if (totals.outstandingAmount > 0.005 && !['SUPER_ADMIN', 'ADMIN'].includes(actor.role)) throw new ForbiddenException('Only Admin or Super Admin users can authorize checkout with an outstanding balance.');
+      if (totals.outstandingAmount > 0.005 && !['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN'].includes(actor.role)) throw new ForbiddenException('Only Admin or Super Admin users (including Corporate Admin) can authorize checkout with an outstanding balance.');
       if (totals.outstandingAmount > 0.005 && !body.overrideReason) throw new BadRequestException('An override reason is required to check out with an outstanding balance.');
       const now = new Date();
       for (const assignment of reservation.roomAssignments) {
@@ -145,7 +158,8 @@ export class ReservationsService {
     });
   }
 
-  async checkoutPreview(reference: string) {
+  async checkoutPreview(reference: string, userId?: string) {
+    if (userId) await this.assertReservationScope(reference, userId);
     const reservation = await this.p.reservation.findUnique({ where: { reference }, include: checkoutInclude });
     if (!reservation) throw new NotFoundException('Reservation not found');
     const totals = this.settlementTotals(reservation);
@@ -154,6 +168,7 @@ export class ReservationsService {
 
   async recordCheckoutPayment(reference: string, body: CheckoutPaymentDto, user: { id: string; role?: string }) {
     this.assertOperationalRole(user.role);
+    await this.assertReservationScope(reference, user.id);
     return serializable(this.p, async (tx) => {
       const reservation = await tx.reservation.findUnique({ where: { reference }, include: { folioCharges: { where: { status: 'POSTED' }, select: { totalAmount: true } }, payments: { where: { verified: true }, select: { amount: true } } } });
       if (!reservation) throw new NotFoundException('Reservation not found');
@@ -170,7 +185,8 @@ export class ReservationsService {
     });
   }
 
-  async finalFolio(reference: string) {
+  async finalFolio(reference: string, userId?: string) {
+    if (userId) await this.assertReservationScope(reference, userId);
     const settlement = await this.p.reservationSettlement.findFirst({ where: { reservation: { reference } }, include: { reservation: { select: { reference: true, guestName: true, hotel: { select: { name: true } } } } } });
     if (!settlement) throw new NotFoundException('Final folio is not available until checkout is finalized.');
     return this.settlementResult(settlement);
@@ -192,8 +208,14 @@ export class ReservationsService {
 
   private settlementResult(settlement: any, reference?: string) { return { reference: reference ?? settlement.reservation?.reference, stayStatus: 'CHECKED_OUT', status: settlement.status, finalFolioNumber: settlement.finalFolioNumber, settlement: { id: settlement.id, status: settlement.status, reservationAmount: Number(settlement.reservationAmount), incidentalAmount: Number(settlement.incidentalAmount), grossAmount: Number(settlement.grossAmount), paidAmount: Number(settlement.paidAmount), balanceAmount: Number(settlement.balanceAmount), settledAt: settlement.settledAt }, snapshot: settlement.snapshot ?? null }; }
 
-  async inHouse(hotelId?: string) {
-    const rows = await this.p.reservation.findMany({ where: { stayStatus: StayStatus.CHECKED_IN, hotelId: hotelId || undefined }, orderBy: [{ hotel: { name: 'asc' } }, { guestName: 'asc' }], include: { hotel: { select: { id: true, name: true } }, checkedInBy: { select: { id: true, name: true } }, lines: { include: { roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, include: { room: { select: { id: true, roomNumber: true, floor: true, wing: true, status: true, roomType: { select: { id: true, name: true } } } } } }, folioCharges: { where: { status: 'POSTED' }, select: { totalAmount: true } }, payments: { where: { verified: true }, select: { amount: true } } } });
+  async inHouse(hotelId?: string, userId?: string) {
+    let effectiveHotelId = hotelId;
+    if (userId) {
+      const scope = await getActorScope(this.p, userId);
+      if (!scope.isGlobal) effectiveHotelId = scope.hotelId ?? undefined;
+      if (scope.hotelId && hotelId && scope.hotelId !== hotelId) throw new NotFoundException('Hotel not found');
+    }
+    const rows = await this.p.reservation.findMany({ where: { stayStatus: StayStatus.CHECKED_IN, hotelId: effectiveHotelId || undefined }, orderBy: [{ hotel: { name: 'asc' } }, { guestName: 'asc' }], include: { hotel: { select: { id: true, name: true } }, checkedInBy: { select: { id: true, name: true } }, lines: { include: { roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, include: { room: { select: { id: true, roomNumber: true, floor: true, wing: true, status: true, roomType: { select: { id: true, name: true } } } } } }, folioCharges: { where: { status: 'POSTED' }, select: { totalAmount: true } }, payments: { where: { verified: true }, select: { amount: true } } } });
     return rows.map((row) => { const incidentalAmount = row.folioCharges.reduce((sum, charge) => sum + Number(charge.totalAmount), 0); const paidAmount = row.payments.reduce((sum, payment) => sum + Number(payment.amount), 0); return { reference: row.reference, guestName: row.guestName, hotel: row.hotel, arrival: row.checkIn, departure: row.checkOut, stayStatus: row.stayStatus, checkedInAt: row.checkedInAt, checkedInBy: row.checkedInBy, rooms: row.roomAssignments.map((assignment) => assignment.room), roomTypes: [...new Map(row.lines.map((line) => [line.roomType.id, line.roomType.name])).values()], pax: row.lines.reduce((sum, line) => sum + line.adults + line.children, 0), balance: Number(row.balanceAmount), incidentals: incidentalAmount, totalOutstanding: Math.max(Number(row.totalAmount) + incidentalAmount - paidAmount, 0) }; });
   }
 
@@ -216,7 +238,7 @@ export class ReservationsService {
     return serializable(this.p, async (tx) => {
       const hold = await tx.inventoryHold.findUnique({ where: { tokenHash: sha256(token) }, include: { lines: { include: { nights: true } } } });
       if (!hold) throw new BadRequestException('Hold expired or invalid');
-      const authorizedAdmin = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION'].includes(user?.role ?? '');
+      const authorizedAdmin = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'].includes(user?.role ?? '');
       if (hold.agentId && (!user || (user.id !== hold.agentId && !authorizedAdmin))) throw new ForbiddenException('This agent hold belongs to another agent.');
       const lockRows = await this.holds.lockInventoryForLines(tx, hold.lines.map((line) => ({ roomTypeId: line.roomTypeId, checkIn: toDateOnly(line.checkIn), checkOut: toDateOnly(line.checkOut) })));
       const liveHold = await tx.inventoryHold.updateMany({ where: { id: hold.id, status: 'ACTIVE', expiresAt: { gt: new Date() } }, data: { status: 'CONVERTED' } });
@@ -305,10 +327,14 @@ export class ReservationsService {
     });
   }
 
-  async list(query: ReservationListQueryDto) {
+  async list(query: ReservationListQueryDto, userId?: string) {
     const page = Math.max(1, Number(query.page));
     const limit = Math.min(100, Math.max(1, Number(query.limit)));
     const where: any = { status: query.status as ReservationStatus | undefined };
+    if (userId) {
+      const scope = await getActorScope(this.p, userId);
+      if (!scope.isGlobal && scope.hotelId) where.hotelId = scope.hotelId;
+    }
     if (query.from || query.to) where.checkIn = { gte: query.from ? parseDateOnly(query.from, 'from') : undefined, lt: query.to ? parseDateOnly(query.to, 'to') : undefined };
     const [items, total] = await Promise.all([
       this.p.reservation.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit, include: { hotel: true, payments: true, lines: { include: { roomType: true, ratePlan: true } } } }),
@@ -334,7 +360,8 @@ export class ReservationsService {
     return assignments.map((assignment) => ({ id: assignment.ratePlan.id, code: assignment.ratePlan.code, name: assignment.ratePlan.name, mealPlan: assignment.ratePlan.mealPlan, description: assignment.ratePlan.description, hotel: assignment.ratePlan.roomType.hotel, room: { id: assignment.ratePlan.roomType.id, name: assignment.ratePlan.roomType.name, code: assignment.ratePlan.roomType.code }, rates: assignment.ratePlan.rates.map((rate) => ({ ...this.rateResolver.byDate({ assignedAgents: [assignment] }, userId).get(rate), date: rate.date })) }));
   }
 
-  async get(reference: string, full = false, viewerRole?: string) {
+  async get(reference: string, full = false, viewerRole?: string, userId?: string) {
+    if (userId) await this.assertReservationScope(reference, userId);
     const reservation = await this.p.reservation.findUnique({
       where: { reference },
       include: {
@@ -352,7 +379,7 @@ export class ReservationsService {
     if (!reservation) throw new NotFoundException('Reservation not found');
     const paymentSchedule = this.paymentSchedule(reservation.paymentTermsSnapshot, reservation.payments.filter((payment) => payment.verified).reduce((sum, payment) => sum + Number(payment.amount), 0));
     if (full) {
-      const canSeeInternalRemark = ['SUPER_ADMIN', 'ADMIN', 'RESERVATION'].includes(viewerRole ?? '');
+      const canSeeInternalRemark = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'].includes(viewerRole ?? '');
       const businessType = reservation.source === 'AGENT' || reservation.source === 'COMPANY' ? 'B2B' : reservation.source === 'OTA' ? 'OTA' : 'B2C';
       return {
         id: reservation.id,
@@ -423,7 +450,8 @@ export class ReservationsService {
     if (stay?.stayStatus !== StayStatus.CHECKED_IN) throw new BadRequestException('This reservation is not eligible for service-staff folio charges.');
   }
 
-  async getFolio(reference: string) {
+  async getFolio(reference: string, userId?: string) {
+    if (userId) await this.assertReservationScope(reference, userId);
     const reservation = await this.p.reservation.findUnique({
       where: { reference },
       select: {
@@ -488,6 +516,7 @@ export class ReservationsService {
   }
 
   async postFolioCharge(reference: string, body: FolioChargeDto, user: { id: string }, options?: { postingDate?: Date; allowedCategories?: readonly FolioChargeCategory[]; staffOnly?: boolean; idempotencyKey?: string }) {
+    await this.assertReservationScope(reference, user.id);
     const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, status: true, stayStatus: true, hotelId: true, hotel: { select: { id: true, name: true } } } });
     if (!reservation) throw new NotFoundException('Reservation not found');
     if (reservation.stayStatus === StayStatus.CHECKED_OUT) throw new ConflictException('Finalized stays cannot receive new folio charges. Use the post-checkout adjustment workflow.');
@@ -540,6 +569,7 @@ export class ReservationsService {
   }
 
   async voidFolioCharge(reference: string, chargeId: string, body: VoidFolioChargeDto, user: { id: string }) {
+    await this.assertReservationScope(reference, user.id);
     const reason = String(body.reason ?? '').trim();
     if (reason.length < 2) throw new BadRequestException('A void reason is required');
     const charge = await this.p.reservationFolioCharge.findUnique({ where: { id: chargeId }, include: { reservation: { select: { id: true, reference: true } } } });
@@ -583,6 +613,7 @@ export class ReservationsService {
   }
 
   async cancel(reference: string, body: CancellationDto, user: { id: string }) {
+    await this.assertReservationScope(reference, user.id);
     const current = await this.p.reservation.findUnique({ where: { reference }, select: { id: true } });
     if (!current) throw new NotFoundException('Reservation not found');
     const idempotencyKey = body.idempotencyKey ?? `cancel:${current.id}`;
@@ -626,6 +657,7 @@ export class ReservationsService {
   }
 
   async modify(reference: string, body: ModificationDto, user: { id: string }) {
+    await this.assertReservationScope(reference, user.id);
     const current = await this.p.reservation.findUnique({ where: { reference }, select: { id: true } });
     if (!current) throw new NotFoundException('Reservation not found');
     if (body.type === 'INVENTORY' || body.type === 'PRICE') throw new BadRequestException('Inventory or price changes require a replacement hold workflow');
@@ -648,6 +680,7 @@ export class ReservationsService {
   }
 
   async setReconfirmation(reference: string, reconfirmed: boolean, user: { id: string }) {
+    await this.assertReservationScope(reference, user.id);
     const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, status: true, reconfirmedAt: true, reconfirmedById: true } });
     if (!reservation) throw new NotFoundException('Reservation not found');
     if (['CANCELLED', 'EXPIRED', 'NO_SHOW'].includes(reservation.status)) throw new BadRequestException('This reservation cannot be reconfirmed');

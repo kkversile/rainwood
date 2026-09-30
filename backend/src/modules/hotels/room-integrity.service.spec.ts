@@ -32,6 +32,36 @@ describe('physical room admin integrity', () => {
     expect(prisma.room.update).toHaveBeenCalled();
   });
 
+  it('rejects room-number change while room has active assignment', async () => {
+    const { service, prisma } = setup();
+    await expect(service.updatePhysicalRoom('room-203', { roomNumber: '205' })).rejects.toThrow(
+      'Room 203 is currently assigned to an in-house guest and cannot be renumbered.',
+    );
+    expect(prisma.room.update).not.toHaveBeenCalled();
+  });
+
+  it.each(['203', ' 203 '])('allows occupied room-number update when normalized value is unchanged: %s', async (roomNumber) => {
+    const { service, prisma } = setup();
+    await expect(service.updatePhysicalRoom('room-203', { roomNumber })).resolves.toBeDefined();
+    expect(prisma.room.update).toHaveBeenCalled();
+  });
+
+  it('allows room-number change when there is no active assignment', async () => {
+    const { service, prisma } = setup(RoomOperationalStatus.AVAILABLE, []);
+    await expect(service.updatePhysicalRoom('room-203', { roomNumber: '205' })).resolves.toBeDefined();
+    expect(prisma.room.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ roomNumber: '205' }),
+    }));
+  });
+
+  it('keeps duplicate room-number conflicts mapped to ConflictException', async () => {
+    const { service, prisma } = setup(RoomOperationalStatus.AVAILABLE, []);
+    prisma.room.update.mockRejectedValue({ code: 'P2002' });
+    await expect(service.updatePhysicalRoom('room-203', { roomNumber: '205' })).rejects.toThrow(
+      'That room number already exists at this hotel.',
+    );
+  });
+
   it('allows only the canonical management transitions', () => {
     expect(allowedAdminRoomStatusTransitions(RoomOperationalStatus.AVAILABLE)).toEqual([RoomOperationalStatus.AVAILABLE, RoomOperationalStatus.OUT_OF_ORDER]);
     expect(allowedAdminRoomStatusTransitions(RoomOperationalStatus.DIRTY)).toEqual([RoomOperationalStatus.DIRTY, RoomOperationalStatus.CLEANING, RoomOperationalStatus.OUT_OF_ORDER]);

@@ -18,12 +18,12 @@ export class PaymentsController {
 
   @Post(':reference/manual')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SUPER_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS')
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS')
   manual(@Param('reference') reference: string, @Body() body: ManualPaymentDto, @CurrentUser() user: any) { return this.s.manual(reference, body, user.id); }
 
   @Post(':reference/manual/:paymentId/verify')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SUPER_ADMIN', 'ADMIN', 'ACCOUNTS')
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'ACCOUNTS')
   verify(@Param('paymentId') paymentId: string, @Body() _body: VerifyPaymentDto, @CurrentUser() user: any) { return this.s.verify(paymentId, user.id); }
 
   @Post(':reference/mock-complete')

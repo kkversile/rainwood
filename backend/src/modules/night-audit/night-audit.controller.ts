@@ -8,7 +8,7 @@ import { NightAuditService } from './night-audit.service';
 
 @Controller('night-audit')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('SUPER_ADMIN', 'ADMIN')
+@Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
 export class NightAuditController {
   constructor(private readonly service: NightAuditService) {}
 

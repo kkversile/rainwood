@@ -15,7 +15,7 @@ export class AuthService {
   constructor(private p: PrismaService, private jwt: JwtService, private c: ConfigService) {}
 
   async me(userId: string) {
-    const user = await this.p.user.findUnique({ where: { id: userId }, select: { id: true, email: true, name: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } } } });
+    const user = await this.p.user.findUnique({ where: { id: userId }, select: { id: true, email: true, name: true, role: true, active: true, staffHotelId: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true, code: true, city: true, active: true } } } });
     if (!user) throw new UnauthorizedException('Session user not found');
     return { user };
   }
@@ -69,7 +69,7 @@ export class AuthService {
     const raw = randomToken();
     const days = Number(this.c.get('JWT_REFRESH_EXPIRES_DAYS', this.c.get('JWT_REFRESH_TTL_DAYS', 30)));
     await tx.refreshToken.create({ data: { userId: user.id, tokenHash: sha256(raw), familyId, expiresAt: new Date(Date.now() + days * 86_400_000), ipAddress: meta.ip, userAgent: meta.ua } });
-    return { accessToken, refreshToken: raw, user: { id: user.id, email: user.email, name: user.name, role: user.role } };
+    return { accessToken, refreshToken: raw, user: { id: user.id, email: user.email, name: user.name, role: user.role, staffHotelId: user.staffHotelId ?? null, staffDepartment: user.staffDepartment ?? null, jobTitle: user.jobTitle ?? null } };
   }
 
   async refresh(raw: string, meta: { ip?: string; ua?: string } = {}) {

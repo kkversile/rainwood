@@ -5,7 +5,7 @@ import { NightAuditService } from './night-audit.service';
 
 function setup(overrides: Record<string, any> = {}) {
   const hotel = { id: 'hotel-1', name: 'RainWood Demo', timezoneName: 'Asia/Kolkata', active: true };
-  const admin = { id: 'admin-1', name: 'RainWood Admin', role: 'ADMIN', staffHotelId: null };
+  const admin = { id: 'admin-1', name: 'RainWood Admin', role: 'CORPORATE_ADMIN', staffHotelId: null, staffHotel: null };
   const rooms = [
     { id: 'room-101', roomNumber: '101', status: 'AVAILABLE' },
     { id: 'room-102', roomNumber: '102', status: 'OCCUPIED' },
@@ -69,7 +69,7 @@ describe('NightAuditService', () => {
   });
 
   it('forces a scoped Admin to its assigned hotel', async () => {
-    const { service } = setup({ user: { findUnique: jest.fn().mockResolvedValue({ id: 'admin-1', name: 'Hotel Admin', role: 'ADMIN', staffHotelId: 'hotel-own' }) } });
+    const { service } = setup({ user: { findUnique: jest.fn().mockResolvedValue({ id: 'admin-1', name: 'Hotel Admin', role: 'ADMIN', staffHotelId: 'hotel-own', staffHotel: { id: 'hotel-own', active: true } }) } });
     await expect(service.preview('admin-1', { hotelId: 'hotel-other', date: '2026-09-28' })).rejects.toThrow('Hotel not found');
   });
 
