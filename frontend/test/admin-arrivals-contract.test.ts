@@ -10,7 +10,7 @@ const shell = fs.readFileSync(path.join(process.cwd(), 'src/components/Shell.tsx
 test('expected arrivals is a first-class admin route and navigation item', () => {
   assert.match(page, /AdminArrivals/);
   assert.match(page, /title="Arrivals"/);
-  assert.match(shell, /admin\/arrivals', 'Arrivals'/);
+  assert.match(shell, /href: '\/admin\/arrivals', label: 'Arrivals'/);
 });
 
 test('expected arrivals exposes operational filters, exports, and reconfirmation', () => {

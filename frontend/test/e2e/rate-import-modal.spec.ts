@@ -56,7 +56,8 @@ test('rate plan import opens a locked modal and waits for explicit import', asyn
 
 test('standalone rate import keeps hotel and rate plan editable', async ({ page }) => {
   await signInAdmin(page);
-  await page.getByRole('link', { name: 'Rate Import', exact: true }).click();
+  await page.getByRole('button', { name: 'Revenue', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Rate Import', exact: true }).click();
   await expect(page).toHaveURL(`${frontendUrl}/admin/base-rate-import`);
   const form = page.getByTestId('rate-import-form');
   await expect(form).toBeVisible();

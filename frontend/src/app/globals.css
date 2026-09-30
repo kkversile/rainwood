@@ -814,6 +814,28 @@
 .adminTopShell .arrivalsCheck{color:#315b60}
 .adminTopShell .arrivalsTableMeta b{color:#bf872b}
 
+/* Grouped admin navigation: the existing role-filtered leaf links remain the source of truth. */
+.adminTopShell .adminGroupedNav{position:sticky;top:64px;z-index:49;display:flex;align-items:center;justify-content:center;gap:5px;min-height:52px;height:52px;padding:6px 20px;overflow:visible;flex-wrap:nowrap;white-space:nowrap}
+.adminTopShell .adminGroupedNav>a,.adminTopShell .adminNavGroupButton{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;border:0;border-radius:7px;background:transparent;color:#315b60;padding:8px 11px;font-size:12px;font-weight:800;line-height:1;cursor:pointer}
+.adminTopShell .adminGroupedNav>a:hover,.adminTopShell .adminNavGroupButton:hover,.adminTopShell .adminNavGroupButton:focus-visible{background:#e0f5f6;color:#087e84}
+.adminTopShell .adminGroupedNav>a.active,.adminTopShell .adminNavGroupButton.active{background:#08aeb0;color:#fff}
+.adminTopShell .adminNavGroup{position:relative;display:flex;align-items:center}
+.adminTopShell .adminNavGroupButton span{font-size:13px;line-height:1;transition:transform .16s ease}
+.adminTopShell .adminNavGroupButton.open span{transform:rotate(180deg)}
+.adminTopShell .adminNavDropdown{position:absolute;top:calc(100% + 5px);left:0;z-index:40;display:grid;min-width:238px;gap:3px;padding:7px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 30px rgba(7,40,62,.16);white-space:normal}
+.adminTopShell .adminNavGroup-revenue .adminNavDropdown{min-width:268px}
+.adminTopShell .adminNavDropdown a{display:block;border-radius:7px;padding:9px 11px;color:#315b60;font-size:12px;font-weight:700;line-height:1.25}
+.adminTopShell .adminNavDropdown a:hover,.adminTopShell .adminNavDropdown a:focus-visible{background:#e0f5f6;color:#087e84}
+.adminTopShell .adminNavDropdown a.active{background:#08aeb0;color:#fff}
+@media(max-width:820px){
+  .adminTopShell .adminGroupedNav{position:static;height:auto;min-height:52px;justify-content:flex-start;gap:5px;padding:7px 15px;flex-wrap:wrap;white-space:normal;overflow:visible}
+  .adminTopShell .adminNavGroup{flex:1 1 170px;min-width:0;flex-wrap:wrap}
+  .adminTopShell .adminGroupedNav>a,.adminTopShell .adminNavGroupButton{flex:1 1 auto;min-width:0}
+  .adminTopShell .adminNavDropdown{position:static;flex:1 0 100%;min-width:0;margin:0 0 2px;box-shadow:none}
+  .adminTopShell .adminNavGroup-revenue{flex-basis:100%}
+  .adminTopShell .adminNavGroup-revenue .adminNavDropdown{min-width:0}
+}
+
 .adminLoginPage{background:#effafb;color:#26363b}
 .adminLoginPage .adminLoginHeader{border-bottom-color:var(--line);background:#fff}
 .adminLoginPage .adminLoginBody{background:linear-gradient(135deg,#e8f8f9 0%,#f8fdfd 60%,#d9f0f1 100%)}

@@ -12,7 +12,7 @@ test('maintenance admin board exposes filters and lifecycle actions', () => {
   const shell = read('src/components/Shell.tsx');
   for (const token of ['/maintenance/tickets', '/maintenance/staff', '/assign', '/start', '/resolve', '/cancel', '/take-room-out-of-order', 'Mark OOO', 'Create maintenance ticket']) assert.match(component, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(page, /MaintenanceBoard/);
-  assert.match(shell, /admin\/maintenance', 'Maintenance'/);
+  assert.match(shell, /href: '\/admin\/maintenance', label: 'Maintenance'/);
 });
 
 test('maintenance staff PWA exposes accept, start, and resolve workflow', () => {

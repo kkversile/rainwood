@@ -42,5 +42,5 @@ test('agent access page has no agent Excel import actions', () => {
 });
 
 test('admin navigation calls the feature Rate Import', () => {
-  assert.match(shell, /admin\/base-rate-import', 'Rate Import'/);
+  assert.match(shell, /href: '\/admin\/base-rate-import', label: 'Rate Import'/);
 });
