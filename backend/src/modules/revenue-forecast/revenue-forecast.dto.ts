@@ -1,4 +1,5 @@
 import { IsDateString, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class RevenueForecastQueryDto {
   @IsOptional()
@@ -18,6 +19,7 @@ export class RevenueForecastQueryDto {
   to?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(90)
@@ -38,6 +40,7 @@ export class RevenueForecastCaptureDto {
   observationDate?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(90)
