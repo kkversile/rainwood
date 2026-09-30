@@ -4,8 +4,9 @@ import { addDays, parseDateOnly, toDateOnly } from '../../common/dates';
 import { getHotelOperationalDate } from '../../common/hotel-dates';
 import { PrismaService } from '../../common/prisma.service';
 import { getActorScope, resolveRequestedHotel } from '../../common/role-scope';
+import { resolvePrePromotionRate } from '../availability/pricing-context';
 import { BookingCurveQueryDto, RevenueForecastCaptureDto, RevenueForecastQueryDto } from './revenue-forecast.dto';
-import { BOOKING_CURVE_LEAD_BUCKETS, COMMITTED_OTB_STATUSES, COMPLETION_LEAD_TOLERANCE_DAYS, COMPLETION_MINIMUM_SAMPLE_SIZE, REVENUE_FORECAST_HISTORY_LOOKBACK_DAYS, REVENUE_FORECAST_HORIZON_DAYS, REVENUE_FORECAST_PICKUP_WINDOWS } from './revenue-forecast.constants';
+import { BOOKING_CURVE_LEAD_BUCKETS, COMMITTED_OTB_STATUSES, COMPLETION_LEAD_TOLERANCE_DAYS, COMPLETION_MINIMUM_SAMPLE_SIZE, REVENUE_FORECAST_HISTORY_LOOKBACK_DAYS, REVENUE_FORECAST_HORIZON_DAYS, REVENUE_FORECAST_PICKUP_WINDOWS, REVENUE_FORECAST_SNAPSHOT_LOOKBACK_DAYS } from './revenue-forecast.constants';
 
 export type OTBMetric = { stayDate: Date; roomTypeId: string | null; sellableRooms: number; bookedRooms: number; heldRooms: number; roomRevenue: number; adr: number };
 type Snapshot = OTBMetric & { id?: string; observationDate: Date; roomType?: { id: string; name: string } | null };
@@ -143,7 +144,9 @@ export class RevenueForecastService {
       }
     }
     const dates = actuals.map((row) => row.stayDate);
-    const snapshotRows = dates.length && this.p.revenueForecastSnapshot?.findMany ? await this.p.revenueForecastSnapshot.findMany({ where: { hotelId: hotel.id, stayDate: { in: dates }, observationDate: { gte: lookbackFrom, lt: current }, ...(roomTypeId ? { roomTypeId } : { roomTypeId: null }) }, select: { observationDate: true, stayDate: true, roomTypeId: true, sellableRooms: true, bookedRooms: true, heldRooms: true, roomRevenue: true, adr: true }, orderBy: { observationDate: 'asc' } }) : [];
+    const snapshotLookbackFrom = addDays(current, -REVENUE_FORECAST_SNAPSHOT_LOOKBACK_DAYS);
+    const snapshotRows = dates.length && this.p.revenueForecastSnapshot?.findMany ? await this.p.revenueForecastSnapshot.findMany({ where: { hotelId: hotel.id, stayDate: { in: dates }, observationDate: { gte: snapshotLookbackFrom, lt: current }, ...(roomTypeId ? { roomTypeId } : { roomTypeId: null }) }, select: { observationDate: true, stayDate: true, roomTypeId: true, sellableRooms: true, bookedRooms: true, heldRooms: true, roomRevenue: true, adr: true }, orderBy: { observationDate: 'asc' } }) : [];
+    // Season-based comparable classification uses current active RateSeason configuration for matching historical stay dates. It is a comparison classification, not an immutable historical pricing-season snapshot.
     const snapshots = (snapshotRows as any[]).map((row) => ({ ...this.snapshotMetric(row), leadTimeDays: Math.round((new Date(row.stayDate).getTime() - new Date(row.observationDate).getTime()) / 86_400_000) }));
     return { actuals, snapshots, seasons };
   }
@@ -187,9 +190,29 @@ export class RevenueForecastService {
 
   private async rateContext(hotelId: string, stayDate: Date, roomTypeId?: string | null) {
     if (!this.p.ratePlan?.findMany) return { available: false, reason: 'RATE_CONTEXT_UNAVAILABLE' };
-    const plans = await this.p.ratePlan.findMany({ where: { active: true, roomType: { hotelId, ...(roomTypeId ? { id: roomTypeId } : {}) } }, select: { roomTypeId: true, name: true, rates: { where: { date: stayDate }, select: { amount: true, baseAmount: true, overrideAmount: true } } } });
-    const rows = (plans as any[]).filter((plan) => plan.rates?.[0]).map((plan) => { const rate = plan.rates[0]; const baseRate = number(rate.baseAmount ?? rate.amount); const manualOverride = rate.overrideAmount == null ? null : number(rate.overrideAmount); return { roomTypeId: plan.roomTypeId, ratePlan: plan.name, baseRate: money(baseRate), manualOverride, season: null, yield: null, effectivePrePromoRate: money(manualOverride ?? baseRate), note: 'Informational RateDay base/override context; season and yield are not applied to forecast revenue.' }; });
-    return rows.length ? { available: true, rows } : { available: false, reason: 'NO_RATE_DAY_FOR_STAY_DATE' };
+    const [plans, inventory, seasons, yieldRules] = await Promise.all([
+      this.p.ratePlan.findMany({ where: { active: true, master: { active: true }, roomType: { hotelId, ...(roomTypeId ? { id: roomTypeId } : {}) } }, select: { id: true, roomTypeId: true, name: true, rates: { where: { date: stayDate }, select: { amount: true, baseAmount: true, overrideAmount: true, occupancyPrices: true } } } }),
+      this.p.inventoryDay?.findMany ? this.p.inventoryDay.findMany({ where: { date: stayDate, roomType: { hotelId, ...(roomTypeId ? { id: roomTypeId } : {}) } }, select: { roomTypeId: true, available: true, held: true, sold: true } }) : [],
+      this.p.rateSeason?.findMany ? this.p.rateSeason.findMany({ where: { hotelId, active: true, startDate: { lte: stayDate }, endDate: { gte: stayDate } }, include: { roomTypes: true, ratePlans: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] }) : [],
+      this.p.yieldRule?.findMany ? this.p.yieldRule.findMany({ where: { hotelId, active: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] }) : [],
+    ]);
+    const inventoryByRoomType = new Map((inventory as any[]).map((row) => [row.roomTypeId, row]));
+    const rows = (plans as any[]).filter((plan) => plan.rates?.[0]).map((plan) => {
+      const pricing = resolvePrePromotionRate({ rate: plan.rates[0], date: dateKey(stayDate), weekday: stayDate.getUTCDay(), roomTypeId: plan.roomTypeId, ratePlanId: plan.id, inventoryDay: inventoryByRoomType.get(plan.roomTypeId), seasons, yieldRules });
+      return {
+        roomTypeId: plan.roomTypeId,
+        ratePlanId: plan.id,
+        ratePlan: plan.name,
+        baseRate: money(pricing.baseRate),
+        manualOverride: pricing.manualOverride === null ? null : money(pricing.manualOverride),
+        season: pricing.season ? { id: pricing.season.id, name: pricing.season.name, adjustmentType: pricing.season.adjustmentType, adjustmentValue: number(pricing.season.adjustmentValue) } : null,
+        yield: pricing.yield ? { id: pricing.yield.id, name: pricing.yield.name, occupancyPercent: money(pricing.occupancyPercent), adjustmentType: pricing.yield.adjustmentType, adjustmentValue: number(pricing.yield.adjustmentValue) } : null,
+        effectivePrePromoRate: money(pricing.effectivePrePromoRate),
+        source: pricing.source,
+        note: 'Pre-Promotion Sell Rate; promotions are intentionally excluded.',
+      };
+    });
+    return rows.length ? { available: true, multipleRates: rows.length > 1, rows } : { available: false, reason: 'NO_RATE_DAY_FOR_STAY_DATE' };
   }
 
   async forecast(userId: string, query: RevenueForecastQueryDto) {
@@ -222,7 +245,7 @@ export class RevenueForecastService {
       const roomType = await this.p.roomType.findUnique({ where: { id: query.roomTypeId }, select: { id: true, hotelId: true } });
       if (!roomType || roomType.hotelId !== hotel.id) throw new NotFoundException('Room type not found.');
     }
-    const snapshots = await this.p.revenueForecastSnapshot.findMany({ where: { hotelId: hotel.id, stayDate, ...(query.roomTypeId ? { roomTypeId: query.roomTypeId } : { roomTypeId: null }), observationDate: { lte: current, gte: addDays(current, -REVENUE_FORECAST_HISTORY_LOOKBACK_DAYS) } }, orderBy: { observationDate: 'asc' }, select: { observationDate: true, stayDate: true, roomTypeId: true, sellableRooms: true, bookedRooms: true, heldRooms: true, roomRevenue: true, adr: true } });
+    const snapshots = await this.p.revenueForecastSnapshot.findMany({ where: { hotelId: hotel.id, stayDate, ...(query.roomTypeId ? { roomTypeId: query.roomTypeId } : { roomTypeId: null }), observationDate: { lte: current, gte: addDays(current, -REVENUE_FORECAST_SNAPSHOT_LOOKBACK_DAYS) } }, orderBy: { observationDate: 'asc' }, select: { observationDate: true, stayDate: true, roomTypeId: true, sellableRooms: true, bookedRooms: true, heldRooms: true, roomRevenue: true, adr: true } });
     const observations: CurveObservation[] = (snapshots as any[]).map((row) => ({ observationDate: dateKey(new Date(row.observationDate)), daysBeforeArrival: Math.round((stayDate.getTime() - new Date(row.observationDate).getTime()) / 86_400_000), bookedRooms: number(row.bookedRooms), heldRooms: number(row.heldRooms), roomRevenue: number(row.roomRevenue), adr: number(row.adr), sellableRooms: number(row.sellableRooms), source: 'SNAPSHOT' }));
     const currentBusinessDay = this.p.hotelBusinessDay?.findUnique ? await this.p.hotelBusinessDay.findUnique({ where: { hotelId_businessDate: { hotelId: hotel.id, businessDate: current } }, select: { status: true } }) : null;
     if (stayDate >= current && currentBusinessDay?.status !== HotelBusinessDayStatus.CLOSED) {
@@ -230,6 +253,7 @@ export class RevenueForecastService {
       if (point && !observations.some((row) => row.observationDate === dateKey(current) && row.source === 'LIVE')) observations.push({ observationDate: dateKey(current), daysBeforeArrival: Math.round((stayDate.getTime() - current.getTime()) / 86_400_000), bookedRooms: point.bookedRooms, heldRooms: point.heldRooms, roomRevenue: point.roomRevenue, adr: point.adr, sellableRooms: point.sellableRooms, source: 'LIVE' });
     }
     observations.sort((a, b) => a.observationDate.localeCompare(b.observationDate)); const context = await this.completionContext(hotel, query.roomTypeId); const latest = observations[observations.length - 1]; const completion = latest ? this.completionFor(context, stayDate, latest.daysBeforeArrival, query.roomTypeId) : { available: false, sampleSize: 0, reason: 'INSUFFICIENT_HISTORY' as const };
-    return { hotel: { id: hotel.id, name: hotel.name, timezoneName: hotel.timezoneName }, hotelId: hotel.id, stayDate: dateKey(stayDate), roomTypeId: query.roomTypeId ?? null, sellableRooms: latest?.sellableRooms ?? null, observations, completion, leadBuckets: BOOKING_CURVE_LEAD_BUCKETS, historicalSource: 'RevenueForecastSnapshot', finalDemandSource: query.roomTypeId ? 'HotelBusinessDay.summary.roomTypePerformance.roomNights' : 'HotelBusinessDay.summary.occupancy.occupiedRoomNights', livePointIncluded: observations.some((row) => row.source === 'LIVE') };
+    const rateContext = await this.rateContext(hotel.id, stayDate, query.roomTypeId);
+    return { hotel: { id: hotel.id, name: hotel.name, timezoneName: hotel.timezoneName }, hotelId: hotel.id, stayDate: dateKey(stayDate), roomTypeId: query.roomTypeId ?? null, sellableRooms: latest?.sellableRooms ?? null, observations, completion, leadBuckets: BOOKING_CURVE_LEAD_BUCKETS, historicalSource: 'RevenueForecastSnapshot', finalDemandSource: query.roomTypeId ? 'HotelBusinessDay.summary.roomTypePerformance.roomNights' : 'HotelBusinessDay.summary.occupancy.occupiedRoomNights', livePointIncluded: observations.some((row) => row.source === 'LIVE'), rateContext };
   }
 }

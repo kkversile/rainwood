@@ -1,7 +1,7 @@
 import { ReservationStatus } from '@prisma/client';
 import { addDays, toDateOnly } from '../../common/dates';
 import { getHotelOperationalDate } from '../../common/hotel-dates';
-import { COMMITTED_OTB_STATUSES, isCommittedOtbStatus, REVENUE_FORECAST_HORIZON_DAYS } from './revenue-forecast.constants';
+import { COMMITTED_OTB_STATUSES, isCommittedOtbStatus, REVENUE_FORECAST_HORIZON_DAYS, REVENUE_FORECAST_SNAPSHOT_LOOKBACK_DAYS } from './revenue-forecast.constants';
 import { RevenueForecastService } from './revenue-forecast.service';
 
 jest.mock('../../common/role-scope', () => ({
@@ -76,6 +76,33 @@ describe('RevenueForecastService', () => {
 
   it('keeps the official capture horizon at 90 days', () => expect(REVENUE_FORECAST_HORIZON_DAYS).toBe(90));
 
+  it('uses the bounded 365-day stay history plus lead-time tolerance for snapshot observations', async () => {
+    const today = current(); const stayDate = addDays(today, 14); const historicalStay = addDays(today, -10); const p: any = {
+      hotel: { findUnique: jest.fn().mockResolvedValue({ id: 'hotel-1', name: 'Demo Hotel', timezoneName: 'Asia/Kolkata', active: true }) },
+      roomType: { findMany: jest.fn().mockResolvedValue([]) },
+      revenueForecastSnapshot: { findMany: jest.fn().mockResolvedValue([]) },
+      hotelBusinessDay: { findMany: jest.fn().mockResolvedValue([{ businessDate: historicalStay, summary: { occupancy: { occupiedRoomNights: 10 } } }]) },
+      rateSeason: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    await new RevenueForecastService(p).forecast('user-1', { hotelId: 'hotel-1', observationDate: toDateOnly(today), from: toDateOnly(stayDate), to: toDateOnly(stayDate) } as any);
+    const completionQuery = p.revenueForecastSnapshot.findMany.mock.calls.at(-1)[0];
+    expect(completionQuery.where.observationDate.gte).toEqual(addDays(today, -REVENUE_FORECAST_SNAPSHOT_LOOKBACK_DAYS));
+    expect(completionQuery.where.stayDate).toEqual({ in: [historicalStay] });
+  });
+
+  it('returns canonical pre-promotion rate context without averaging multiple rates', async () => {
+    const stayDate = new Date('2026-10-10T00:00:00.000Z'); const p: any = {
+      ratePlan: { findMany: jest.fn().mockResolvedValue([{ id: 'plan-1', roomTypeId: 'room-1', name: 'BAR', rates: [{ amount: 5000, baseAmount: 5000, overrideAmount: null, occupancyPrices: null }] }, { id: 'plan-2', roomTypeId: 'room-2', name: 'BAR', rates: [{ amount: 6000, baseAmount: 6000, overrideAmount: 5800, occupancyPrices: null }] }]) },
+      inventoryDay: { findMany: jest.fn().mockResolvedValue([{ roomTypeId: 'room-1', available: 20, held: 2, sold: 8 }, { roomTypeId: 'room-2', available: 20, held: 0, sold: 0 }]) },
+      rateSeason: { findMany: jest.fn().mockResolvedValue([{ id: 'season-1', name: 'Peak', startDate: stayDate, endDate: stayDate, daysOfWeek: [], adjustmentType: 'PERCENT', adjustmentValue: 20, roomTypes: [], ratePlans: [] }]) },
+      yieldRule: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const result: any = await (new RevenueForecastService(p) as any).rateContext('hotel-1', stayDate);
+    expect(result).toMatchObject({ available: true, multipleRates: true });
+    expect(result.rows[0]).toMatchObject({ effectivePrePromoRate: 6000, season: { id: 'season-1' }, note: 'Pre-Promotion Sell Rate; promotions are intentionally excluded.' });
+    expect(result.rows[1]).toMatchObject({ effectivePrePromoRate: 5800, manualOverride: 5800, season: null });
+  });
+
   it('returns an ordered immutable booking curve and appends a live point without persisting it', async () => {
     const today = current(); const stayDate = addDays(today, 5); const p: any = {
       hotel: { findUnique: jest.fn().mockResolvedValue({ id: 'hotel-1', name: 'Demo Hotel', timezoneName: 'Asia/Kolkata', active: true }) },
@@ -102,5 +129,6 @@ describe('RevenueForecastService', () => {
     };
     const result: any = await new RevenueForecastService(p).forecast('user-1', { hotelId: 'hotel-1', observationDate: toDateOnly(today), from: toDateOnly(stayDate), to: toDateOnly(stayDate), pickupWindows: '7' } as any);
     expect(result.rows[0].completion).toMatchObject({ available: true, ratio: 0.75, sampleSize: 5, confidence: 'LOW' }); expect(result.rows[0].forecast).toMatchObject({ finalRooms: 40, remainingDemandRooms: 10, occupancyPercent: 100, revenue: null }); expect(result.rows[0].paceComparison).toMatchObject({ status: 'ON_PACE', differenceRooms: 0, historicalMedianOtbAtLead: 30 });
+    expect(p.revenueForecastSnapshot.findMany.mock.calls.at(-1)[0].where.observationDate.gte).toEqual(addDays(today, -REVENUE_FORECAST_SNAPSHOT_LOOKBACK_DAYS));
   });
 });

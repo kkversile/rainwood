@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { adminLinks, buildNavigationGroups, isAdminRouteActive, linksForRole } from '../src/components/Shell';
-import { scopedRevenueForecastHotels } from '../src/components/RevenueForecast';
+import { bookingCurveAxisLabels, bookingCurveX, scopedRevenueForecastHotels } from '../src/components/RevenueForecast';
 
 const asAdminLinks = (role: string) => {
   const allowed = new Set(linksForRole(role).map(([href]) => href));
@@ -41,4 +41,13 @@ test('revenue forecast keeps global roles multi-property and property Admin fixe
   assert.deepEqual(scopedRevenueForecastHotels({ role: 'CORPORATE_ADMIN' }, hotels), hotels);
   assert.deepEqual(scopedRevenueForecastHotels({ role: 'ADMIN', staffHotelId: 'hotel-b' }, hotels), [hotels[1]]);
   assert.deepEqual(scopedRevenueForecastHotels({ role: 'ADMIN' }, hotels), []);
+});
+
+test('booking curve uses actual lead-time spacing and meaningful axis labels', () => {
+  const observations = [90, 60, 14, 7, 0].map((daysBeforeArrival) => ({ daysBeforeArrival }));
+  const xs = observations.map((observation) => bookingCurveX(observation.daysBeforeArrival, observations));
+  assert.deepEqual(xs.map((value) => Number(value.toFixed(4))), [4, 34.6667, 81.6889, 88.8444, 96]);
+  assert.ok(xs[1] - xs[0] > xs[3] - xs[2]);
+  assert.equal(bookingCurveX(10, [{ daysBeforeArrival: 10 }]), 50);
+  assert.deepEqual(bookingCurveAxisLabels(observations).map((label) => label.value), [90, 60, 30, 14, 7, 0]);
 });

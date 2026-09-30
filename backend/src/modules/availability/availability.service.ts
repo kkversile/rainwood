@@ -6,6 +6,7 @@ import { getHotelOperationalDate } from '../../common/hotel-dates';
 import { AvailabilityQueryDto } from './availability.dto';
 import { RateResolverService } from './rate-resolver';
 import { selectBestPromotion } from './promotion.utils';
+import { resolvePrePromotionRate } from './pricing-context';
 
 type Database = PrismaService | Prisma.TransactionClient;
 export type RoomOccupancy = { adults: number; children: number };
@@ -13,22 +14,6 @@ type Selection = { hotelId: string; roomTypeId: string; ratePlanId: string; chec
 
 export function supplementaryScopeFilter(agentId?: string) {
   return agentId ? { in: [SupplementaryChargeScope.AGENTS, SupplementaryChargeScope.ALL] } : SupplementaryChargeScope.ALL;
-}
-
-function applyAdjustment(amount: number, type: 'PERCENT' | 'FIXED', value: number) {
-  return Math.max(0, type === 'PERCENT' ? amount + amount * value / 100 : amount + value);
-}
-
-function targetMatches(targets: Array<{ roomTypeId?: string; ratePlanId?: string }> | undefined, id: string) {
-  return !targets?.length || targets.some((target) => target.roomTypeId === id || target.ratePlanId === id);
-}
-
-function selectedSeason(seasons: any[], date: string, weekday: number, roomTypeId: string, ratePlanId: string) {
-  return seasons.find((season) => date >= toDateOnly(season.startDate) && date <= toDateOnly(season.endDate) && (!season.daysOfWeek?.length || season.daysOfWeek.includes(weekday)) && targetMatches(season.roomTypes, roomTypeId) && targetMatches(season.ratePlans, ratePlanId));
-}
-
-function selectedYieldRule(rules: any[], occupancyPercent: number, roomTypeId: string) {
-  return rules.find((rule) => occupancyPercent >= rule.occupancyFrom && (occupancyPercent < rule.occupancyTo || (rule.occupancyTo === 100 && occupancyPercent <= 100)) && (!rule.roomTypeId || rule.roomTypeId === roomTypeId));
 }
 
 @Injectable()
@@ -126,15 +111,12 @@ export class AvailabilityService {
         const hasManualOverride = rate?.overrideAmount != null;
         const hasOccupancyPrice = !hasManualOverride && Object.prototype.hasOwnProperty.call(occupancyPrices, occupancyKey) && Number.isFinite(Number(occupancyPrices[occupancyKey]));
         const commercialBase = hasManualOverride ? Number(rate.overrideAmount) : hasOccupancyPrice ? Number(occupancyPrices[occupancyKey]) : Number(rate?.baseAmount ?? rate?.amount ?? 0);
-        const season = hasManualOverride ? null : selectedSeason(seasons, toDateOnly(night), night.getUTCDay(), room.id, plan.id);
         const inventoryDay = inventoryByDate.get(toDateOnly(night));
-        const occupancyPercent = inventoryDay?.available > 0 ? Math.min(100, Math.max(0, (Number(inventoryDay.held ?? 0) + Number(inventoryDay.sold ?? 0)) / Number(inventoryDay.available) * 100)) : 100;
-        const yieldRule = hasManualOverride ? null : selectedYieldRule(yieldRules, occupancyPercent, room.id);
-        const seasonAmount = season ? applyAdjustment(commercialBase, season.adjustmentType, Number(season.adjustmentValue)) : commercialBase;
-        const effectiveAmount = yieldRule ? applyAdjustment(seasonAmount, yieldRule.adjustmentType, Number(yieldRule.adjustmentValue)) : seasonAmount;
-        const seasonAdjustment = effectiveAmount - commercialBase - (yieldRule ? effectiveAmount - seasonAmount : 0);
+        const pricing = resolvePrePromotionRate({ rate, commercialBase, date: toDateOnly(night), weekday: night.getUTCDay(), roomTypeId: room.id, ratePlanId: plan.id, inventoryDay, seasons, yieldRules });
+        const season = pricing.season; const yieldRule = pricing.yield; const occupancyPercent = pricing.occupancyPercent; const effectiveAmount = pricing.effectivePrePromoRate;
+        const seasonAdjustment = pricing.seasonAdjustedRate - commercialBase;
         const supplementAmount = hasOccupancyPrice || hasManualOverride ? 0 : Number(rate?.childAmount ?? 0) * occupancy.children + Number(rate?.extraAdultAmount ?? 0) * Math.max(0, occupancy.adults - 2);
-        return { roomIndex: index, adults: occupancy.adults, children: occupancy.children, occupancyKey, baseRate: Math.round(commercialBase * 100) / 100, baseAmount: Math.round(effectiveAmount * 100) / 100, supplementAmount, manualOverride: hasManualOverride ? Number(rate.overrideAmount) : null, seasonApplied: season ? { id: season.id, name: season.name, adjustment: Math.round(seasonAdjustment * 100) / 100 } : null, yieldRuleApplied: yieldRule ? { id: yieldRule.id, name: yieldRule.name, occupancyPercent: Math.round(occupancyPercent * 100) / 100, adjustment: Math.round((effectiveAmount - seasonAmount) * 100) / 100 } : null };
+        return { roomIndex: index, adults: occupancy.adults, children: occupancy.children, occupancyKey, baseRate: Math.round(commercialBase * 100) / 100, baseAmount: Math.round(effectiveAmount * 100) / 100, supplementAmount, manualOverride: hasManualOverride ? Number(rate.overrideAmount) : null, seasonApplied: season ? { id: season.id, name: season.name, adjustment: Math.round(seasonAdjustment * 100) / 100 } : null, yieldRuleApplied: yieldRule ? { id: yieldRule.id, name: yieldRule.name, occupancyPercent: Math.round(occupancyPercent * 100) / 100, adjustment: Math.round((effectiveAmount - pricing.seasonAdjustedRate) * 100) / 100 } : null };
       });
       const occupancyKeys = roomBreakdown.map((item) => item.occupancyKey);
       const base = roomBreakdown.reduce((sum, item) => sum + item.baseAmount, 0);

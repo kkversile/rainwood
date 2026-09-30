@@ -914,3 +914,4 @@
 @media (max-width:1100px){.revenueForecastSummary{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:900px){.revenueForecastFilters .managementFilterGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.revenueForecastSummary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:560px){.revenueForecastFilters .managementFilterGrid{grid-template-columns:1fr}.revenueForecastSummary{grid-template-columns:1fr}}
+.bookingCurveRateContext{display:grid;gap:8px;padding:16px;border:1px solid var(--line);border-radius:12px;background:#fbffff}.bookingCurveRateRow{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 0;border-top:1px solid var(--line)}.bookingCurveRateRow small{display:block;color:var(--muted);font-size:11px;margin-top:3px}.bookingCurveRateRow strong{color:var(--navy);white-space:nowrap}

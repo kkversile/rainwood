@@ -3,9 +3,12 @@ import { ReservationStatus } from '@prisma/client';
 export const REVENUE_FORECAST_HORIZON_DAYS = 90;
 export const REVENUE_FORECAST_PICKUP_WINDOWS = [1, 3, 7, 14, 30] as const;
 export const REVENUE_FORECAST_HISTORY_LOOKBACK_DAYS = 365;
-export const BOOKING_CURVE_LEAD_BUCKETS = [90, 60, 45, 30, 21, 14, 7, 3, 1, 0] as const;
+export const REVENUE_FORECAST_MAX_LEAD_DAYS = 90;
+export const REVENUE_FORECAST_LEAD_TOLERANCE_DAYS = 3;
+export const REVENUE_FORECAST_SNAPSHOT_LOOKBACK_DAYS = REVENUE_FORECAST_HISTORY_LOOKBACK_DAYS + REVENUE_FORECAST_MAX_LEAD_DAYS + REVENUE_FORECAST_LEAD_TOLERANCE_DAYS;
+export const BOOKING_CURVE_LEAD_BUCKETS = [REVENUE_FORECAST_MAX_LEAD_DAYS, 60, 45, 30, 21, 14, 7, 3, 1, 0] as const;
 export const COMPLETION_MINIMUM_SAMPLE_SIZE = 5;
-export const COMPLETION_LEAD_TOLERANCE_DAYS = 3;
+export const COMPLETION_LEAD_TOLERANCE_DAYS = REVENUE_FORECAST_LEAD_TOLERANCE_DAYS;
 
 // V1 committed OTB is intentionally explicit. Held inventory is represented by InventoryDay.held.
 export const COMMITTED_OTB_STATUSES = [ReservationStatus.CONFIRMED, ReservationStatus.MODIFIED] as const;
