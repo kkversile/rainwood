@@ -85,7 +85,7 @@ export class TaxDocumentsService {
   }
 
   private sourceLines(reservation: any, rules: any[]) {
-    const rule = (serviceCode?: string) => rules.find((candidate) => serviceCode && candidate.serviceCode === serviceCode) ?? rules[0];
+    const rule = (serviceCode?: string) => rules.find((candidate) => candidate.hotelId === reservation.hotelId && serviceCode && candidate.serviceCode === serviceCode) ?? rules.find((candidate) => candidate.hotelId === reservation.hotelId) ?? rules.find((candidate) => serviceCode && candidate.serviceCode === serviceCode) ?? rules[0];
     const lines: any[] = [];
     for (const reservationLine of reservation.lines) {
       const nights = reservationLine.nights ?? [];
