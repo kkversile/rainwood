@@ -46,7 +46,7 @@ export class NightAuditService {
     const range = this.dateRange(businessDate);
     const timestampRange = getHotelBusinessDayUtcRange(businessDate, hotel.timezoneName);
     const reservationWhere = { hotelId: hotel.id, status: { notIn: EXCLUDED_RESERVATION_STATUSES } };
-    const [rooms, arrivalRows, departureRows, inHouseRows, noShowRows, nights, charges, payments, activeReservations, assignments, housekeepingTasks, maintenanceTickets] = await Promise.all([
+    const [rooms, arrivalRows, departureRows, inHouseRows, noShowRows, nights, charges, payments, activeReservations, assignments, housekeepingTasks, maintenanceTickets, openCashierShift] = await Promise.all([
       client.room.findMany({ where: { hotelId: hotel.id, active: true }, select: { id: true, roomNumber: true, status: true }, orderBy: { roomNumber: 'asc' } }),
       client.reservation.findMany({ where: { ...reservationWhere, checkIn: range }, select: { id: true, stayStatus: true } }),
       client.reservation.findMany({ where: { ...reservationWhere, checkOut: range }, select: { id: true, stayStatus: true } }),
@@ -59,6 +59,7 @@ export class NightAuditService {
       client.reservationRoomAssignment.findMany({ where: { reservation: reservationWhere, unassignedAt: null }, select: { id: true, roomId: true, reservationId: true, room: { select: { id: true, roomNumber: true, hotelId: true, active: true, status: true } }, reservation: { select: { id: true, stayStatus: true } } } }),
       client.housekeepingTask.findMany({ where: { hotelId: hotel.id, status: { in: ACTIVE_HOUSEKEEPING as any } }, select: { id: true, roomId: true, status: true, room: { select: { roomNumber: true, status: true } } } }),
       client.maintenanceTicket.findMany({ where: { hotelId: hotel.id, status: { in: ACTIVE_MAINTENANCE } }, select: { id: true, roomId: true, status: true, requiresOutOfOrder: true, room: { select: { roomNumber: true, status: true } } } }),
+      client.cashierShift?.findFirst ? client.cashierShift.findFirst({ where: { hotelId: hotel.id, businessDate, status: 'OPEN' }, select: { id: true, shiftNo: true } }) : Promise.resolve(null),
     ]);
 
     const blockers: Issue[] = [];
@@ -96,6 +97,7 @@ export class NightAuditService {
     const unsettledCheckoutCount = activeReservations.filter((_row: any, index: number) => outstandingByReservation[index] > 0.005 && _row.stayStatus === StayStatus.CHECKED_IN).length;
     if (outstandingGuestBalance > 0.005) warnings.push({ code: 'OUTSTANDING_GUEST_BALANCE', message: `Outstanding guest balance is INR ${outstandingGuestBalance.toFixed(2)}.` });
     if (maintenanceTickets.length) warnings.push({ code: 'OPEN_MAINTENANCE_TICKETS', message: `${maintenanceTickets.length} maintenance ticket(s) remain open.` });
+    if (openCashierShift) blockers.push({ code: 'OPEN_CASHIER_SHIFT', message: `Cashier shift ${openCashierShift.shiftNo} must be closed before Night Audit.` });
 
     const totalRooms = rooms.length;
     const occupiedRooms = rooms.filter((room: any) => room.status === RoomOperationalStatus.OCCUPIED).length;
@@ -119,7 +121,7 @@ export class NightAuditService {
       }
     }
     const incidentalRevenue = charges.reduce((sum: number, charge: any) => sum + this.number(charge.totalAmount), 0);
-    const paymentsByMode: Record<string, number> = { CASH: 0, UPI: 0, BANK_TRANSFER: 0, GATEWAY: 0, WALLET: 0, COMPANY_CREDIT: 0 };
+    const paymentsByMode: Record<string, number> = { CASH: 0, UPI: 0, CARD: 0, BANK_TRANSFER: 0, GATEWAY: 0, WALLET: 0, COMPANY_CREDIT: 0, CHEQUE: 0, OTHER: 0 };
     for (const payment of payments) paymentsByMode[payment.mode] = (paymentsByMode[payment.mode] ?? 0) + this.number(payment.amount);
     const totalPayments = Object.values(paymentsByMode).reduce((sum, amount) => sum + amount, 0);
     const summary = {
@@ -127,7 +129,7 @@ export class NightAuditService {
       occupancy: { totalRooms, occupiedRooms, availableRooms, dirtyRooms: dirtyRooms.length, cleaningRooms: cleaningRooms.length, outOfOrderRooms: outOfOrderCount, sellableRooms, occupiedRoomNights, sellableRoomNights: sellableRooms, occupancyPercent: sellableRooms ? Number(((occupiedRoomNights / sellableRooms) * 100).toFixed(2)) : 0 },
       stays: { arrivals: arrivalRows.length, checkedIn: arrivalRows.filter((row: any) => row.stayStatus === StayStatus.CHECKED_IN).length, departures: departureRows.length, checkedOut: departureRows.filter((row: any) => row.stayStatus === StayStatus.CHECKED_OUT).length, inHouse: inHouseRows.length, noShows: noShowRows },
       revenue: { roomRevenue, incidentalRevenue, grossRevenue: roomRevenue + incidentalRevenue },
-      payments: { cash: paymentsByMode.CASH, upi: paymentsByMode.UPI, bankTransfer: paymentsByMode.BANK_TRANSFER, gateway: paymentsByMode.GATEWAY, wallet: paymentsByMode.WALLET, companyCredit: paymentsByMode.COMPANY_CREDIT, total: totalPayments },
+      payments: { cash: paymentsByMode.CASH, upi: paymentsByMode.UPI, card: paymentsByMode.CARD, bankTransfer: paymentsByMode.BANK_TRANSFER, gateway: paymentsByMode.GATEWAY, wallet: paymentsByMode.WALLET, companyCredit: paymentsByMode.COMPANY_CREDIT, cheque: paymentsByMode.CHEQUE, other: paymentsByMode.OTHER, total: totalPayments },
       balances: { outstandingGuestBalance, unsettledCheckoutCount },
       operations: { dirtyRooms: dirtyRooms.length, cleaningRooms: cleaningRooms.length, outOfOrderRooms: outOfOrderCount, openMaintenanceTickets: maintenanceTickets.length, openHousekeepingTasks: housekeepingTasks.length },
       sourcePerformance: [...sourcePerformance.values()].map((row) => ({ source: row.source, reservationIds: [...row.reservationIds], reservations: row.reservationIds.size, roomNights: row.roomNights, roomRevenue: row.roomRevenue })),

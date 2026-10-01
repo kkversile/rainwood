@@ -1,15 +1,17 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PaymentProvider, Prisma } from '@prisma/client';
+import { PaymentMode, PaymentProvider, Prisma, UserRole } from '@prisma/client';
 import { createHash } from 'crypto';
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/audit.service';
 import { MockGateway, PaymentGateway, RazorpayGateway } from './payment-provider';
 import { ManualPaymentDto, MockCompletionDto } from './payments.dto';
+import { CashierShiftsService } from '../cashier-shifts/cashier-shifts.service';
+import { getActorScope } from '../../common/role-scope';
 
 @Injectable()
 export class PaymentsService {
-  constructor(private p: PrismaService, private c: ConfigService, private audit: AuditService) {}
+  constructor(private p: PrismaService, private c: ConfigService, private audit: AuditService, private cashierShifts?: CashierShiftsService) {}
 
   async getWalletRechargeAttempt(agentId: string, attemptId: string) {
     const attempt = await this.p.walletRechargeAttempt.findFirst({ where: { id: attemptId, wallet: { agentId } }, select: { id: true, status: true, amount: true, currency: true, provider: true } });
@@ -128,12 +130,21 @@ export class PaymentsService {
   }
 
   async manual(reference: string, body: ManualPaymentDto, userId: string) {
+    const actor = await getActorScope(this.p, userId);
+    const paymentRoles: UserRole[] = [UserRole.SUPER_ADMIN, UserRole.CORPORATE_ADMIN, UserRole.ADMIN, UserRole.RESERVATION];
+    if (!paymentRoles.includes(actor.role)) throw new ForbiddenException('This account cannot record payments.');
     const reservation = await this.p.reservation.findUnique({ where: { reference } });
     if (!reservation) throw new NotFoundException('Reservation not found');
+    if (!actor.isGlobal && actor.role !== UserRole.ACCOUNTS && actor.hotelId !== reservation.hotelId) throw new ForbiddenException('You cannot record a payment for another hotel.');
     if (body.amount > Number(reservation.balanceAmount)) throw new BadRequestException('Payment exceeds balance due');
-    const payment = await this.p.payment.create({ data: { reservationId: reservation.id, amount: body.amount, mode: body.mode, provider: 'MANUAL', reference: body.reference, proofFileId: body.proofFileId, verified: false } });
-    await this.p.reservation.update({ where: { id: reservation.id }, data: { paymentStatus: 'PENDING' } });
-    await this.audit.log({ actorUserId: userId, action: 'PAYMENT_RECORDED', entityType: 'Payment', entityId: payment.id, after: { amount: body.amount, mode: body.mode } });
+    const payment = await this.p.$transaction(async (tx) => {
+      const openShift = this.cashierShifts ? await this.cashierShifts.findOpenForHotel(tx, reservation.hotelId) : null;
+      if (body.mode === PaymentMode.CASH && !openShift) throw new BadRequestException('Open a cashier shift before recording cash payments.');
+      const created = await tx.payment.create({ data: { reservationId: reservation.id, amount: body.amount, mode: body.mode, provider: 'MANUAL', reference: body.reference, proofFileId: body.proofFileId, cashierShiftId: openShift?.id, verified: false } });
+      await tx.reservation.update({ where: { id: reservation.id }, data: { paymentStatus: 'PENDING' } });
+      return created;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    await this.audit.log({ actorUserId: userId, action: 'PAYMENT_RECORDED', entityType: 'Payment', entityId: payment.id, after: { amount: body.amount, mode: body.mode, cashierShiftId: payment.cashierShiftId } });
     return payment;
   }
 

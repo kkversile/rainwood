@@ -11,7 +11,7 @@ const asAdminLinks = (role: string) => {
 test('grouped admin navigation keeps the requested information architecture', () => {
   const groups = buildNavigationGroups(asAdminLinks('SUPER_ADMIN'));
   assert.deepEqual(groups.map((group) => group.label), ['Operations', 'Reservations', 'Revenue', 'CRM & Sales', 'Reports', 'System']);
-  assert.deepEqual(groups[0].items.map((item) => item.label), ['Rooms & Inventory', 'Physical Rooms', 'Housekeeping', 'Maintenance', 'Supplementary Charges', 'Expenses', 'Service Items']);
+  assert.deepEqual(groups[0].items.map((item) => item.label), ['Rooms & Inventory', 'Physical Rooms', 'Housekeeping', 'Maintenance', 'Supplementary Charges', 'Expenses', 'Service Items', 'Cashier Shift']);
   assert.deepEqual(groups[1].items.map((item) => item.label), ['Reservations', 'Arrivals', 'In-house', 'Lost & Found', 'Payments', 'Contact Requests']);
   assert.deepEqual(groups[2].items.map((item) => item.label), ['Revenue Forecast', 'Rate Plans', 'Rates', 'Rate Seasons', 'Yield Rules', 'Rate Simulator', 'Promotions', 'Rate Import']);
   assert.deepEqual(groups[3].items.map((item) => item.label), ['Guests', 'Agents', 'Corporates', 'Inquiries']);
@@ -22,7 +22,7 @@ test('grouped admin navigation keeps the requested information architecture', ()
 test('role filtering is fail-closed and groups only allowed links', () => {
   assert.deepEqual(linksForRole(), []);
   assert.deepEqual(linksForRole('NOT_A_ROLE'), []);
-  assert.deepEqual(buildNavigationGroups(asAdminLinks('RESERVATION')).map((group) => group.label), ['Reservations', 'CRM & Sales', 'Reports']);
+  assert.deepEqual(buildNavigationGroups(asAdminLinks('RESERVATION')).map((group) => group.label), ['Operations', 'Reservations', 'CRM & Sales', 'Reports']);
   assert.equal(buildNavigationGroups(asAdminLinks('ADMIN')).some((group) => group.key === 'system' && group.items.some((item) => item.label === 'Manage Hotels')), false);
   assert.equal(buildNavigationGroups(asAdminLinks('CORPORATE_ADMIN')).some((group) => group.items.some((item) => item.label === 'Site Settings')), false);
 });

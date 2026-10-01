@@ -18,7 +18,7 @@ export class PaymentsController {
 
   @Post(':reference/manual')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS')
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION')
   manual(@Param('reference') reference: string, @Body() body: ManualPaymentDto, @CurrentUser() user: any) { return this.s.manual(reference, body, user.id); }
 
   @Post(':reference/manual/:paymentId/verify')

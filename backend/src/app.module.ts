@@ -34,6 +34,7 @@ import { InquiriesModule } from './modules/inquiries/inquiries.module';
 import { GuestsModule } from './modules/guests/guests.module';
 import { RevenueForecastModule } from './modules/revenue-forecast/revenue-forecast.module';
 import { GuestServicesModule } from './modules/guest-services/guest-services.module';
+import { CashierShiftsModule } from './modules/cashier-shifts/cashier-shifts.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { GuestServicesModule } from './modules/guest-services/guest-services.mod
     GuestsModule,
     RevenueForecastModule,
     GuestServicesModule,
+    CashierShiftsModule,
   ],
 })
 export class AppModule {}

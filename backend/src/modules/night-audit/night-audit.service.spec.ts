@@ -24,6 +24,7 @@ function setup(overrides: Record<string, any> = {}) {
     reservationRoomAssignment: { findMany: jest.fn().mockResolvedValue([{ id: 'assignment-1', roomId: 'room-102', reservationId: 'stay-1', room: { id: 'room-102', roomNumber: '102', hotelId: 'hotel-1', active: true, status: 'OCCUPIED' }, reservation: { id: 'stay-1', stayStatus: 'CHECKED_IN' } }]) },
     housekeepingTask: { findMany: jest.fn().mockResolvedValue([{ id: 'task-1', roomId: 'room-103', status: 'PENDING', room: { roomNumber: '103', status: 'DIRTY' } }]) },
     maintenanceTicket: { findMany: jest.fn().mockResolvedValue([]) },
+    cashierShift: { findFirst: jest.fn().mockResolvedValue(null) },
     hotelBusinessDay: { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockImplementation(async ({ data, include }: any) => ({ ...data, id: 'day-1', closedBy: include ? admin : undefined })) },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
     $transaction: jest.fn(async (work: any) => work(p)),
@@ -47,6 +48,12 @@ describe('NightAuditService', () => {
     expect(result.summary.occupancy).toEqual(expect.objectContaining({ totalRooms: 4, occupiedRooms: 1, outOfOrderRooms: 1, sellableRooms: 3 }));
     expect(result.blockers).toEqual([]);
     expect(result.warnings.map((item: any) => item.code)).toEqual(expect.arrayContaining(['DIRTY_ROOMS', 'OUT_OF_ORDER_ROOMS', 'OUTSTANDING_GUEST_BALANCE']));
+  });
+
+  it('blocks Night Audit while the hotel cashier shift remains open', async () => {
+    const { service } = setup({ cashierShift: { findFirst: jest.fn().mockResolvedValue({ id: 'shift-1', shiftNo: 'CSH-2026-000001' }) } });
+    const result: any = await service.preview('admin-1', { hotelId: 'hotel-1', date: toDateOnly(currentDate()) });
+    expect(result.blockers).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'OPEN_CASHIER_SHIFT' })]));
   });
 
   it('blocks close on invalid occupied-room integrity but does not mutate stays', async () => {

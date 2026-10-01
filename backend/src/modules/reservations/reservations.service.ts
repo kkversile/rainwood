@@ -17,6 +17,7 @@ import { HousekeepingService } from '../housekeeping/housekeeping.service';
 import { GuestsService, guestArrivalContext } from '../guests/guests.service';
 import { assertActorCanManageHotel, getActorScope } from '../../common/role-scope';
 import { calculateSettlementTotals } from './settlement-totals';
+import { CashierShiftsService } from '../cashier-shifts/cashier-shifts.service';
 
 const checkoutInclude = {
   hotel: { select: { id: true, name: true, timezoneName: true } },
@@ -29,7 +30,7 @@ const checkoutInclude = {
 
 @Injectable()
 export class ReservationsService {
-  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService, @Optional() private readonly availability?: AvailabilityService) {}
+  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService, @Optional() private readonly availability?: AvailabilityService, @Optional() private readonly cashierShifts?: CashierShiftsService) {}
 
   private operationalRoles = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'];
 
@@ -181,7 +182,10 @@ export class ReservationsService {
       }
       const totals = this.settlementTotals(reservation);
       if (body.amount > totals.outstandingAmount + 0.005) throw new BadRequestException(`Payment exceeds total outstanding of INR ${totals.outstandingAmount.toFixed(2)}.`);
-      const payment = await tx.payment.create({ data: { reservationId: reservation.id, amount: new Prisma.Decimal(body.amount.toFixed(2)), mode: body.mode, provider: 'MANUAL', reference: body.reference?.trim() || null, idempotencyKey: body.idempotencyKey, verified: true, verifiedById: user.id, paidAt: new Date() } });
+      const cashierAvailable = Boolean(this.cashierShifts && typeof this.cashierShifts.findOpenForHotel === 'function');
+      const openShift = cashierAvailable ? await this.cashierShifts!.findOpenForHotel(tx, reservation.hotelId) : null;
+      if (cashierAvailable && body.mode === 'CASH' && !openShift) throw new BadRequestException('Open a cashier shift before recording cash payments.');
+      const payment = await tx.payment.create({ data: { reservationId: reservation.id, amount: new Prisma.Decimal(body.amount.toFixed(2)), mode: body.mode, provider: 'MANUAL', reference: body.reference?.trim() || null, idempotencyKey: body.idempotencyKey, cashierShiftId: openShift?.id, verified: true, verifiedById: user.id, paidAt: new Date() } });
       await tx.auditLog.create({ data: { actorUserId: user.id, action: 'PAYMENT_RECORDED', entityType: 'Payment', entityId: payment.id, after: { reference, reservationId: reservation.id, amount: body.amount, mode: body.mode, context: 'CHECKOUT' } } });
       return payment;
     });

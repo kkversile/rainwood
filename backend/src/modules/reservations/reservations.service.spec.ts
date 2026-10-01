@@ -30,6 +30,9 @@ function setup(balance = 10000, paid = 2000) {
 }
 
 describe('reservation due milestone payments', () => {
+  beforeAll(() => jest.useFakeTimers().setSystemTime(new Date('2026-09-30T12:00:00.000Z')));
+  afterAll(() => jest.useRealTimers());
+
   it('debits only the currently due milestone and leaves future milestones unpaid', async () => {
     const { service, tx } = setup();
     const result: any = await service.payDueMilestones('RW-TEST-1', 'retry-1', { id: 'agent-1', role: 'AGENT' });

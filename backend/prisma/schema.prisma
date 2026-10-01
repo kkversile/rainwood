@@ -164,6 +164,7 @@ enum PaymentMode {
   GATEWAY
   WALLET
   UPI
+  CARD
   BANK_TRANSFER
   CASH
   COMPANY_CREDIT
@@ -206,6 +207,12 @@ enum DocumentSequenceType {
   INQUIRY
   SERVICE_ORDER
   LOST_FOUND
+  CASHIER_SHIFT
+}
+
+enum CashierShiftStatus {
+  OPEN
+  CLOSED
 }
 
 enum ServiceItemType {
@@ -423,6 +430,9 @@ model User {
   reportedLostFoundItems     LostFoundItem[]             @relation("LostFoundReportedBy")
   assignedLostFoundItems     LostFoundItem[]             @relation("LostFoundAssignedTo")
   returnedLostFoundItems     LostFoundItem[]             @relation("LostFoundReturnedBy")
+  disposedLostFoundItems     LostFoundItem[]             @relation("LostFoundDisposedBy")
+  openedCashierShifts        CashierShift[]              @relation("CashierShiftOpenedBy")
+  closedCashierShifts        CashierShift[]              @relation("CashierShiftClosedBy")
   assignedRatePlans          AgentRatePlan[]
   guestNotes                 GuestNote[]
   paymentMilestones          AgentPaymentMilestone[]
@@ -546,6 +556,7 @@ model Hotel {
   serviceItems            ServiceItem[]
   serviceOrders           GuestServiceOrder[]
   lostFoundItems          LostFoundItem[]
+  cashierShifts           CashierShift[]
   corporateLinks          CorporateAccountHotel[]
   corporateRateAgreements CorporateRateAgreement[]
   inquiries               BookingInquiry[]
@@ -1450,6 +1461,9 @@ model LostFoundItem {
   returnedById   String?
   returnedBy     User?           @relation("LostFoundReturnedBy", fields: [returnedById], references: [id], onDelete: SetNull)
   disposalReason String?
+  disposedAt     DateTime?
+  disposedById   String?
+  disposedBy     User?           @relation("LostFoundDisposedBy", fields: [disposedById], references: [id], onDelete: SetNull)
   notes          String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
@@ -1458,6 +1472,34 @@ model LostFoundItem {
   @@index([hotelId, type, status, createdAt])
   @@index([roomId, createdAt])
   @@index([reservationId, status])
+}
+
+model CashierShift {
+  id                    String             @id @default(cuid())
+  hotelId               String
+  hotel                 Hotel              @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  shiftNo               String
+  openedById            String
+  openedBy              User               @relation("CashierShiftOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  openedAt              DateTime           @default(now())
+  openingCash           Decimal            @db.Decimal(14, 2)
+  status                CashierShiftStatus @default(OPEN)
+  closedById            String?
+  closedBy              User?              @relation("CashierShiftClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  closedAt              DateTime?
+  expectedCash          Decimal?           @db.Decimal(14, 2)
+  actualCash            Decimal?           @db.Decimal(14, 2)
+  cashVariance          Decimal?           @db.Decimal(14, 2)
+  closingNote           String?
+  paymentTotalsSnapshot Json?
+  businessDate          DateTime           @db.Date
+  payments              Payment[]
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  @@unique([hotelId, shiftNo])
+  @@index([hotelId, businessDate, status])
+  @@index([openedById, hotelId, status])
 }
 
 model CorporateAccount {
@@ -1843,12 +1885,15 @@ model Payment {
   verified          Boolean         @default(false)
   verifiedById      String?
   verifiedBy        User?           @relation("PaymentVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+  cashierShiftId    String?
+  cashierShift      CashierShift?   @relation(fields: [cashierShiftId], references: [id], onDelete: SetNull)
   paidAt            DateTime?
   idempotencyKey    String?         @unique
   createdAt         DateTime        @default(now())
 
   @@unique([provider, providerPaymentId])
   @@index([reservationId, verified])
+  @@index([cashierShiftId, mode, createdAt])
 }
 
 model PaymentAttempt {
