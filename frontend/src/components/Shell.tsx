@@ -27,6 +27,10 @@ export const adminLinks = [
   { key: 'expenses', href: '/admin/expenses', label: 'Expenses' },
   { key: 'serviceItems', href: '/admin/service-items', label: 'Service Items' },
   { key: 'cashier', href: '/admin/cashier', label: 'Cashier Shift' },
+  { key: 'taxSettings', href: '/admin/tax-settings', label: 'Tax Settings' },
+  { key: 'taxInvoices', href: '/admin/tax-invoices', label: 'Tax Invoices' },
+  { key: 'creditNotes', href: '/admin/credit-notes', label: 'Credit Notes' },
+  { key: 'tds', href: '/admin/tds', label: 'TDS Register' },
   { key: 'agents', href: '/admin/agents', label: 'Agents' },
   { key: 'corporates', href: '/admin/corporates', label: 'Corporates' },
   { key: 'inquiries', href: '/admin/inquiries', label: 'Inquiries' },
@@ -45,15 +49,15 @@ export const adminLinks = [
   { key: 'siteSettings', href: '/admin/settings', label: 'Site Settings' },
   { key: 'auditLogs', href: '/admin/audit-logs', label: 'Audit Logs' },
 ] as const satisfies readonly AdminLink[];
-const reservationLinks = new Set(['/admin/dashboard', '/admin/reservations', '/admin/arrivals', '/admin/in-house', '/admin/lost-found', '/admin/guests', '/admin/payments', '/admin/reports', '/admin/inquiries', '/admin/cashier']);
+const reservationLinks = new Set(['/admin/dashboard', '/admin/reservations', '/admin/arrivals', '/admin/in-house', '/admin/lost-found', '/admin/guests', '/admin/payments', '/admin/reports', '/admin/inquiries', '/admin/cashier', '/admin/tax-invoices']);
 const propertyHiddenLinks = new Set(['/admin/hotels', '/admin/settings', '/admin/axisrooms', '/admin/jobs', '/admin/audit-logs']);
 const adminGroupDefinitions = [
   { key: 'operations', label: 'Operations', itemKeys: ['roomsInventory', 'physicalRooms', 'housekeeping', 'maintenance', 'supplementaryCharges', 'expenses', 'serviceItems', 'cashier'] },
   { key: 'reservations', label: 'Reservations', itemKeys: ['reservations', 'arrivals', 'inHouse', 'lostFound', 'payments', 'contactRequests'] },
   { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rates', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
   { key: 'crmSales', label: 'CRM & Sales', itemKeys: ['guests', 'agents', 'corporates', 'inquiries'] },
-  { key: 'reports', label: 'Reports', itemKeys: ['reports', 'nightAudit'] },
-  { key: 'system', label: 'System', itemKeys: ['manageHotels', 'axisRooms', 'jobs', 'users', 'siteSettings', 'auditLogs'] },
+  { key: 'reports', label: 'Reports', itemKeys: ['reports', 'taxInvoices', 'creditNotes', 'tds', 'nightAudit'] },
+  { key: 'system', label: 'System', itemKeys: ['manageHotels', 'taxSettings', 'axisRooms', 'jobs', 'users', 'siteSettings', 'auditLogs'] },
 ] as const;
 
 function allowedAdminLinksForRole(role?: string | null): readonly AdminLink[] {
@@ -62,7 +66,7 @@ function allowedAdminLinksForRole(role?: string | null): readonly AdminLink[] {
   if (role === 'RESERVATION') return adminLinks.filter((item) => reservationLinks.has(item.href));
   if (role === 'ADMIN') return adminLinks.filter((item) => !propertyHiddenLinks.has(item.href));
   if (role === 'CORPORATE_ADMIN') return adminLinks.filter((item) => item.href !== '/admin/settings');
-  if (role === 'ACCOUNTS') return adminLinks.filter((item) => ['/admin/dashboard', '/admin/payments', '/admin/reports', '/admin/expenses', '/admin/corporates', '/admin/lost-found', '/admin/cashier'].includes(item.href));
+  if (role === 'ACCOUNTS') return adminLinks.filter((item) => ['/admin/dashboard', '/admin/payments', '/admin/reports', '/admin/expenses', '/admin/corporates', '/admin/lost-found', '/admin/cashier', '/admin/tax-settings', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds'].includes(item.href));
   if (role === 'VIEWER') return adminLinks.filter((item) => ['/admin/dashboard', '/admin/reports'].includes(item.href));
   return [];
 }

@@ -15,8 +15,8 @@ test('grouped admin navigation keeps the requested information architecture', ()
   assert.deepEqual(groups[1].items.map((item) => item.label), ['Reservations', 'Arrivals', 'In-house', 'Lost & Found', 'Payments', 'Contact Requests']);
   assert.deepEqual(groups[2].items.map((item) => item.label), ['Revenue Forecast', 'Rate Plans', 'Rates', 'Rate Seasons', 'Yield Rules', 'Rate Simulator', 'Promotions', 'Rate Import']);
   assert.deepEqual(groups[3].items.map((item) => item.label), ['Guests', 'Agents', 'Corporates', 'Inquiries']);
-  assert.deepEqual(groups[4].items.map((item) => item.label), ['Reports', 'Night Audit']);
-  assert.deepEqual(groups[5].items.map((item) => item.label), ['Manage Hotels', 'AxisRooms', 'Jobs', 'Users', 'Site Settings', 'Audit Logs']);
+  assert.deepEqual(groups[4].items.map((item) => item.label), ['Reports', 'Tax Invoices', 'Credit Notes', 'TDS Register', 'Night Audit']);
+  assert.deepEqual(groups[5].items.map((item) => item.label), ['Manage Hotels', 'Tax Settings', 'AxisRooms', 'Jobs', 'Users', 'Site Settings', 'Audit Logs']);
 });
 
 test('role filtering is fail-closed and groups only allowed links', () => {

@@ -208,6 +208,45 @@ enum DocumentSequenceType {
   SERVICE_ORDER
   LOST_FOUND
   CASHIER_SHIFT
+  TAX_INVOICE
+  CREDIT_NOTE
+}
+
+enum TaxInvoiceStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+}
+
+enum TaxCustomerType {
+  INDIVIDUAL
+  CORPORATE
+  AGENT
+}
+
+enum TaxInvoiceLineType {
+  ROOM
+  FOOD_BEVERAGE
+  LAUNDRY
+  ROOM_SERVICE
+  OTHER_SERVICE
+  ADJUSTMENT
+}
+
+enum TaxRuleType {
+  GST
+}
+
+enum TaxCreditNoteStatus {
+  ISSUED
+  CANCELLED
+}
+
+enum TdsStatus {
+  RECORDED
+  CERTIFICATE_PENDING
+  CERTIFICATE_RECEIVED
+  REVERSED
 }
 
 enum CashierShiftStatus {
@@ -433,6 +472,11 @@ model User {
   disposedLostFoundItems     LostFoundItem[]             @relation("LostFoundDisposedBy")
   openedCashierShifts        CashierShift[]              @relation("CashierShiftOpenedBy")
   closedCashierShifts        CashierShift[]              @relation("CashierShiftClosedBy")
+  issuedTaxInvoices          TaxInvoice[]                @relation("TaxInvoiceIssuer")
+  cancelledTaxInvoices       TaxInvoice[]                @relation("TaxInvoiceCanceller")
+  issuedTaxCreditNotes       TaxCreditNote[]             @relation("TaxCreditNoteIssuer")
+  recordedTdsDeductions      TdsDeduction[]              @relation("TdsRecorder")
+  reversedTdsDeductions      TdsDeduction[]              @relation("TdsReverser")
   assignedRatePlans          AgentRatePlan[]
   guestNotes                 GuestNote[]
   paymentMilestones          AgentPaymentMilestone[]
@@ -557,6 +601,11 @@ model Hotel {
   serviceOrders           GuestServiceOrder[]
   lostFoundItems          LostFoundItem[]
   cashierShifts           CashierShift[]
+  taxProfiles             HotelTaxProfile[]
+  taxRules                TaxRule[]
+  taxInvoices             TaxInvoice[]
+  taxCreditNotes          TaxCreditNote[]
+  tdsDeductions           TdsDeduction[]
   corporateLinks          CorporateAccountHotel[]
   corporateRateAgreements CorporateRateAgreement[]
   inquiries               BookingInquiry[]
@@ -1262,6 +1311,7 @@ model Reservation {
   folioCharges         ReservationFolioCharge[]
   paymentAttempts      PaymentAttempt[]
   settlement           ReservationSettlement?
+  taxInvoice           TaxInvoice?
   syncLogs             AxisSyncLog[]
   vouchers             Voucher[]
   cancellations        CancellationRequest[]
@@ -1361,6 +1411,215 @@ model DocumentSequence {
 
   @@unique([hotelId, type, year])
   @@index([hotelId, type, year])
+}
+
+model HotelTaxProfile {
+  id                String          @id @default(cuid())
+  hotelId           String
+  hotel             Hotel           @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  legalName         String
+  tradeName         String?
+  gstin             String?
+  pan               String?
+  registeredAddress String?
+  city              String?
+  state             String?
+  stateCode         String?
+  postalCode        String?
+  country           String          @default("India")
+  invoicePrefix     String?
+  creditNotePrefix  String?
+  active            Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  invoices          TaxInvoice[]
+  creditNotes       TaxCreditNote[]
+
+  @@index([hotelId, active])
+}
+
+model TaxRule {
+  id            String           @id @default(cuid())
+  hotelId       String?
+  hotel         Hotel?           @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  name          String
+  serviceCode   String?
+  description   String?
+  taxType       TaxRuleType      @default(GST)
+  ratePercent   Decimal          @db.Decimal(5, 2)
+  effectiveFrom DateTime         @db.Date
+  effectiveTo   DateTime?        @db.Date
+  active        Boolean          @default(true)
+  invoiceLines  TaxInvoiceLine[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([hotelId, active, effectiveFrom, effectiveTo])
+}
+
+model TaxInvoice {
+  id                     String                 @id @default(cuid())
+  hotelId                String
+  hotel                  Hotel                  @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  taxProfileId           String?
+  taxProfile             HotelTaxProfile?       @relation(fields: [taxProfileId], references: [id], onDelete: SetNull)
+  invoiceNo              String                 @unique
+  invoiceDate            DateTime               @db.Date
+  financialYear          String
+  status                 TaxInvoiceStatus       @default(DRAFT)
+  reservationId          String                 @unique
+  reservation            Reservation            @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+  settlementId           String?                @unique
+  settlement             ReservationSettlement? @relation("SettlementTaxInvoice", fields: [settlementId], references: [id], onDelete: SetNull)
+  customerType           TaxCustomerType
+  customerName           String
+  customerGstin          String?
+  customerAddress        String?
+  customerState          String?
+  customerStateCode      String?
+  customerEmail          String?
+  customerMobile         String?
+  hotelLegalName         String
+  hotelTradeName         String?
+  hotelGstin             String?
+  hotelPan               String?
+  hotelAddress           String?
+  hotelCity              String?
+  hotelState             String?
+  hotelStateCode         String?
+  hotelPostalCode        String?
+  placeOfSupplyState     String?
+  placeOfSupplyStateCode String?
+  taxableAmount          Decimal                @db.Decimal(14, 2)
+  cgstAmount             Decimal                @db.Decimal(14, 2)
+  sgstAmount             Decimal                @db.Decimal(14, 2)
+  igstAmount             Decimal                @db.Decimal(14, 2)
+  otherTaxAmount         Decimal                @default(0) @db.Decimal(14, 2)
+  roundOff               Decimal                @default(0) @db.Decimal(14, 2)
+  grandTotal             Decimal                @db.Decimal(14, 2)
+  currency               String                 @default("INR")
+  issuedById             String?
+  issuedBy               User?                  @relation("TaxInvoiceIssuer", fields: [issuedById], references: [id], onDelete: SetNull)
+  issuedAt               DateTime?
+  cancelledById          String?
+  cancelledBy            User?                  @relation("TaxInvoiceCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
+  cancelledAt            DateTime?
+  cancellationReason     String?
+  lines                  TaxInvoiceLine[]
+  creditNotes            TaxCreditNote[]
+  tdsDeductions          TdsDeduction[]
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  @@index([hotelId, invoiceDate, status])
+  @@index([customerType, customerGstin])
+}
+
+model TaxInvoiceLine {
+  id            String             @id @default(cuid())
+  invoiceId     String
+  invoice       TaxInvoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  taxRuleId     String?
+  taxRule       TaxRule?           @relation(fields: [taxRuleId], references: [id], onDelete: SetNull)
+  lineType      TaxInvoiceLineType
+  description   String
+  serviceCode   String?
+  quantity      Decimal            @db.Decimal(10, 2)
+  unitAmount    Decimal            @db.Decimal(14, 2)
+  taxableAmount Decimal            @db.Decimal(14, 2)
+  taxRate       Decimal            @db.Decimal(5, 2)
+  cgstRate      Decimal            @default(0) @db.Decimal(5, 2)
+  cgstAmount    Decimal            @default(0) @db.Decimal(14, 2)
+  sgstRate      Decimal            @default(0) @db.Decimal(5, 2)
+  sgstAmount    Decimal            @default(0) @db.Decimal(14, 2)
+  igstRate      Decimal            @default(0) @db.Decimal(5, 2)
+  igstAmount    Decimal            @default(0) @db.Decimal(14, 2)
+  lineTotal     Decimal            @db.Decimal(14, 2)
+  sourceType    String
+  sourceId      String?
+  createdAt     DateTime           @default(now())
+
+  @@index([invoiceId])
+  @@index([sourceType, sourceId])
+}
+
+model TaxCreditNote {
+  id                 String              @id @default(cuid())
+  hotelId            String
+  hotel              Hotel               @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  invoiceId          String
+  invoice            TaxInvoice          @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  creditNoteNo       String              @unique
+  creditNoteDate     DateTime            @db.Date
+  financialYear      String
+  reason             String
+  status             TaxCreditNoteStatus @default(ISSUED)
+  taxableAmount      Decimal             @db.Decimal(14, 2)
+  cgstAmount         Decimal             @db.Decimal(14, 2)
+  sgstAmount         Decimal             @db.Decimal(14, 2)
+  igstAmount         Decimal             @db.Decimal(14, 2)
+  grandTotal         Decimal             @db.Decimal(14, 2)
+  issuedById         String?
+  issuedBy           User?               @relation("TaxCreditNoteIssuer", fields: [issuedById], references: [id], onDelete: SetNull)
+  issuedAt           DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
+  lines              TaxCreditNoteLine[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  hotelTaxProfile    HotelTaxProfile?    @relation(fields: [hotelTaxProfileId], references: [id])
+  hotelTaxProfileId  String?
+
+  @@index([hotelId, creditNoteDate, status])
+}
+
+model TaxCreditNoteLine {
+  id            String        @id @default(cuid())
+  creditNoteId  String
+  creditNote    TaxCreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+  invoiceLineId String?
+  description   String
+  serviceCode   String?
+  taxableAmount Decimal       @db.Decimal(14, 2)
+  taxRate       Decimal       @db.Decimal(5, 2)
+  cgstAmount    Decimal       @default(0) @db.Decimal(14, 2)
+  sgstAmount    Decimal       @default(0) @db.Decimal(14, 2)
+  igstAmount    Decimal       @default(0) @db.Decimal(14, 2)
+  lineTotal     Decimal       @db.Decimal(14, 2)
+  createdAt     DateTime      @default(now())
+
+  @@index([creditNoteId])
+}
+
+model TdsDeduction {
+  id                 String           @id @default(cuid())
+  hotelId            String
+  hotel              Hotel            @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  corporateAccountId String
+  corporateAccount   CorporateAccount @relation(fields: [corporateAccountId], references: [id], onDelete: Restrict)
+  taxInvoiceId       String
+  taxInvoice         TaxInvoice       @relation(fields: [taxInvoiceId], references: [id], onDelete: Restrict)
+  deductionDate      DateTime         @db.Date
+  sectionCode        String?
+  ratePercent        Decimal?         @db.Decimal(5, 2)
+  grossInvoiceAmount Decimal          @db.Decimal(14, 2)
+  tdsAmount          Decimal          @db.Decimal(14, 2)
+  certificateNumber  String?
+  certificateDate    DateTime?        @db.Date
+  financialYear      String?
+  status             TdsStatus        @default(CERTIFICATE_PENDING)
+  notes              String?
+  recordedById       String?
+  recordedBy         User?            @relation("TdsRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+  reversedById       String?
+  reversedBy         User?            @relation("TdsReverser", fields: [reversedById], references: [id], onDelete: SetNull)
+  reversedAt         DateTime?
+  reversalReason     String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([hotelId, deductionDate, status])
+  @@index([corporateAccountId, taxInvoiceId])
 }
 
 model ServiceItem {
@@ -1523,6 +1782,7 @@ model CorporateAccount {
   reservations   Reservation[]
   holds          InventoryHold[]
   rateAgreements CorporateRateAgreement[]
+  tdsDeductions  TdsDeduction[]
   createdAt      DateTime                 @default(now())
   updatedAt      DateTime                 @updatedAt
 
@@ -1683,6 +1943,7 @@ model ReservationSettlement {
   overrideAuthorizedBy     String?
   notes                    String?
   snapshot                 Json?
+  taxInvoice               TaxInvoice?                 @relation("SettlementTaxInvoice")
   createdAt                DateTime                    @default(now())
   updatedAt                DateTime                    @updatedAt
 
