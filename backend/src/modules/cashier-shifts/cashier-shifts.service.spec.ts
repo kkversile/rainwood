@@ -51,4 +51,26 @@ describe('CashierShiftsService', () => {
     const { p, service } = make(); p.cashierShift.findUnique.mockResolvedValue({ id: 'shift-1', hotelId: 'hotel-a', status: CashierShiftStatus.CLOSED, hotel });
     await expect(service.close('admin-1', 'shift-1', { actualCash: 1 })).rejects.toBeInstanceOf(ConflictException);
   });
+
+  it('uses closed snapshots and queries live payments only for open history', async () => {
+    const { p, service } = make();
+    const closed = Array.from({ length: 20 }, (_, index) => ({ id: `closed-${index}`, hotelId: 'hotel-a', status: CashierShiftStatus.CLOSED, shiftNo: `CSH-2026-${String(index + 1).padStart(6, '0')}`, businessDate: new Date('2026-10-01'), openedAt: new Date('2026-10-01T01:00:00Z'), openingCash: 10000, expectedCash: 44000, actualCash: 44000, cashVariance: 0, paymentTotalsSnapshot: { byMode: { CASH: 34000, UPI: 5000, CARD: 2000 }, cash: 34000, total: 41000 }, hotel, openedBy: { name: 'Admin' }, closedBy: { name: 'Admin' } }));
+    const open = { id: 'open-1', hotelId: 'hotel-a', status: CashierShiftStatus.OPEN, shiftNo: 'CSH-2026-000021', businessDate: new Date('2026-10-01'), openedAt: new Date('2026-10-01T02:00:00Z'), openingCash: 10000, paymentTotalsSnapshot: null, hotel, openedBy: { name: 'Admin' }, closedBy: null };
+    p.cashierShift.findMany.mockResolvedValue([...closed, open]);
+    p.payment.findMany.mockResolvedValue([{ amount: 100, mode: 'CASH' }]);
+    const rows: any[] = await service.list('admin-1', { hotelId: 'hotel-a' });
+    expect(rows).toHaveLength(21);
+    expect(rows[0].paymentTotals.cash).toBe(34000);
+    expect(rows[20].paymentTotals.cash).toBe(100);
+    expect(p.payment.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps pending recorded payments in cashier totals by policy', async () => {
+    const { p, service } = make();
+    p.cashierShift.findUnique.mockResolvedValue({ id: 'shift-1', hotelId: 'hotel-a', status: CashierShiftStatus.OPEN, shiftNo: 'CSH-2026-000001', businessDate: new Date('2026-10-01'), openingCash: 0, hotel });
+    p.payment.findMany.mockResolvedValue([{ amount: 100, mode: 'CASH', verified: false }]);
+    p.cashierShift.update.mockImplementation(async ({ data }: any) => ({ id: 'shift-1', ...data, status: CashierShiftStatus.CLOSED, hotel, openedBy: { name: 'Admin' }, closedBy: { name: 'Admin' }, businessDate: new Date('2026-10-01'), shiftNo: 'CSH-2026-000001' }));
+    const result: any = await service.close('admin-1', 'shift-1', { actualCash: 100 });
+    expect(result.paymentTotals.cash).toBe(100);
+  });
 });

@@ -39,6 +39,9 @@ export class CashierShiftsService {
   }
 
   private async totals(db: Db, shiftId: string) {
+    // Cashier totals represent payments recorded against the drawer, including
+    // pending manual payments. Verification is a separate payment workflow;
+    // changing this filter would alter the existing cashier business meaning.
     const rows = await db.payment.findMany({ where: { cashierShiftId: shiftId }, select: { amount: true, mode: true } });
     const byMode: Record<string, number> = { CASH: 0, UPI: 0, CARD: 0, BANK_TRANSFER: 0, GATEWAY: 0, WALLET: 0, COMPANY_CREDIT: 0, CHEQUE: 0, OTHER: 0 };
     for (const row of rows) byMode[row.mode] = round((byMode[row.mode] ?? 0) + amount(row.amount));
@@ -105,6 +108,9 @@ export class CashierShiftsService {
     const scope = await this.actor(userId, READ_ROLES);
     const hotelId = resolveRequestedHotel(scope, query.hotelId);
     const rows = await this.p.cashierShift.findMany({ where: { hotelId: hotelId ?? undefined, openedById: query.cashierId, businessDate: query.from || query.to ? { gte: query.from ? parseDateOnly(query.from, 'from') : undefined, lte: query.to ? parseDateOnly(query.to, 'to') : undefined } : undefined }, include: { hotel: { select: { id: true, name: true, timezoneName: true } }, openedBy: { select: { id: true, name: true } }, closedBy: { select: { id: true, name: true } } }, orderBy: { openedAt: 'desc' } });
-    return Promise.all(rows.map(async (row) => this.view(row, await this.totals(this.p, row.id))));
+    return Promise.all(rows.map(async (row) => {
+      const snapshot = row.status === CashierShiftStatus.CLOSED && row.paymentTotalsSnapshot;
+      return this.view(row, snapshot || await this.totals(this.p, row.id));
+    }));
   }
 }
