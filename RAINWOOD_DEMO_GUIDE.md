@@ -1,81 +1,78 @@
 # RainWood PMS Demo Guide
 
-Verified source commit: 82a93240
+Verified commit: `701dc3c1` (`feat: prefill operational demo forms`)
 Branch: `main`
-Verification date/time: 2026-10-02 16:28 Asia/Calcutta
-Demo environment: `https://demo.dhisoft.in/rainwood` (read-only smoke target); local verification uses `http://localhost:3001/rainwood`
+Verification date: 2026-10-02
+Demo environment: `https://demo.dhisoft.in/rainwood`
+Local verification environment: `http://localhost:3001/rainwood` with disposable PostgreSQL
 
-Use configured demo credentials from the local environment. They are intentionally not reproduced in this guide.
-
-## Recommended Demo Length
-
-- 5-minute quick demo: management overview and one operational story.
-- 10-minute standard demo: guest booking through front desk and Room Rack.
-- 20-minute full demo: add folio, housekeeping, maintenance, reporting, and role boundaries.
+This guide contains no passwords, JWTs, API keys, database credentials, or private tokens. Use the configured demo-login shortcuts or approved credentials from the local environment.
 
 ## 5-Minute Demo
 
-### 1. Admin Dashboard
+Use this sequence for a concise management demonstration.
 
-Where: sign in at `/rainwood/login`, then open Dashboard.
+### 1. Dashboard
 
-Show: hotel context, operational summary, and the Operations command bar.
+Where to click: Sign in at `/rainwood/login`, then open Dashboard.
 
-Say: “RainWood brings commercial, front-office, and operational information into one hotel-scoped workspace.”
+What to show: Hotel context, operational summary, command bar, and grouped navigation.
 
-Expected result: the authorized dashboard loads without an Unauthorized state.
+What to say: "RainWood brings commercial, front-office, finance, and hotel operations into one hotel-scoped workspace."
+
+Expected result: The authorized dashboard loads without an Unauthorized state.
 
 ### 2. Front Desk
 
-Where: Admin → Operations → Front Desk.
+Where to click: Admin -> Operations -> Front Desk.
 
-Show: Arrivals, In-house, Departures, and Exceptions queues.
+What to show: Arrivals, In-house, Departures, and Exceptions queues.
 
-Say: “The front desk works from operational queues, while Reservation 360 keeps the complete guest context in one reusable workspace.”
+What to say: "Front Desk staff work from operational queues while Reservation 360 keeps the complete guest context in one place."
 
-Expected result: queue tabs and URL state remain stable when switching views.
+Expected result: Queue switching preserves URL state and shows the seeded operational records.
 
 ### 3. Reservation 360
 
-Where: open an arrival or reservation reference.
+Where to click: Open an arrival or reservation reference from Front Desk.
 
-Show: Overview, Stay & Room, Folio, Guest, and Timeline tabs.
+What to show: Overview, Stay & Room, Folio, Guest, and Timeline sections.
 
-Say: “The same Reservation 360 workspace is reused by Front Desk and Room Rack, so staff do not learn two competing detail screens.”
+What to say: "The same Reservation 360 workspace connects the guest, stay, room, folio, and operational history."
 
-Expected result: the drawer opens, loads the reservation, and closes back to the previous queue or rack state.
+Expected result: The detail workspace opens and closes back to the previous queue or Room Rack context.
 
 ### 4. Room Rack
 
-Where: Admin → Operations → Room Rack.
+Where to click: Admin -> Operations -> Room Rack.
 
-Show: physical rooms on rows, reservation blocks across dates, the Unassigned lane, and current housekeeping/maintenance overlays.
+What to show: Physical rooms, reservation blocks by date, Unassigned stays, housekeeping state, and maintenance overlays.
 
-Say: “RainWood separates sellable room-type inventory from physical-room assignment. This board shows which guest is planned into which physical room without changing the rate or inventory engine.”
+What to say: "Room Rack is physical-room planning. Rates and inventory remain separate sellable room-type inventory."
 
-Expected result: assigned stays render on physical rooms, genuine gaps appear in Unassigned, and historical checked-out assignments are not mistaken for current gaps.
+Expected result: Assigned stays render on physical rooms and genuinely unassigned stays remain visible in the Unassigned lane.
 
 ### 5. Folio / Checkout
 
-Where: Reservation 360 → Folio.
+Where to click: Open Reservation 360 -> Folio.
 
-Show: authoritative reservation balance, incidental charges, payments, and settlement status.
+What to show: Room charges, incidental charges, payments, balance, and settlement state.
 
-Say: “Financial totals come from the server-authoritative folio and settlement workflow.”
+What to say: "Financial totals are calculated from the server-authoritative folio and settlement workflow."
 
-Expected result: the folio refreshes after an authorized demo action. Use Preview when a live business-day close is not intentionally prepared.
+Expected result: The folio shows safe seeded values. Use a prepared disposable record for any demonstration mutation.
 
 ### 6. Night Audit
 
-Where: Admin → Night Audit.
+Where to click: Admin -> Night Audit -> Preview.
 
-Show: Preview, warnings, blockers, and the review step.
+What to show: Business date, occupancy, revenue, outstanding amount, blockers, and warnings.
 
-Say: “Night Audit closes the hotel business day and preserves an historical snapshot rather than recalculating history from today’s data.”
+What to say: "Night Audit provides a controlled business-day review and preserves an historical snapshot."
 
-Expected result: Preview is safe to show. Do not close a real business date merely for a presentation.
+Expected result: Preview loads. Do not close a real business day during a presentation unless it was intentionally prepared.
 
-## 10–15 Minute Standard Demo
+## 10-15 Minute Demo
 
 ```text
 Public Booking
@@ -90,7 +87,7 @@ Front Desk
 Room Rack
       |
       v
-Check-in
+Check In
       |
       v
 In-house
@@ -105,50 +102,45 @@ Checkout
 Night Audit Preview
 ```
 
-Speaking script:
+Presenter talking points:
 
-1. Start with Public Booking to show hotel, dates, occupancy, availability, hold, guest-safe fields, and demo payment.
-2. Move to Front Desk to show the arrival queue and open Reservation 360.
-3. Move to Room Rack to explain the difference between physical rooms and sellable room types.
-4. Show Expected, Checked In, and Checked Out stay filters plus the 7/14/30-day controls.
-5. Show current HK and maintenance overlays without implying historical operational status.
-6. Return to Reservation 360 for Folio and a safe permitted charge demonstration if the disposable/demo workflow is prepared.
-7. Finish with Checkout or Night Audit Preview, depending on the prepared data.
+1. Start with Public Booking: select a hotel, dates, adults, and children; show availability and the authoritative quote.
+2. Show the temporary inventory hold and guest-safe details before reaching the mock payment step.
+3. Open the resulting reservation in Front Desk and Reservation 360.
+4. Use Room Rack to explain physical-room planning, assigned rooms, unassigned stays, and date-range controls.
+5. Show Check In, In-house, room context, folio charges, payment state, and safe settlement behavior.
+6. Open Housekeeping and Maintenance to show how room readiness is controlled by operational workflows.
+7. Finish with Night Audit Preview, showing warnings and blockers without closing a real business day.
 
-## ASCII System Overview
+## ASCII Architecture
 
 ```text
                          RAINWOOD PMS
                               |
-        +---------------------+---------------------+
-        |                     |                     |
-        v                     v                     v
-  Guest Booking          Hotel Operations       Agent Portal
-        |                     |                     |
-        v                     v                     v
- Availability           Front Desk             Availability
-        |                     |                     |
-        v                     +--------+            v
-       Hold                            |          Booking
-        |                              |
-        v                              v
-     Payment                      Reservation 360
-        |                              |
-        v                 +------------+------------+
-   Reservation            |            |            |
-                          v            v            v
-                     Room Rack       Folio      Guest CRM
-                          |            |
-                          v            v
-                     Room Ops      Settlement
-                          |            |
-                    +-----+-----+      v
-                    |           |   Checkout
-                    v           v
-               Housekeeping Maintenance
-                                     |
-                                     v
-                                 Night Audit
+          +-------------------+-------------------+
+          |                   |                   |
+          v                   v                   v
+   Public Booking       Hotel Operations      Agent Portal
+          |                   |                   |
+          v                   v                   v
+     Availability         Front Desk          Availability
+          |                   |                   |
+          v                   v                   v
+         Hold          Reservation 360         Booking
+          |                   |                   |
+          v          +--------+--------+        v
+       Payment       |        |        |     Agent Reports
+          |          v        v        v
+          v      Room Rack  Folio   Guest CRM
+     Reservation      |        |
+                      v        v
+                 Room Operations  Settlement
+                   /       \        |
+                  v         v      v
+            Housekeeping Maintenance Checkout
+                                |
+                                v
+                           Night Audit
 ```
 
 ## ASCII Public Booking Flow
@@ -157,18 +149,18 @@ Speaking script:
 Home
  |
  v
-Hotel + Dates + Occupancy
+Hotel + Dates + Guests
  |
  v
 Availability
  |
  v
-Room / Rate
+Room + Rate
  |
  v
 Inventory Hold
  |
- +------ expires ------> Recheck Availability
+ +---- expires ----> Recheck Availability
  |
  v
 Guest Details
@@ -177,12 +169,12 @@ Guest Details
 Payment
  |
  v
-Reservation Confirmed
+Booking Confirmation
 ```
 
-The public journey uses server-authoritative availability/pricing, separate adults and children, a temporary inventory hold, and guest-safe fields only.
+The public flow uses server-authoritative pricing, separate adult/child occupancy, a temporary inventory hold, and guest-safe input fields.
 
-## ASCII Reservation Lifecycle
+## Reservation / Stay Lifecycle
 
 ```text
 Reservation
@@ -196,15 +188,16 @@ EXPECTED
         v
 CHECKED_IN
         |
-        | Room change possible
-        | Charges / Payments / Folio
+        | Charges / Payments
+        | Room change where authorized
+        |
         v
 CHECKED_OUT
-
-No-show is a separate stay outcome and is not normal physical-room occupancy.
 ```
 
-## ASCII Front Desk Flow
+`NO_SHOW` is a separate supported stay outcome and is not normal physical-room occupancy.
+
+## Front Desk Flow
 
 ```text
                     FRONT DESK
@@ -217,38 +210,38 @@ No-show is a separate stay outcome and is not normal physical-room occupancy.
         +---------------+---------------+
                         |
                         v
-                 Reservation 360
+                 RESERVATION 360
                         |
         +---------------+---------------+---------------+---------------+
-        |               |               |               |               |
-        v               v               v               v               v
-    Overview        Stay & Room       Folio           Guest          Timeline
+        |               |               |               |
+        v               v               v               v
+    Overview       Stay & Room       Folio          Guest / Timeline
 ```
 
-Authorized quick actions include Assign Room, Check In, Change Room, Post Charge, Record Payment, and Checkout.
+Relevant authorized actions include Assign Room, Check In, Change Room, Post Charge, Record Payment, and Checkout, subject to role and hotel scope.
 
-## ASCII Room Rack Diagram
+## Room Rack Diagram
 
 ```text
-ROOM RACK — 02 OCT → 06 OCT
+ROOM RACK - 02 OCT -> 06 OCT
 
 Room      02      03      04      05      06
 ------------------------------------------------
-201      [ Ravi Kumar  RW-1042 -------- ]
-202              [ Priya RW-1051 ------ ]
+201      [ Ravi Kumar RW-1042 -------- ]
+202              [ Priya RW-1051 ----- ]
 203      AVAILABLE
 204      OUT OF ORDER
-205      [ Amit ------------------------ ]
+205      [ Amit ----------------------- ]
 
 UNASSIGNED
 ------------------------------------------------
-RW-1060 · Suresh · Deluxe · 03–05 Oct
-RW-1068 · Maya   · Suite  · 04–06 Oct
+RW-1060 - Suresh - Deluxe - 03-05 Oct
+RW-1068 - Maya   - Suite  - 04-06 Oct
 ```
 
-Room Rack means physical-room planning. Rates and inventory mean sellable room-type inventory.
+Room Rack means physical-room planning. Rates and Inventory mean sellable room-type inventory.
 
-## ASCII Housekeeping / Maintenance Flow
+## Housekeeping Flow
 
 ```text
 Guest checks out
@@ -260,28 +253,44 @@ Room DIRTY
 Housekeeping task
       |
       v
-PENDING → ACCEPTED → CLEANING → COMPLETED
-                                  |
-                                  v
-                            Room AVAILABLE
-```
-
-```text
-Maintenance issue
+PENDING
       |
       v
-Ticket
+ACCEPTED
       |
-      +---- requires OOO? ---- YES ----> OUT OF ORDER
-      |                                 |
-      |                                 v
-      +----------------------------> Resolved
-                                        |
-                                        v
-                         AVAILABLE only when blockers clear
+      v
+CLEANING
+      |
+      v
+COMPLETED
+      |
+      v
+Room AVAILABLE
 ```
 
-## ASCII Finance Flow
+## Maintenance / Out-of-Order Flow
+
+```text
+Issue reported
+      |
+      v
+Maintenance ticket
+      |
+      +---- requires blocking? ----+
+      |                            |
+      NO                           YES
+      |                            |
+      v                            v
+Work / resolve                OUT OF ORDER
+                                   |
+                                   v
+                               Resolve
+                                   |
+                                   v
+                    AVAILABLE only after all blockers are clear
+```
+
+## Finance Flow
 
 ```text
 Reservation / Stay
@@ -289,7 +298,7 @@ Reservation / Stay
        v
 Room Charges
        |
-       +---- Incidental Charges
+       +---- Incidentals
        |
        v
 Folio
@@ -299,13 +308,13 @@ Folio
        v
 Settlement
        |
-       +---- Outstanding authorization if required
+       +---- Outstanding authorization when required
        |
        v
 Checkout
        |
        v
-Invoice / Credit Note / TDS as applicable
+Invoice / Credit Note / TDS
        |
        v
 Night Audit Snapshot
@@ -313,160 +322,176 @@ Night Audit Snapshot
 
 ## Role Demo Matrix
 
-| Persona | Login URL | Landing page | Demonstrate | Do not expect |
+| Persona | Login / entry | Landing | Key modules to demonstrate | Mutations allowed? |
 |---|---|---|---|---|
-| Public Guest | `/rainwood/booking` | Booking flow | Hotel search, availability, hold, guest details, demo payment | Internal notes, staff-only fields, admin navigation |
-| SUPER_ADMIN | `/rainwood/login` | `/admin/dashboard` | Organization visibility, hotels, operations, finance, Night Audit, system administration | No restriction to one property |
-| CORPORATE_ADMIN | `/rainwood/login` | `/admin/dashboard` | Multi-property dashboard, operations, rates, promotions, guests, reports | SUPER_ADMIN-only site settings |
-| ADMIN | `/rainwood/login` | `/admin/dashboard` | Hotel dashboard, Front Desk, Room Rack, Arrivals, In-house, folio, housekeeping, maintenance | Other hotels outside assigned scope |
-| RESERVATION | `/rainwood/login` | `/admin/arrivals` | New reservation, authoritative quote/hold, arrivals, search, Room Rack where authorized | System administration and unrestricted finance mutation |
-| ACCOUNTS | `/rainwood/login` | `/admin/cashier` | Cashier, payments, expenses, tax invoices, credit notes, TDS, reports | New Reservation and operational mutation controls |
-| VIEWER | `/rainwood/login` | `/admin/reports` | Reports and read-only information | New Reservation, check-in, checkout, payment, room mutation |
-| SERVICE_STAFF | `/rainwood/staff/login` | `/staff` | Assigned stays, room/stay search, permitted service charge, housekeeping context | Admin navigation and unrelated departments |
-| AGENT | `/rainwood/agent/login` | `/agent` | Assigned hotels/rates, availability, booking history, agent reports/settings | Admin navigation and other agents’ scope |
+| Public Guest | `/rainwood/booking` | Booking flow | Hotel search, availability, hold, guest details, mock payment | Guest booking inputs only |
+| SUPER_ADMIN | `/rainwood/login` | `/admin/dashboard` | Organization, hotels, operations, finance, Night Audit, system administration | Yes, within system policy |
+| CORPORATE_ADMIN | `/rainwood/login` | `/admin/dashboard` | Multi-property operations, rates, promotions, guests, reports | Authorized corporate scope |
+| ADMIN | `/rainwood/login` | `/admin/dashboard` | Front Desk, Room Rack, Arrivals, In-house, folio, housekeeping, maintenance | Authorized property scope |
+| RESERVATION | `/rainwood/login` | `/admin/arrivals` | Quotes, reservations, arrivals, search, authorized Room Rack | Reservation scope; not unrestricted finance/system administration |
+| ACCOUNTS | `/rainwood/login` | `/admin/cashier` | Cashier, payments, expenses, tax invoices, credit notes, TDS, reports | Authorized finance actions |
+| VIEWER | `/rainwood/login` | `/admin/reports` | Reports and read-only information | No operational or financial mutation |
+| SERVICE_STAFF | `/rainwood/staff/login` | `/staff` | Assigned stays, service orders, permitted charges, housekeeping context | Department-scoped service actions |
+| AGENT | `/rainwood/agent/login` | `/agent` | Assigned hotels/rates, availability, booking history, reports/settings | Agent-scoped bookings and settings |
 
-## Role-Specific Demo Steps
+## Role-by-Role Presentation Script
+
+### Public Guest
+
+1. Open `/rainwood/booking`.
+2. Select a hotel, dates, adults, and children.
+3. Show availability, room/rate selection, temporary hold, guest details, mock payment, and confirmation.
+
+Say: "The guest sees only guest-safe fields; availability and pricing remain authoritative on the server."
+
+Cannot access: Internal notes, staff fields, admin navigation, hotel operations, or other guests' data.
 
 ### SUPER_ADMIN
 
-1. Sign in → Dashboard.
-2. Show hotel/organization visibility.
-3. Open Manage Hotels, Rooms, Room Rack, Front Desk, Reservations, Rates, Promotions, Housekeeping, Maintenance, Guests, Finance, Night Audit, and Users as needed.
-4. Open and close Reservation 360 from Room Rack.
+1. Sign in at `/rainwood/login`.
+2. Show Dashboard, Manage Hotels, Operations, Rates, Finance, Night Audit, and Users.
+3. Open Reservation 360 from Front Desk or Room Rack.
 
-Presenter line: “This is the broad operational and system-admin view, while all financial and lifecycle actions remain guarded by backend authorization.”
+Say: "This is the broad system and operational view, with backend authorization still applied to every mutation."
+
+Cannot access: No ordinary property restriction; sensitive actions still require their explicit authorization.
 
 ### CORPORATE_ADMIN
 
-1. Sign in → Dashboard.
-2. Show multi-property context and Reports.
-3. Open Front Desk, Room Rack, Rooms, Housekeeping, Maintenance, Rates, Promotions, Guests, and Finance.
+1. Sign in at `/rainwood/login`.
+2. Show the multi-property dashboard, reports, rates, promotions, guests, and operations.
 
-Presenter line: “Corporate administration can work across authorized properties without receiving SUPER_ADMIN-only configuration controls.”
+Say: "Corporate administration works across authorized properties without receiving SUPER_ADMIN-only site configuration controls."
+
+Cannot access: SUPER_ADMIN-only site and organization administration.
 
 ### ADMIN
 
-1. Sign in → Dashboard.
-2. Open Front Desk → an arrival → Reservation 360.
-3. Open Room Rack and preserve the context while viewing the reservation.
-4. Show Arrivals, In-house, Folio, Housekeeping, Maintenance, and Night Audit Preview.
+1. Sign in at `/rainwood/login`.
+2. Open Front Desk -> an arrival -> Reservation 360.
+3. Show Room Rack, Arrivals, In-house, Folio, Housekeeping, Maintenance, and Night Audit Preview.
 
-Presenter line: “The property team can move from arrival to physical room to folio without leaving the hotel workspace.”
+Say: "The property team can move from arrival to physical room to folio without leaving the hotel workspace."
+
+Cannot access: Other hotels outside the assigned property scope.
 
 ### RESERVATION
 
-1. Sign in → Expected Arrivals.
-2. Open Reservations → New Reservation.
-3. Enter guest/stay inputs, request authoritative availability and price, review the hold/quote, then create only when the disposable/demo workflow is prepared.
-4. Verify that changing dates, room, rate plan, or PAX invalidates the prior quote.
+1. Sign in at `/rainwood/login` and land on Expected Arrivals.
+2. Open New Reservation and request an authoritative quote.
+3. Show the hold/quote and explain that changing dates, room, rate, or occupancy invalidates stale pricing.
 
-Presenter line: “Reservation staff work from authoritative quotes and hotel scope; they do not bypass inventory or settlement rules.”
+Say: "Reservation staff work from authoritative quotes and hotel scope; they do not bypass inventory or settlement rules."
+
+Cannot access: System administration and unrestricted finance or room-lifecycle mutation.
 
 ### ACCOUNTS
 
-1. Sign in → Cashier Shift.
-2. Show Payments, Expenses, Tax Invoices, Credit Notes, TDS, Reports, and authorized corporate/accounting views.
-3. Demonstrate that New Reservation and reservation command search are not exposed.
+1. Sign in at `/rainwood/login` and open Cashier Shift.
+2. Show Payments, Expenses, Tax Invoices, Credit Notes, TDS, Reports, and corporate receivables.
 
-Presenter line: “Accounts sees financial workflows without inheriting front-office or room-mutation permissions.”
+Say: "Accounts sees the financial workflow without inheriting front-office and room-mutation permissions."
+
+Cannot access: New Reservation and unrelated operational mutation controls.
 
 ### VIEWER
 
-1. Sign in → Reports.
-2. Open read-only reports and tax/reporting views.
-3. Verify that New Reservation, check-in, checkout, payment mutation, and room mutation controls are absent.
-4. Directly request an unauthorized route to confirm backend/UI protection.
+1. Sign in at `/rainwood/login` and open Reports.
+2. Show read-only reports and reporting/tax views.
+3. Confirm that New Reservation, Check In, Checkout, Payment, and room-mutation controls are absent.
 
-Presenter line: “Viewer access is fail-closed and read-only; hidden navigation is backed by route authorization.”
+Say: "Viewer access is fail-closed and read-only; hidden navigation is backed by route authorization."
+
+Cannot access: Operational and financial mutations.
 
 ### SERVICE_STAFF
 
-1. Use Staff Login → assigned staff landing.
+1. Sign in at `/rainwood/staff/login`.
 2. Search by room, guest, or reservation.
-3. Open the stay/folio and use only permitted service-item/charge actions.
-4. Verify hotel and department scope and refreshed totals.
+3. Show assigned stays, service orders, permitted service charges, and department scope.
 
-Presenter line: “Staff PWA access is scoped to the assigned hotel and department, without admin navigation.”
+Say: "The Staff PWA is limited to the assigned hotel and department and does not expose admin navigation."
+
+Cannot access: Admin navigation and unrelated departments or properties.
 
 ### AGENT
 
-1. Use Agent Login → Agent Dashboard.
-2. Show assigned rate plans and hotel availability.
-3. Open booking history and agent reports/settings where available.
-4. Keep agent-specific references and payment terms visible only in the agent context.
+1. Sign in at `/rainwood/agent/login`.
+2. Show the Agent Dashboard, assigned rate plans, hotel availability, booking history, and settings.
+3. Attempt an admin URL only if demonstrating route protection.
 
-Presenter line: “Agents see the commercial access granted to their account, not the hotel’s internal operations console.”
+Say: "Agents see the commercial access granted to their account, not the hotel's internal operations console."
 
-## What to Say
+Cannot access: Admin operations, other agents' scope, and internal hotel data.
 
-- “RainWood keeps sellable inventory and physical-room assignment separate.”
-- “All financial totals shown during checkout come from server-authoritative settlement calculations.”
-- “Room assignment and room changes are transactional and preserve assignment history.”
-- “Housekeeping and maintenance affect room readiness without bypassing front-office controls.”
-- “Night Audit closes the hotel business day and stores historical snapshots.”
-- “Role routing is fail-closed and hotel scope is enforced by the backend.”
-
-## 15 Minutes Before Demo
+## Before Demo
 
 - [ ] Demo URL responds.
-- [ ] Backend readiness endpoint responds.
+- [ ] Backend liveness responds at `/api/v1/health/live`.
+- [ ] Backend readiness responds at `/api/v1/health/ready`.
 - [ ] Admin login works.
 - [ ] Reservation login works.
 - [ ] Accounts login works.
 - [ ] Service Staff login works.
 - [ ] Agent login works.
-- [ ] Demo hotel is selected.
-- [ ] At least one expected arrival exists.
-- [ ] At least one checked-in stay exists.
-- [ ] Room Rack has visible data.
-- [ ] A safe demonstration folio is prepared.
-- [ ] No test modal or error is left open.
+- [ ] Expected arrival is available.
+- [ ] Checked-in stay is available.
+- [ ] Room Rack has visible reservations.
+- [ ] Folio has safe demo data.
+- [ ] Night Audit Preview loads.
 - [ ] Browser zoom is 100%.
 - [ ] DevTools are closed.
+- [ ] No test dialogs are open.
 
-## If Something Fails During the Demo
+## If Something Fails
 
-- Public booking unavailable: go directly to Front Desk and demonstrate an existing reservation.
-- Payment adapter unavailable: explain the payment state and continue with an existing confirmed reservation.
-- Room Rack empty: change the hotel/date range and show physical rooms plus current overlays.
-- Night Audit cannot safely close: show Preview only; do not close a real business day.
-- A role lands on an unauthorized page: sign out, use the correct role landing URL, and do not bypass the route guard.
+- Public booking unavailable -> demonstrate an existing confirmed reservation from Front Desk.
+- Payment adapter unavailable -> explain the payment state and continue with an existing booking; do not claim a live payment.
+- Room Rack empty -> change hotel/date range and show physical rooms plus current overlays.
+- Night Audit cannot safely close -> demonstrate Preview only; do not close a real business day.
+- Mutation failure -> move to a read-only module and continue the operational story.
+- Role lands on an unauthorized page -> sign out, use the correct role landing route, and do not bypass route protection.
 
-## Do Not Do During Demo
+## Demo Safety Rules
 
-- Do not close a real hotel business date unless intentionally prepared.
-- Do not create uncontrolled maintenance blockers.
-- Do not cancel a real reservation.
-- Do not expose `.env` or configured demo credentials.
-- Do not modify tax configuration.
-- Do not modify live rate inventory unless planned.
-- Do not run destructive database commands.
-- Do not use production/staging data for mutation-heavy testing.
+- Use synthetic or approved demo data only.
+- Do not expose `.env`, passwords, JWTs, API keys, or database credentials.
+- Do not close a real business day merely for presentation.
+- Do not cancel a real reservation or create uncontrolled maintenance blockers.
+- Do not modify live rate inventory or tax configuration unless explicitly planned.
+- Do not run destructive database commands against the hosted demo.
 
 ## Verification Results
 
-Final local verification used the disposable PostgreSQL instance and the local Chrome/Playwright environment.
+All results below are from the current verification run on the disposable local PostgreSQL environment, plus the targeted Agent browser check.
 
-- Frontend unit: 107/107 PASS
-- Frontend browser E2E: 19/19 PASS
-- Backend unit: 343/343 PASS across 50 suites
-- Backend PostgreSQL E2E: 10/10 PASS across 7 suites
-- Frontend typecheck: PASS
-- Backend typecheck: PASS
-- Frontend lint: PASS
-- Backend lint: PASS
-- Frontend build: PASS
-- Backend build: PASS
-- `git diff --check`: PASS before release staging
+Frontend unit: 107/107 PASS
+Frontend browser E2E: 19/19 PASS after one isolated retry of the Images & Media test
+Frontend typecheck: PASS
+Frontend lint: PASS
+Frontend build: PASS (77 static pages generated)
 
-The seeded Room Rack browser workflow covered assigned Expected, Checked In, unassigned, historical Checked Out, housekeeping/maintenance overlays, Reservation 360 open/close, filters, date ranges, and mobile fallback. Public Booking covered search, hold, guest details, policy acceptance, demo payment, confirmation, and exclusion of internal staff fields.
+Backend unit: 343/343 PASS across 50 suites
+Backend API E2E: 4/4 PASS
+Backend PostgreSQL E2E: 6/6 PASS across 5 PostgreSQL suites with `RUN_DB_INTEGRATION=1`
+Backend E2E total: 10/10 PASS across 7 suites
+Backend typecheck: PASS
+Backend lint: PASS
+Backend build: PASS
 
-## Known Demo Notes
+Agent browser verification: PASS; Agent login reached `/rainwood/agent`, and direct access to `/rainwood/admin/dashboard` was protected and returned to the Agent portal.
+Role browser matrix: PASS for SUPER_ADMIN, CORPORATE_ADMIN, ADMIN, RESERVATION, ACCOUNTS, VIEWER, and SERVICE_STAFF.
+`git diff --check`: PASS
 
-- The configured Git repository has no detected GitHub Actions, deployment manifest, or other automatic deployment workflow in this checkout. A normal Git push therefore does not by itself prove that the hosted demo has updated.
-- The full mutation-heavy verification is local/disposable. The hosted demo smoke check is read-only and should not be used for uncontrolled data creation.
-- Use Night Audit Preview during a presentation unless a business date was deliberately prepared for closure.
+Core flow coverage included Public Booking, authoritative quote/hold, mock payment confirmation, admin navigation, Front Desk queues, Reservation 360 access, Room Rack planning, room assignment data, stay lifecycle, housekeeping concurrency, maintenance context, rate import, hotel setup forms, role landing/protection, expected arrivals pagination, document sequences, and Agent access.
 
 ## Release Handoff
 
-The release commit and push result are recorded in the final assistant handoff after staging review. This document contains no credentials, JWTs, API keys, database secrets, or private tokens.
+Branch: `main`
+Commit SHA: `701dc3c1586a922ea4fe4c2c779cc60b93335975`
+Remote: `origin` (`https://github.com/kkversile/rainwood.git`)
+Push status: YES
+Upstream synchronized: YES
+Ahead/behind after push: 0/0
+
+`RAINWOOD_DEMO_GUIDE.md` is provided as a standalone root deliverable alongside the existing source archives. The existing `frontend-src.zip` and `backend-src.zip` were intentionally not changed or staged during this documentation verification task.
