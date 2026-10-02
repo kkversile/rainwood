@@ -19,9 +19,9 @@ test('guest can search, hold, pay in mock mode, and reach confirmation', async (
   await expect(page.getByText('Internal notes', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Mail message', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Agent reference number', { exact: true })).toHaveCount(0);
-  await page.getByLabel('First name').fill('Playwright');
+  await page.getByLabel('First name').fill('Sample');
   await page.getByLabel('Last name').fill('Guest');
-  await page.getByLabel('Email address').fill(`playwright-${Date.now()}@example.com`);
+  await page.getByLabel('Email address').fill(`sample-guest-${Date.now()}@example.com`);
   await page.locator('label').filter({ hasText: 'Mobile number' }).getByRole('textbox').last().fill('9876543210');
   await page.getByLabel('I agree to the hotel booking and cancellation policies').check();
   const publicReservationRequest = page.waitForRequest((request) => request.url().includes('/reservations/from-hold/') && request.method() === 'POST');

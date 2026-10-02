@@ -5,7 +5,9 @@ import { API, apiRequest } from '../lib/api';
 import { todayInHotelTimezone } from '../lib/hotel-date-time';
 
 type Invoice = { id: string; invoiceNo: string; invoiceDate: string; customerName: string; customerGstin?: string | null; taxableAmount: number; cgstAmount: number; sgstAmount: number; igstAmount: number; grandTotal: number; status: string; roundOff?: number; hotel?: { name: string } };
-type Settings = { profiles: Array<any>; rules: Array<any> };
+type TaxProfile = { id: string; hotelId: string; legalName: string; tradeName?: string | null; gstin?: string | null; gstRegistered: boolean; registeredAddress?: string | null; city?: string | null; state?: string | null; stateCode?: string | null; postalCode?: string | null; invoicePrefix?: string | null; creditNotePrefix?: string | null; active: boolean; hotel?: { name: string } };
+type TaxRule = { id: string; hotelId?: string | null; name: string; taxCategory: string; serviceCode?: string | null; ratePercent: number | string; effectiveFrom: string; effectiveTo?: string | null; active: boolean; hotel?: { name: string } };
+type Settings = { profiles: TaxProfile[]; rules: TaxRule[] };
 type InvoiceLine = { id: string; description: string; serviceCode?: string | null; taxableAmount: number; taxRate: number; cgstAmount: number; sgstAmount: number; igstAmount: number; lineTotal: number };
 type InvoiceDetail = Invoice & { lines: InvoiceLine[]; creditNotes: Array<any>; tdsDeductions: Array<any>; reservation: { reference: string; corporateAccountId?: string | null; payments: Array<{ amount: number; verified: boolean }> } };
 const money = (value: unknown) => `INR ${Number(value ?? 0).toFixed(2)}`;
@@ -17,7 +19,16 @@ export function TaxSettingsData() {
   const [error, setError] = useState(''); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
   const [profile, setProfile] = useState({ hotelId: '', legalName: '', tradeName: '', gstin: '', gstRegistered: true, registeredAddress: '', city: '', state: '', stateCode: '', postalCode: '', invoicePrefix: 'INV', creditNotePrefix: 'CN' });
   const [rule, setRule] = useState({ hotelId: '', name: 'GST standard', taxCategory: 'ROOM', serviceCode: '', ratePercent: '18', effectiveFrom: todayInHotelTimezone(), effectiveTo: '' });
-  async function load() { try { setSettings(await apiRequest<Settings>('/tax-settings')); } catch (e) { setError(e instanceof Error ? e.message : 'Could not load tax settings.'); } }
+  async function load() {
+    try {
+      const next = await apiRequest<Settings>('/tax-settings');
+      setSettings(next);
+      const savedProfile = next.profiles[0];
+      if (savedProfile) setProfile((current) => ({ ...current, hotelId: savedProfile.hotelId, legalName: savedProfile.legalName, tradeName: savedProfile.tradeName ?? '', gstin: savedProfile.gstin ?? '', gstRegistered: savedProfile.gstRegistered, registeredAddress: savedProfile.registeredAddress ?? '', city: savedProfile.city ?? '', state: savedProfile.state ?? '', stateCode: savedProfile.stateCode ?? '', postalCode: savedProfile.postalCode ?? '', invoicePrefix: savedProfile.invoicePrefix ?? 'INV', creditNotePrefix: savedProfile.creditNotePrefix ?? 'CN' }));
+      const savedRule = next.rules.find((candidate) => candidate.hotelId === savedProfile?.hotelId) ?? next.rules[0];
+      if (savedRule) setRule((current) => ({ ...current, hotelId: savedRule.hotelId ?? savedProfile?.hotelId ?? '', name: savedRule.name, taxCategory: savedRule.taxCategory, serviceCode: savedRule.serviceCode ?? '', ratePercent: String(savedRule.ratePercent), effectiveFrom: String(savedRule.effectiveFrom).slice(0, 10), effectiveTo: savedRule.effectiveTo ? String(savedRule.effectiveTo).slice(0, 10) : '' }));
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not load tax settings.'); }
+  }
   useEffect(() => { void load(); }, []);
   async function saveProfile(event: FormEvent) { event.preventDefault(); setBusy(true); setError(''); setMessage(''); try { await apiRequest('/tax-settings/profile', { method: 'PUT', body: JSON.stringify(profile) }); setMessage('Hotel tax profile saved.'); await load(); } catch (e) { setError(e instanceof Error ? e.message : 'Could not save profile.'); } finally { setBusy(false); } }
   async function saveRule(event: FormEvent) { event.preventDefault(); setBusy(true); setError(''); setMessage(''); try { await apiRequest('/tax-settings/rules', { method: 'POST', body: JSON.stringify({ ...rule, effectiveTo: rule.effectiveTo || undefined, ratePercent: Number(rule.ratePercent) }) }); setMessage('Tax rule saved.'); await load(); } catch (e) { setError(e instanceof Error ? e.message : 'Could not save rule.'); } finally { setBusy(false); } }
