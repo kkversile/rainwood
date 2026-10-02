@@ -1,6 +1,6 @@
 # RainWood PMS Demo Guide
 
-Verified source commit: pending release commit
+Verified source commit: 82a93240
 Branch: `main`
 Verification date/time: 2026-10-02 16:28 Asia/Calcutta
 Demo environment: `https://demo.dhisoft.in/rainwood` (read-only smoke target); local verification uses `http://localhost:3001/rainwood`
