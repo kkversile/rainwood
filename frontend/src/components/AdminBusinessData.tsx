@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { apiRequest } from '../lib/api';
-import { todayInHotelTimezone } from '../lib/hotel-date-time';
+import { addHotelDays, todayInHotelTimezone } from '../lib/hotel-date-time';
 
 type Hotel = { id: string; name: string; city?: string };
 type Profile = { role: string; staffHotelId?: string | null };
@@ -29,10 +29,10 @@ export function ExpensesData() {
 }
 
 export function CorporatesData() {
-  const [hotels, setHotels] = useState<Hotel[]>([]); const [rows, setRows] = useState<Corporate[]>([]); const [selected, setSelected] = useState<Corporate | null>(null); const [form, setForm] = useState({ name: '', gstin: '', creditDays: '30', creditLimit: '0' }); const [linkHotelId, setLinkHotelId] = useState(''); const [message, setMessage] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  const [hotels, setHotels] = useState<Hotel[]>([]); const [rows, setRows] = useState<Corporate[]>([]); const [selected, setSelected] = useState<Corporate | null>(null); const [form, setForm] = useState({ name: 'Mountain View Conferences', gstin: '33AACCM1234L1Z6', creditDays: '30', creditLimit: '250000' }); const [linkHotelId, setLinkHotelId] = useState(''); const [message, setMessage] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   async function load() { try { const [context, nextRows] = await Promise.all([adminContext(), apiRequest<Corporate[]>('/corporates')]); setHotels(context.hotels); setRows(nextRows); setLinkHotelId((current) => current || context.hotels[0]?.id || ''); } catch (reason) { setError(errorText(reason, 'Could not load corporate accounts')); } }
   useEffect(() => { void load(); }, []);
-  async function create(event: FormEvent) { event.preventDefault(); setBusy(true); try { await apiRequest('/corporates', { method: 'POST', body: JSON.stringify({ name: form.name, gstin: form.gstin || undefined, creditDays: Number(form.creditDays), creditLimit: Number(form.creditLimit) }) }); setMessage('Corporate account created.'); setForm({ name: '', gstin: '', creditDays: '30', creditLimit: '0' }); await load(); } catch (reason) { setError(errorText(reason, 'Could not create corporate account')); } finally { setBusy(false); } }
+  async function create(event: FormEvent) { event.preventDefault(); setBusy(true); try { await apiRequest('/corporates', { method: 'POST', body: JSON.stringify({ name: form.name, gstin: form.gstin || undefined, creditDays: Number(form.creditDays), creditLimit: Number(form.creditLimit) }) }); setMessage('Corporate account created.'); setForm({ name: 'Mountain View Conferences', gstin: '33AACCM1234L1Z6', creditDays: '30', creditLimit: '250000' }); await load(); } catch (reason) { setError(errorText(reason, 'Could not create corporate account')); } finally { setBusy(false); } }
   async function link() { if (!selected || !linkHotelId) return; setBusy(true); try { await apiRequest(`/corporates/${selected.id}/hotels`, { method: 'POST', body: JSON.stringify({ hotelId: linkHotelId }) }); setMessage('Hotel linked to corporate account.'); await load(); } catch (reason) { setError(errorText(reason, 'Could not link hotel')); } finally { setBusy(false); } }
   return <section className="pageSection"><header className="pageTitle"><div><span>CRM & Sales</span><h1>Corporate accounts</h1><p>Manage company identity and hotel links separately from agents and guests.</p></div></header>{error && <p className="error" role="alert">{error}</p>}{message && <p className="notice" role="status">{message}</p>}<section className="panel"><h2>Add company</h2><form className="formCard" onSubmit={create}><div className="three"><label>Company name<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label><label>GSTIN<input value={form.gstin} onChange={(event) => setForm({ ...form, gstin: event.target.value })} /></label><label>Credit days<input min="0" type="number" value={form.creditDays} onChange={(event) => setForm({ ...form, creditDays: event.target.value })} /></label><label>Credit limit<input min="0" type="number" value={form.creditLimit} onChange={(event) => setForm({ ...form, creditLimit: event.target.value })} /></label></div><button className="btn" disabled={busy}>Create company</button></form></section><section className="panel"><div className="tableScroll"><table><thead><tr><th>Company</th><th>GSTIN</th><th>Hotels</th><th>Credit days</th><th>Credit limit</th><th>Action</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.name}</td><td>{row.gstin ?? '—'}</td><td>{row.hotels?.filter((link) => link.active).map((link) => link.hotel?.name ?? link.hotelId).join(', ') || 'Not linked'}</td><td>{row.creditDays ?? '—'}</td><td>{row.creditLimit == null ? '—' : `INR ${Number(row.creditLimit).toFixed(2)}`}</td><td><button className="smallBtn" type="button" onClick={() => setSelected(row)}>Manage hotels</button></td></tr>)}{!rows.length && <tr><td colSpan={6}><p className="empty">No corporate accounts found.</p></td></tr>}</tbody></table></div>{selected && <div className="formCard"><h3>{selected.name}</h3><label>Link hotel<select value={linkHotelId} onChange={(event) => setLinkHotelId(event.target.value)}>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label><button className="smallBtn" type="button" disabled={busy} onClick={() => void link()}>Link hotel</button><button className="smallBtn secondary" type="button" onClick={() => setSelected(null)}>Close</button></div>}</section></section>;
 }
@@ -55,7 +55,7 @@ export function InquiriesData() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ guestName: '', mobile: '', email: '', source: 'PHONE', checkIn: '', checkOut: '', roomTypeId: '', adults: '2', children: '0', notes: '' });
+  const [form, setForm] = useState({ guestName: 'Nisha Kumar', mobile: '+91 90000 40004', email: 'nisha.kumar@example.com', source: 'WEBSITE', checkIn: today(), checkOut: addHotelDays(today(), 2), roomTypeId: '', adults: '2', children: '0', notes: 'Family holiday enquiry' });
   const [followUpNote, setFollowUpNote] = useState('');
   const [quoteRatePlanId, setQuoteRatePlanId] = useState('');
   const [quoteRooms, setQuoteRooms] = useState('1');
@@ -65,7 +65,7 @@ export function InquiriesData() {
 
   async function loadCatalog(nextHotelId: string) {
     if (!nextHotelId) { setRooms([]); return; }
-    try { const catalog = await apiRequest<{ rooms: CatalogRoom[] }>(`/hotels/${nextHotelId}/catalog`); setRooms(catalog.rooms ?? []); } catch (reason) { setError(errorText(reason, 'Could not load room and rate plan catalog')); }
+    try { const catalog = await apiRequest<{ rooms: CatalogRoom[] }>(`/hotels/${nextHotelId}/catalog`); setRooms(catalog.rooms ?? []); setForm((current) => ({ ...current, roomTypeId: current.roomTypeId || catalog.rooms?.[0]?.id || '' })); } catch (reason) { setError(errorText(reason, 'Could not load room and rate plan catalog')); }
   }
   async function load() {
     try { const context = await adminContext(); setHotels(context.hotels); const nextHotelId = hotelId || context.hotels[0]?.id || ''; setHotelId(nextHotelId); await loadCatalog(nextHotelId); const result = await apiRequest<{ inquiries: Inquiry[] }>('/inquiries'); setRows(result.inquiries); } catch (reason) { setError(errorText(reason, 'Could not load inquiries')); }
@@ -76,7 +76,7 @@ export function InquiriesData() {
   useEffect(() => { setQuoteRatePlanId((current) => current && quotePlans.some((plan) => plan.id === current) ? current : quotePlans[0]?.id ?? ''); }, [selected?.roomTypeId, rooms]);
   async function create(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError(''); setMessage('');
-    try { await apiRequest('/inquiries', { method: 'POST', body: JSON.stringify({ hotelId, ...form, email: form.email || undefined, checkIn: form.checkIn || undefined, checkOut: form.checkOut || undefined, roomTypeId: form.roomTypeId || undefined, adults: Number(form.adults), children: Number(form.children) }) }); setMessage('Inquiry created.'); setForm({ guestName: '', mobile: '', email: '', source: 'PHONE', checkIn: '', checkOut: '', roomTypeId: '', adults: '2', children: '0', notes: '' }); await load(); } catch (reason) { setError(errorText(reason, 'Could not create inquiry')); } finally { setBusy(false); }
+    try { await apiRequest('/inquiries', { method: 'POST', body: JSON.stringify({ hotelId, ...form, email: form.email || undefined, checkIn: form.checkIn || undefined, checkOut: form.checkOut || undefined, roomTypeId: form.roomTypeId || undefined, adults: Number(form.adults), children: Number(form.children) }) }); setMessage('Inquiry created.'); setForm({ guestName: 'Nisha Kumar', mobile: '+91 90000 40004', email: 'nisha.kumar@example.com', source: 'WEBSITE', checkIn: today(), checkOut: addHotelDays(today(), 2), roomTypeId: rooms[0]?.id || '', adults: '2', children: '0', notes: 'Family holiday enquiry' }); await load(); } catch (reason) { setError(errorText(reason, 'Could not create inquiry')); } finally { setBusy(false); }
   }
   async function post(path: string, body: unknown, success: string) {
     if (!selected) return; setBusy(true); setError('');
