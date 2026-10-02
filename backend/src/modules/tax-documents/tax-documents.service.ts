@@ -38,7 +38,8 @@ export class TaxDocumentsService {
 
   async settings(userId: string, requestedHotel?: string) {
     const { hotelId, scope } = await this.hotelIdFor(userId, requestedHotel);
-    return this.p.hotelTaxProfile.findMany({ where: { hotelId: hotelId ?? undefined }, orderBy: { updatedAt: 'desc' }, include: { hotel: { select: { id: true, name: true } } } }).then(async (profiles) => ({ profiles, rules: await this.p.taxRule.findMany({ where: { OR: [{ hotelId: hotelId ?? undefined }, { hotelId: null }] }, orderBy: [{ effectiveFrom: 'desc' }, { name: 'asc' }], include: { hotel: { select: { id: true, name: true } } } }), scope: { isGlobal: scope.isGlobal, hotelId: scope.hotelId } }));
+    const ruleWhere = hotelId ? { OR: [{ hotelId }, { hotelId: null }] } : {};
+    return this.p.hotelTaxProfile.findMany({ where: { hotelId: hotelId ?? undefined }, orderBy: { updatedAt: 'desc' }, include: { hotel: { select: { id: true, name: true } } } }).then(async (profiles) => ({ profiles, rules: await this.p.taxRule.findMany({ where: ruleWhere, orderBy: [{ effectiveFrom: 'desc' }, { name: 'asc' }], include: { hotel: { select: { id: true, name: true } } } }), scope: { isGlobal: scope.isGlobal, hotelId: scope.hotelId } }));
   }
 
   async saveProfile(userId: string, body: TaxProfileDto) {
