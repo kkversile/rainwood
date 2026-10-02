@@ -48,6 +48,21 @@ async function readBody(response: Response) {
   try { return JSON.parse(text); } catch { return { message: text }; }
 }
 
+export function friendlyApiError(status: number, body: any) {
+  const raw = Array.isArray(body?.message)
+    ? body.message.join(', ')
+    : typeof body?.message === 'object' && body.message
+      ? body.message.message ?? JSON.stringify(body.message)
+      : body?.message;
+  const message = String(raw ?? '').replace(/^(BadRequest|Conflict|Forbidden|NotFound)Exception:\s*/i, '').trim();
+  if (/active_assignment_exists|room already occupied|room_assignment_conflict/i.test(message)) return 'This room is already occupied. Choose another available room.';
+  if (status === 401) return 'Your session has expired. Sign in again to continue.';
+  if (status === 403) return 'You do not have permission to perform this action.';
+  if (status === 404) return 'The requested record could not be found. Refresh and try again.';
+  if (status === 409) return 'This record conflicts with another operation. Refresh and try again.';
+  return message || `Request failed (${status})`;
+}
+
 export async function apiRequest<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const token = browserToken();
   const headers = new Headers(init.headers);
@@ -69,8 +84,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, retry 
   if (response.status === 401 && !path.startsWith('/auth/')) redirectToLoginAfterUnauthorized();
   const body = await readBody(response);
   if (!response.ok) {
-    const message = Array.isArray(body?.message) ? body.message.join(', ') : typeof body?.message === 'object' && body.message ? body.message.message ?? JSON.stringify(body.message) : body?.message;
-    throw new Error(message ?? `Request failed (${response.status})`);
+    throw new Error(friendlyApiError(response.status, body));
   }
   return body as T;
 }

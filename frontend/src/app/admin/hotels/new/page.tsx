@@ -9,15 +9,20 @@ import { HotelExtendedSections } from "../../../../components/HotelExtendedSecti
 import { HotelLocationMap } from "../../../../components/HotelLocationMap";
 import { HotelImagesMedia } from "../../../../components/HotelImagesMedia";
 import { useDialog } from "../../../../components/ReactDialog";
+import { addHotelDays, todayInHotelTimezone } from "../../../../lib/hotel-date-time";
 
 const steps = [
-  { label: "Basic Details", step: 0 },
+  { label: "Property", step: 0 },
+  { label: "Rooms", step: 1 },
   { label: "Amenities", step: 2 },
-  { label: "Images & Media", step: 3 },
-  { label: "Policies", step: 7 },
-  { label: "Contacts", step: 8 },
-  { label: "Location", step: 9 },
-  { label: "Documents", step: 10 },
+  { label: "Media", step: 3 },
+  { label: "Rates", step: 4 },
+  { label: "Policies", step: 5 },
+  { label: "Contacts", step: 6 },
+  { label: "Location", step: 7 },
+  { label: "Documents", step: 8 },
+  { label: "Guest Reviews", step: 9 },
+  { label: "Publish", step: 10 },
 ];
 const showLegacyAmenities = false;
 type OccupancyKey =
@@ -282,11 +287,10 @@ function RoomMultiSelect({
 }
 function datesBetween(start: string, end: string) {
   const out: string[] = [];
-  const cursor = new Date(`${start}T00:00:00Z`);
-  const last = new Date(`${end}T00:00:00Z`);
-  while (start && end && cursor <= last && out.length < 370) {
-    out.push(cursor.toISOString().slice(0, 10));
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  let cursor = start;
+  while (start && end && cursor <= end && out.length < 370) {
+    out.push(cursor);
+    cursor = addHotelDays(cursor, 1);
   }
   return out;
 }
@@ -303,9 +307,7 @@ function rangesFromDates(dates: string[]) {
       previous = date;
       return;
     }
-    const next = new Date(`${previous}T00:00:00Z`);
-    next.setUTCDate(next.getUTCDate() + 1);
-    if (formatDate(next) !== date) {
+    if (addHotelDays(previous, 1) !== date) {
       ranges.push({ id: `saved-${start}-${previous}`, start, end: previous });
       start = date;
     }
@@ -316,19 +318,21 @@ function rangesFromDates(dates: string[]) {
   return ranges;
 }
 function formatDate(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return date.toISOString().slice(0, 10);
 }
-function endOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+function endOfMonth(dateOnly: string) {
+  const year = Number(dateOnly.slice(0, 4));
+  const month = Number(dateOnly.slice(5, 7));
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${dateOnly.slice(0, 7)}-${String(lastDay).padStart(2, "0")}`;
 }
 function defaultDateRange() {
-  const today = new Date();
-  return { start: formatDate(today), end: formatDate(endOfMonth(today)) };
+  const today = todayInHotelTimezone();
+  return { start: today, end: endOfMonth(today) };
 }
 function nextDateRange(lastEnd: string) {
-  const next = new Date(`${lastEnd}T00:00:00`);
-  next.setDate(next.getDate() + 1);
-  return { start: formatDate(next), end: formatDate(endOfMonth(next)) };
+  const next = addHotelDays(lastEnd, 1);
+  return { start: next, end: endOfMonth(next) };
 }
 function emptyPricing(): PricingValues {
   return {
@@ -373,13 +377,18 @@ export default function NewHotelWizard() {
   const dialog = useDialog();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit") ?? "";
-  const initialStep = Number(searchParams.get("step") ?? 0);
+  const requestedStep = Number(searchParams.get("step") ?? 0);
+  // Keep bookmarked/query-string step numbers working while the wizard uses the new setup order internally.
+  const initialStep = ({ 7: 5, 8: 6, 9: 7, 10: 8 } as Record<number, number>)[requestedStep] ?? requestedStep;
   const [step, setWizardStep] = useState(
     Number.isFinite(initialStep) ? initialStep : 0,
   );
   const [hotel, setHotel] = useState(blankHotel);
   const [hotelId, setHotelId] = useState(editId);
   const [catalog, setCatalog] = useState<Hotel | null>(null);
+  const persistedHotelRef = useRef(hotel);
+  const persistedCatalogRef = useRef<Hotel | null>(null);
+  const [extendedResetKey, setExtendedResetKey] = useState(0);
   const [room, setRoom] = useState(blankRoom);
   const [roomRows, setRoomRows] = useState<RoomRow[]>([]);
   const [amenity, setAmenity] = useState({ code: "", name: "" });
@@ -410,6 +419,7 @@ export default function NewHotelWizard() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [saveState, setSaveState] = useState<"clean" | "dirty" | "saving" | "saved" | "error">("clean");
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
   const [reviews, setReviews] = useState<HotelReview[]>([]);
@@ -419,24 +429,81 @@ export default function NewHotelWizard() {
   const [reviewPageSize, setReviewPageSize] = useState(10);
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewDeleteTarget, setReviewDeleteTarget] = useState<HotelReview | null>(null);
+  const loadedAmenityNamesRef = useRef("");
+  const [setupExtras, setSetupExtras] = useState({ policy: false, contacts: 0, location: false, documents: 0, guestReviews: 0 });
+  function markDirty() { setSaveState("dirty"); }
   useEffect(() => {
     if (!message) return;
     const timeoutId = window.setTimeout(() => setMessage(""), 1000);
     return () => window.clearTimeout(timeoutId);
   }, [message]);
-  function setStep(next: number) {
-    if (step === 2 && next === 3) { void saveReferenceAmenities(); return; }
+  useEffect(() => {
+    if (!['dirty', 'saving', 'error'].includes(saveState)) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [saveState]);
+  async function setStep(next: number, skipGuard = false) {
+    if (step === next) return;
+    if (!skipGuard && ['dirty', 'saving', 'error'].includes(saveState)) {
+      const discard = await dialog.confirm({ title: "Unsaved hotel changes", message: "You have unsaved changes in this setup section.", confirmLabel: "Discard changes", cancelLabel: "Stay" });
+      if (!discard) return;
+      await restoreDiscardedChanges();
+    }
+    if (step === 2 && next === 3) { await saveReferenceAmenities(); return; }
     setWizardStep(next);
   }
+  async function restoreDiscardedChanges() {
+    setHotel({ ...persistedHotelRef.current });
+    setCatalog(persistedCatalogRef.current);
+    setRoom(blankRoom);
+    setRoomRows([]);
+    setAmenity({ code: "", name: "" });
+    setAmenityRows([]);
+    setSelectedAmenities([]);
+    setSelectedRoomId("ALL");
+    setSelectedPlanKey("");
+    setDateRanges([]);
+    setInventoryDateRanges([]);
+    setPricingByRoom({});
+    setInventoryByRoom({});
+    if ([5, 6, 7, 8].includes(step)) setExtendedResetKey((value) => value + 1);
+    setError("");
+    setMessage("");
+    setSaveState("clean");
+  }
+  async function cancelWizard() {
+    if (['dirty', 'saving', 'error'].includes(saveState) && !(await dialog.confirm({ title: "Leave hotel setup?", message: "Unsaved changes will be lost.", confirmLabel: "Discard changes", cancelLabel: "Stay" }))) return;
+    window.location.href = "/admin/hotels";
+  }
   async function loadCatalog(id = hotelId) {
-    if (id) setCatalog(await apiRequest<Hotel>(`/hotels/${id}/catalog`));
+    if (!id) return null;
+    const loaded = await apiRequest<Hotel>(`/hotels/${id}/catalog`);
+    persistedCatalogRef.current = loaded;
+    setCatalog(loaded);
+    return loaded;
   }
   useEffect(() => {
     if (hotelId) void loadCatalog();
   }, [hotelId]);
+  async function refreshSetupExtras() {
+    if (!hotelId) return;
+    try {
+      const [policy, contacts, location, documents] = await Promise.all([
+        apiRequest<unknown>(`/hotels/${hotelId}/policy`),
+        apiRequest<Array<{ primary?: boolean }>>(`/hotels/${hotelId}/contacts`),
+        apiRequest<unknown>(`/hotels/${hotelId}/location`),
+        apiRequest<Array<unknown>>(`/hotels/${hotelId}/documents`),
+      ]);
+      setSetupExtras((current) => ({ ...current, policy: Boolean(policy), contacts: contacts.length, location: Boolean((location as { profile?: unknown })?.profile) || Boolean(hotel.latitude && hotel.longitude), documents: documents.length }));
+    } catch { /* The individual section renders its own request error. */ }
+  }
+  useEffect(() => { void refreshSetupExtras(); }, [hotelId, hotel.latitude, hotel.longitude]);
   useEffect(() => {
     if (catalog?.amenities) {
-      setSelectedAmenities(catalog.amenities.map((item) => item.amenity.name));
+      const names = catalog.amenities.map((item) => item.amenity.name);
+      loadedAmenityNamesRef.current = names.slice().sort().join("|");
+      setSelectedAmenities(names);
       const drafts = amenityRows.filter((item) => !item.saved);
       setAmenityRows([
         ...drafts,
@@ -467,6 +534,9 @@ export default function NewHotelWizard() {
         },
       ]);
   }, [catalog?.amenities]);
+  useEffect(() => {
+    if (step === 2 && loadedAmenityNamesRef.current && selectedAmenities.slice().sort().join("|") !== loadedAmenityNamesRef.current) markDirty();
+  }, [selectedAmenities, step]);
   useEffect(() => {
     if (catalog?.rooms) {
       const drafts = roomRows.filter((item) => !item.saved);
@@ -503,8 +573,7 @@ export default function NewHotelWizard() {
     if (!editId) return;
     apiRequest<Hotel>(`/hotels/${editId}/catalog`)
       .then((data) => {
-        setHotelId(editId);
-        setHotel({
+        const loadedHotel = {
           code: data.code ?? "",
           name: data.name,
           slug: data.slug,
@@ -530,7 +599,11 @@ export default function NewHotelWizard() {
           canonicalPath: data.canonicalPath ?? "",
           ogImageUrl: data.ogImageUrl ?? "",
           virtualTourUrl: data.virtualTourUrl ?? "",
-        });
+        };
+        setHotelId(editId);
+        persistedHotelRef.current = loadedHotel;
+        persistedCatalogRef.current = data;
+        setHotel(loadedHotel);
         setCatalog(data);
       })
       .catch((reason) =>
@@ -549,16 +622,20 @@ export default function NewHotelWizard() {
   const reviewLast = Math.min(reviewPage * reviewPageSize, filteredReviews.length);
   async function loadReviews() {
     if (!hotelId) return;
-    try { setReviews(await apiRequest<HotelReview[]>(`/hotels/${hotelId}/reviews`)); }
+    try {
+      const loaded = await apiRequest<HotelReview[]>(`/hotels/${hotelId}/reviews`);
+      setReviews(loaded);
+      setSetupExtras((current) => ({ ...current, guestReviews: loaded.length }));
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load reviews"); }
   }
-  useEffect(() => { if (step === 5 && hotelId) void loadReviews(); }, [step, hotelId]);
+  useEffect(() => { if (step === 9 && hotelId) void loadReviews(); }, [step, hotelId]);
   function resetReviewForm() { setReviewForm({ rating: "", description: "" }); setEditingReviewId(""); }
   async function saveReview(event: FormEvent) {
     event.preventDefault();
     if (!hotelId || !reviewForm.rating || !reviewForm.description.trim()) { setError("Rating and feedback are required."); return; }
     const result = await request(editingReviewId ? `/hotels/reviews/${editingReviewId}` : `/hotels/${hotelId}/reviews`, { rating: Number(reviewForm.rating), description: reviewForm.description.trim() }, editingReviewId ? "PATCH" : "POST");
-    if (result) { resetReviewForm(); await loadReviews(); }
+    if (result) { resetReviewForm(); await loadReviews(); setSaveState("saved"); }
   }
   async function confirmDeleteReview() {
     if (!reviewDeleteTarget) return;
@@ -642,6 +719,7 @@ export default function NewHotelWizard() {
     method: "POST" | "PATCH" = "POST",
   ) {
     setBusy(true);
+    setSaveState("saving");
     setError("");
     setMessage("");
     try {
@@ -649,9 +727,11 @@ export default function NewHotelWizard() {
         method,
         body: JSON.stringify(body),
       });
+      setSaveState("saved");
       setMessage("Saved successfully.");
       return result;
     } catch (reason) {
+      setSaveState("error");
       setError(reason instanceof Error ? reason.message : "Could not save");
       return null;
     } finally {
@@ -817,8 +897,10 @@ export default function NewHotelWizard() {
     setBusy(true); setError(""); setMessage("");
     try {
       await apiRequest(`/hotels/${hotelId}`, { method: "PATCH", body: JSON.stringify({ virtualTourUrl }) });
+      await loadCatalog(hotelId);
       setHotel((current) => ({ ...current, virtualTourUrl }));
       setCatalog((current) => current ? { ...current, virtualTourUrl } : current);
+      setSaveState("saved");
       setMessage("Virtual tour saved.");
       return true;
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save virtual tour"); return false; }
@@ -833,6 +915,7 @@ export default function NewHotelWizard() {
     );
     const savedId = hotelId || result?.id;
     if (savedId) {
+      persistedHotelRef.current = { ...hotel, slug: hotel.slug.trim().toLowerCase() };
       if (result?.id) setHotelId(result.id);
       if (imageFiles.length) {
         setBusy(true);
@@ -871,8 +954,10 @@ export default function NewHotelWizard() {
         method: "PATCH",
         body: JSON.stringify({ latitude: hotel.latitude, longitude: hotel.longitude, location: hotel.location, address: hotel.address, city: hotel.city, state: hotel.state, country: hotel.country, pincode: hotel.pincode }),
       });
-          setHotel((current) => ({ ...current, latitude: result.latitude ?? current.latitude, longitude: result.longitude ?? current.longitude, location: result.location ?? current.location, address: result.address ?? current.address, city: result.city ?? current.city, state: result.state ?? current.state, country: result.country ?? current.country, pincode: result.pincode ?? current.pincode }));
+      setHotel((current) => ({ ...current, latitude: result.latitude ?? current.latitude, longitude: result.longitude ?? current.longitude, location: result.location ?? current.location, address: result.address ?? current.address, city: result.city ?? current.city, state: result.state ?? current.state, country: result.country ?? current.country, pincode: result.pincode ?? current.pincode }));
+      persistedHotelRef.current = { ...persistedHotelRef.current, latitude: result.latitude ?? persistedHotelRef.current.latitude, longitude: result.longitude ?? persistedHotelRef.current.longitude, location: result.location ?? persistedHotelRef.current.location, address: result.address ?? persistedHotelRef.current.address, city: result.city ?? persistedHotelRef.current.city, state: result.state ?? persistedHotelRef.current.state, country: result.country ?? persistedHotelRef.current.country, pincode: result.pincode ?? persistedHotelRef.current.pincode };
       setCatalog((current) => current ? { ...current, ...result } : current);
+      setSaveState("saved");
       setMessage("Location updated successfully.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not update location");
@@ -933,14 +1018,16 @@ export default function NewHotelWizard() {
     if (result || savedRoomId) await loadCatalog();
   }
   function updateRoomRow(id: string, patch: Partial<RoomRow>) {
+    markDirty();
     setRoomRows((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
   }
   function setRoomGalleryFiles(id: string, files: File[]) {
+    markDirty();
     const previews = files.map((file) => URL.createObjectURL(file));
     setRoomRows((current) => current.map((item) => item.id === id ? { ...item, galleryFiles: files, galleryPreviewUrls: previews } : item));
   }
   function deleteRoomRow(row: RoomRow) {
-    if (!row.saved) setRoomRows((current) => current.filter((item) => item.id !== row.id));
+    if (!row.saved) { markDirty(); setRoomRows((current) => current.filter((item) => item.id !== row.id)); }
     else setError("Persisted room deletion is not enabled yet.");
   }
   async function saveAllRooms() {
@@ -988,15 +1075,15 @@ export default function NewHotelWizard() {
   }
   async function saveReferenceAmenities() {
     if (!hotelId) { setError("Save the hotel details before configuring amenities."); return; }
-    setBusy(true); setError(""); setMessage("");
+    setBusy(true); setSaveState("saving"); setError(""); setMessage("");
     try {
       const existing = catalog?.amenities ?? [];
       const existingNames = new Set(existing.map((item) => item.amenity.name));
       const selected = new Set(selectedAmenities);
       await Promise.all(selectedAmenities.filter((name) => !existingNames.has(name)).map((name) => apiRequest(`/hotels/${hotelId}/amenities`, { method: "POST", body: JSON.stringify({ code: `AMN_${name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`, name, quantity: 1, availabilityType: "24/7", active: true }) })));
       await Promise.all(existing.filter((item) => !selected.has(item.amenity.name)).map((item) => apiRequest(`/hotels/${hotelId}/amenities/${item.amenityId}`, { method: "DELETE" })));
-      await loadCatalog(); setMessage("Amenities saved successfully."); setWizardStep(3);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save amenities"); }
+      await loadCatalog(); setSaveState("saved"); setMessage("Amenities saved successfully.");
+    } catch (reason) { setSaveState("error"); setError(reason instanceof Error ? reason.message : "Could not save amenities"); }
     finally { setBusy(false); }
   }
   async function deleteAmenity(row: AmenityRow) {
@@ -1221,16 +1308,37 @@ export default function NewHotelWizard() {
       `Inventory saved for ${selectedRooms.length} room${selectedRooms.length === 1 ? "" : "s"} across ${selectedInventoryDates.length} date${selectedInventoryDates.length === 1 ? "" : "s"}.`,
     );
   }
+  async function setPublication(active: boolean) {
+    if (!hotelId) return;
+    if (active && missingRequired.length) { setError("Complete the required setup fields before publishing the hotel."); return; }
+    const saved = await request(`/hotels/${hotelId}`, { active }, "PATCH");
+    if (saved) { setHotel((current) => ({ ...current, active })); await loadCatalog(); }
+  }
+  const requiredSetupFields = [["Hotel name", hotel.name], ["Hotel code", hotel.code], ["Category", hotel.category], ["Country", hotel.country], ["State", hotel.state], ["City", hotel.city], ["Pincode", hotel.pincode], ["Address", hotel.address]] as const;
+  const missingRequired = requiredSetupFields.filter(([, value]) => !String(value ?? "").trim()).map(([label]) => label);
+  const setupSummary = [
+    { label: "Property details", value: missingRequired.length ? `${missingRequired.length} required field(s) missing` : "Complete", state: missingRequired.length ? "warn" : "ok" },
+    { label: "Rooms", value: `${catalog?.rooms?.length ?? roomRows.filter((row) => row.saved).length} configured`, state: (catalog?.rooms?.length ?? roomRows.filter((row) => row.saved).length) ? "ok" : "warn" },
+    { label: "Amenities", value: `${catalog?.amenities?.length ?? selectedAmenities.length} selected`, state: (catalog?.amenities?.length ?? selectedAmenities.length) ? "ok" : "neutral" },
+    { label: "Media", value: `${catalog?.images?.length ?? 0} image(s) · ${catalog?.videos?.length ?? 0} video(s)`, state: (catalog?.images?.length ?? 0) ? "ok" : "neutral" },
+    { label: "Rates", value: `${rooms.reduce((total, room) => total + room.ratePlans.length, 0)} rate plan(s)`, state: rooms.some((room) => room.ratePlans.length) ? "ok" : "warn" },
+    { label: "Policies", value: setupExtras.policy ? "Configured" : "Default / not configured", state: setupExtras.policy ? "ok" : "neutral" },
+    { label: "Contacts", value: `${setupExtras.contacts} contact${setupExtras.contacts === 1 ? "" : "s"}${setupExtras.contacts ? " · Primary contact should be configured" : ""}`, state: setupExtras.contacts ? "ok" : "neutral" },
+    { label: "Location", value: setupExtras.location ? "Coordinates configured" : "Not configured", state: setupExtras.location ? "ok" : "neutral" },
+    { label: "Documents", value: `${setupExtras.documents} document${setupExtras.documents === 1 ? "" : "s"} uploaded`, state: setupExtras.documents ? "ok" : "neutral" },
+    { label: "Guest reviews", value: `${setupExtras.guestReviews} review(s)`, state: "neutral" },
+    { label: "Publication", value: hotel.active ? "Active" : "Draft / inactive", state: hotel.active ? "ok" : "neutral" },
+  ];
   return (
     <AdminLayout title={editId ? "Edit Hotel" : "Add Hotel"}>
-      <div className={`wizard${step === 8 ? " contactsWizard" : ""}${step === 9 ? " locationWizard" : ""}`}>
+      <div className={`wizard${step === 6 ? " contactsWizard" : ""}${step === 7 ? " locationWizard" : ""}`}>
         <div className="wizardHeader">
           <div>
             <span>Hotels <b>›</b> {step >= 3 && editId ? "Edit Hotel" : editId ? "Add / Edit Hotel" : "Add Hotel"}</span>
             <h2>{editId ? "Edit Hotel" : "Add Hotel"}</h2>
             <p>{step >= 3 && editId ? `${hotel.name} (${hotel.code})` : "Manage hotel details, facilities, images and policies"}</p>
           </div>
-          <div className="hotelHeaderActions"><Link className="btn secondary" href="/admin/hotels">Cancel</Link><button className="btn" form={step === 7 ? "hotel-policy-form" : "hotel-basic-form"} type="submit">Save Hotel</button></div>
+          <div className="hotelHeaderActions"><button className="btn secondary" type="button" onClick={() => void cancelWizard()}>Cancel</button><span className={`wizardSaveState wizardSaveState-${saveState}`} aria-live="polite">{saveState === "dirty" ? "Unsaved changes" : saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : "All changes saved"}</span>{(step === 0 || step === 5) && <button className="btn" form={step === 5 ? "hotel-policy-form" : "hotel-basic-form"} type="submit">Save Hotel</button>}</div>
         </div>
         <div className="wizardSteps">
           {steps.map(({ label, step: stepIndex }) => (
@@ -1257,7 +1365,7 @@ export default function NewHotelWizard() {
         )}
         {step === 0 && (
           <div className="hotelBasicLayout">
-          <form id="hotel-basic-form" className="formCard wizardCard basicInfoCard" onSubmit={nextFromBasic}>
+          <form id="hotel-basic-form" className="formCard wizardCard basicInfoCard" onSubmit={nextFromBasic} onInput={markDirty}>
             <div className="basicInfoHeading"><div><h2>Basic Information</h2><p>Provide the main details of your hotel</p></div><label className="hotelStatusToggle"><span>Status</span><span className="statusSwitch"><input type="checkbox" checked={hotel.active} onChange={(e) => setHotel({ ...hotel, active: e.target.checked })} /><i /></span><b>{hotel.active ? "Active" : "Inactive"}</b></label></div>
             <div className="two">
               <label>
@@ -1595,7 +1703,7 @@ export default function NewHotelWizard() {
             onDeleteVideo={(video) => void deleteHotelVideo(video)}
             onSaveVirtualTour={saveVirtualTour}
             onBack={() => setStep(2)}
-            onContinue={() => setStep(4)}
+            onContinue={() => window.setTimeout(() => void setStep(4, true), 0)}
           />
         )}
         {step === 4 && (
@@ -1952,10 +2060,10 @@ export default function NewHotelWizard() {
             />
           </section>
         )}
-        {step === 5 && (
+        {step === 9 && (
           <section className="hotelReviewStep">
             <div className="reviewColumns">
-              <form className="reviewFormCard" onSubmit={saveReview}>
+                <form className="reviewFormCard" onSubmit={saveReview} onInput={markDirty}>
                 <label className="reviewRatingLabel">Rating</label>
                 <select value={reviewForm.rating} onChange={(event) => setReviewForm((current) => ({ ...current, rating: event.target.value }))}>
                   <option value="">Select Rating</option>
@@ -1982,13 +2090,23 @@ export default function NewHotelWizard() {
                 <div className="reviewTableFooter"><span>Showing {reviewFirst} to {reviewLast} of {filteredReviews.length} entries</span><div><button type="button" disabled={reviewPage <= 1} onClick={() => setReviewPage((page) => Math.max(1, page - 1))}>Previous</button><button type="button" disabled={reviewPage >= reviewPageCount} onClick={() => setReviewPage((page) => Math.min(reviewPageCount, page + 1))}>Next</button></div></div>
               </section>
             </div>
-            <div className="reviewStepActions"><button type="button" className="backButton" onClick={() => setStep(4)}>Back</button><button type="button" className="primaryButton" onClick={() => setStep(6)}>Update &amp; Continue</button></div>
+            <div className="reviewStepActions"><button type="button" className="backButton" onClick={() => setStep(8)}>Back</button><button type="button" className="primaryButton" onClick={() => setStep(10)}>Review &amp; Publish</button></div>
           </section>
         )}
-        {step === 6 && (
+        {step === 10 && (
           <section className="hotelPreviewStep">
+            <section className={`reviewCompleteness ${missingRequired.length ? "hasMissing" : "complete"}`} aria-labelledby="review-completeness-title">
+              <h2 id="review-completeness-title">Required setup checks</h2>
+              {missingRequired.length ? <><p>Complete these required fields before publishing:</p><ul>{missingRequired.map((field) => <li key={field}>{field}</li>)}</ul></> : <p role="status">All required property fields are complete. Review the summary below before publishing.</p>}
+            </section>
+            <section className="setupReviewSummary" aria-labelledby="setup-review-summary-title">
+              <h2 id="setup-review-summary-title">Setup summary</h2>
+              <p>Review the saved configuration before changing publication status.</p>
+              <div className="setupReviewGrid">{setupSummary.map((item) => <div key={item.label} className={`setupReviewItem ${item.state}`}><span>{item.label}</span><strong>{item.value}</strong><small>{item.state === "ok" ? "Ready" : item.state === "warn" ? "Needs attention" : "Optional"}</small></div>)}</div>
+            </section>
             <div className="hotelPreviewCard">
-              <h2>Basic Info</h2>
+              <h2>Review &amp; Publish</h2>
+              <p>Publishing makes this hotel visible in guest-facing hotel discovery. Room availability still follows live inventory, rate, and restriction rules.</p>
               <div className="hotelPreviewGrid">
                 {[
                   ["Hotel Name", hotel.name], ["Hotel Code", hotel.code], ["Hotel Mobile", hotel.mobile], ["Hotel Email", hotel.email],
@@ -1998,14 +2116,18 @@ export default function NewHotelWizard() {
                 ].map(([label, value]) => <div key={label} className={label === "Hotel Status" ? "previewStatus" : ""}><label>{label}</label><p>{value || "—"}</p></div>)}
               </div>
             </div>
+            <div className="publishActions"><button type="button" className="btn secondary" disabled={busy} onClick={() => void setPublication(false)}>Save as Draft</button><button type="button" className="btn" disabled={busy || Boolean(missingRequired.length)} onClick={() => void setPublication(true)}>{hotel.active ? "Hotel Active" : "Publish Hotel"}</button></div>
           </section>
         )}
-        {hotelId && step >= 7 && step <= 10 && (
+        {hotelId && step >= 5 && step <= 8 && (
           <HotelExtendedSections
+            key={`${hotelId}-${extendedResetKey}`}
             hotelId={hotelId}
             hotel={{ id: hotelId, ...hotel }}
-            initialSection={(["policy", "contacts", "location", "documents"] as const)[step - 7]}
-            onNavigate={(section) => setStep(({ preview: 6, policy: 7, contacts: 8, location: 9, documents: 10 } as const)[section])}
+            initialSection={(["policy", "contacts", "location", "documents"] as const)[step - 5]}
+            onSaved={() => { setSaveState("saved"); void refreshSetupExtras(); }}
+            onDirty={markDirty}
+            onNavigate={(section, skipGuard = false) => setStep(({ rates: 4, policy: 5, contacts: 6, location: 7, documents: 8, guestReviews: 9 } as const)[section], skipGuard)}
           />
         )}
       </div>

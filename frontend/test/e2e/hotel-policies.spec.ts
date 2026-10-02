@@ -99,7 +99,7 @@ test('Policies matches the Stitch layout and persists every control group', asyn
   expect(metrics.top).toMatchObject({ x: 96, width: 1728 });
   expect(metrics.middle).toMatchObject({ x: 96, width: 1728 });
   expect(metrics.terms).toMatchObject({ x: 96, width: 1728 });
-  expect(metrics.wizardSteps).toBe(7);
+  expect(metrics.wizardSteps).toBe(11);
   expect(metrics.topCards).toBe(3);
   expect(metrics.middleCards).toBe(3);
 

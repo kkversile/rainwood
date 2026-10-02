@@ -14,9 +14,12 @@ test('expected arrivals is a first-class admin route and navigation item', () =>
 });
 
 test('expected arrivals exposes operational filters, exports, and reconfirmation', () => {
-  for (const token of ['includeWaitlist', 'reconfirmedOnly', 'hotelIds', 'statuses', 'Excel', 'window.print', '/reports/expected-arrivals', '/reconfirmation']) {
+  for (const token of ['includeWaitlist', 'reconfirmedOnly', 'hotelIds', 'statuses', 'CSV (current page)', 'window.print', '/reports/expected-arrivals', '/reconfirmation', 'todayInHotelTimezone', 'pageSize', 'arrivalsPagination']) {
     assert.ok(component.includes(token), `missing arrivals contract token: ${token}`);
   }
   assert.match(component, /PATCH/);
   assert.match(component, /summary\.reservations/);
+  assert.match(component, /page: String\(page\)/);
+  assert.match(component, /limit: String\(pageSize\)/);
+  assert.match(component, /setPage\(1\)/);
 });

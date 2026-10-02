@@ -233,6 +233,14 @@ enum TaxInvoiceLineType {
   ADJUSTMENT
 }
 
+enum TaxCategory {
+  ROOM
+  FOOD_BEVERAGE
+  LAUNDRY
+  ROOM_SERVICE
+  OTHER_SERVICE
+}
+
 enum TaxRuleType {
   GST
 }
@@ -1420,6 +1428,7 @@ model HotelTaxProfile {
   legalName         String
   tradeName         String?
   gstin             String?
+  gstRegistered     Boolean         @default(true)
   pan               String?
   registeredAddress String?
   city              String?
@@ -1443,6 +1452,7 @@ model TaxRule {
   hotelId       String?
   hotel         Hotel?           @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   name          String
+  taxCategory   TaxCategory      @default(ROOM)
   serviceCode   String?
   description   String?
   taxType       TaxRuleType      @default(GST)
@@ -1558,6 +1568,7 @@ model TaxCreditNote {
   cgstAmount         Decimal             @db.Decimal(14, 2)
   sgstAmount         Decimal             @db.Decimal(14, 2)
   igstAmount         Decimal             @db.Decimal(14, 2)
+  roundOff           Decimal             @default(0) @db.Decimal(14, 2)
   grandTotal         Decimal             @db.Decimal(14, 2)
   issuedById         String?
   issuedBy           User?               @relation("TaxCreditNoteIssuer", fields: [issuedById], references: [id], onDelete: SetNull)

@@ -72,7 +72,7 @@ export default async function HotelDetail({ params }: { params: Promise<{ slug: 
             <div className="demoHotelTableWrap">
               <table className="demoHotelTable"><thead><tr><th>Room Type</th><th>Rate Plan</th><th>Restriction</th><th>Rate</th><th /></tr></thead>
                 <tbody>{rooms.flatMap((room) => (room.ratePlans?.length ? room.ratePlans : [{ id: `${room.id}-default`, name: 'Direct booking', mealPlan: 'EP' }]).map((plan) => (
-                  <tr key={`${room.id}-${plan.id}`}><td>{room.name}</td><td>{plan.name}</td><td><span className="status ok">Open</span></td><td>Live rate</td><td><Link className="btn secondary" href={`/booking?hotel=${hotel.slug}`}>Select</Link></td></tr>
+                  <tr key={`${room.id}-${plan.id}`}><td>{room.name}</td><td>{plan.name}</td><td><span className="status">Check dates</span></td><td>Rates shown after search</td><td><Link className="btn secondary" href={`/booking?hotel=${hotel.slug}`}>Check availability</Link></td></tr>
                 )))}
                 {!rooms.length && <tr><td colSpan={5} className="empty">No rooms are currently published.</td></tr>}
                 </tbody>

@@ -27,4 +27,8 @@ describe('hotel date utilities', () => {
   it('uses the hotel-local date at a UTC boundary', () => {
     expect(toDateOnly(getHotelOperationalDate('Asia/Kolkata', new Date('2026-09-27T20:00:00.000Z')))).toBe('2026-09-28');
   });
+
+  it('keeps the local date after midnight at 00:30 IST', () => {
+    expect(toDateOnly(getHotelOperationalDate('Asia/Kolkata', new Date('2026-09-27T19:00:00.000Z')))).toBe('2026-09-28');
+  });
 });

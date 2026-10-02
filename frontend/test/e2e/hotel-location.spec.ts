@@ -68,14 +68,17 @@ test('Location matches the Stitch layout and persists map coordinates and contex
   let attractionId = '';
   let transportId = '';
   try {
-    await page.locator('label.locationFieldControl').filter({ hasText: 'Latitude' }).locator('input').fill(latitude);
-    await page.locator('label.locationFieldControl').filter({ hasText: 'Longitude' }).locator('input').fill(longitude);
+    const latitudeInput = page.locator('label.locationFieldControl').filter({ hasText: 'Latitude' }).locator('input');
+    const longitudeInput = page.locator('label.locationFieldControl').filter({ hasText: 'Longitude' }).locator('input');
+    await latitudeInput.evaluate((element, value) => { const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set; setter?.call(element, value); element.dispatchEvent(new Event('input', { bubbles: true })); element.dispatchEvent(new Event('change', { bubbles: true })); }, latitude);
+    await longitudeInput.evaluate((element, value) => { const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set; setter?.call(element, value); element.dispatchEvent(new Event('input', { bubbles: true })); element.dispatchEvent(new Event('change', { bubbles: true })); }, longitude);
     await page.getByRole('button', { name: 'Update & Continue' }).click();
     await expect(page.getByRole('status')).toContainText('Location updated successfully.');
 
-    const savedHotel = await (await page.request.get(`${apiUrl}/hotels/${hotelId}/catalog`, { headers })).json() as Hotel;
-    expect(savedHotel.latitude).toBe(latitude);
-    expect(savedHotel.longitude).toBe(longitude);
+    await expect.poll(async () => {
+      const savedHotel = await (await page.request.get(`${apiUrl}/hotels/${hotelId}/catalog`, { headers })).json() as Hotel;
+      return { latitude: savedHotel.latitude, longitude: savedHotel.longitude };
+    }).toEqual({ latitude, longitude });
 
     const attraction = await (await page.request.post(`${apiUrl}/hotels/${hotelId}/location/attractions`, { headers, data: { name: `Location QA ${Date.now()}`, distance: '2.4 km', sortOrder: 90 } })).json() as { id: string; name: string };
     attractionId = attraction.id;

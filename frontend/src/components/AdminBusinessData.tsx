@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { apiRequest } from '../lib/api';
+import { todayInHotelTimezone } from '../lib/hotel-date-time';
 
 type Hotel = { id: string; name: string; city?: string };
 type Profile = { role: string; staffHotelId?: string | null };
@@ -10,7 +11,7 @@ type Corporate = { id: string; name: string; gstin?: string | null; creditDays?:
 type Inquiry = { id: string; inquiryNo: string; hotelId: string; guestName: string; mobile: string; source: string; status: string; quotedAmount?: number | null; nextFollowUpAt?: string | null; checkIn?: string | null; checkOut?: string | null; adults?: number | null; children?: number | null; roomTypeId?: string | null; hotel?: Hotel; roomType?: { id: string; name: string } | null; assignedTo?: { name: string } | null };
 type CatalogRoom = { id: string; name: string; ratePlans: { id: string; name: string; mealPlan?: string }[] };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayInHotelTimezone();
 const errorText = (reason: unknown, fallback: string) => reason instanceof Error ? reason.message : fallback;
 
 async function adminContext() {

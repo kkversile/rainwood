@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { BookingSource, ReservationStatus } from '@prisma/client';
+import { BookingSource, ReservationStatus, RoomOperationalStatus, StayStatus } from '@prisma/client';
 import { IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 function listValue(value: unknown): string[] | undefined {
@@ -29,4 +29,14 @@ export class ReportQueryDto {
   @IsOptional() @IsBoolean() @Transform(({ value }) => booleanValue(value)) showRemarks?: boolean;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) limit = 50;
+}
+
+export class RoomRackQueryDto extends ReportQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(31) days = 14;
+  @IsOptional() @IsString() roomTypeId?: string;
+  @IsOptional() @IsString() floor?: string;
+  @IsOptional() @IsString() wing?: string;
+  @IsOptional() @IsEnum(RoomOperationalStatus) roomStatus?: RoomOperationalStatus;
+  @IsOptional() @IsEnum(StayStatus) stayStatus?: StayStatus;
+  @IsOptional() @IsString() search?: string;
 }

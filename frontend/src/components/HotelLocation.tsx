@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeftRight, BusFront, Clock, CloudSun, Copy, ExternalLink, FileText, Image as ImageIcon, Info, LocateFixed, Map, MapPin, Mountain, Pencil, Plane, Plus, Route, Sun, Trash2, TrainFront } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { HotelLocationMap } from './HotelLocationMap';
@@ -87,12 +87,14 @@ function LocationCardHeading({ icon, title, detail, action }: { icon: React.Reac
 }
 
 function LocationField({ label, value, required, onChange, placeholder }: { label: string; value: string; required?: boolean; onChange: (value: string) => void; placeholder?: string }) {
-  return <label className="locationFieldControl"><span>{label}{required && <em> *</em>}</span><input value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} /></label>;
+  const handleInput = (event: React.FormEvent<HTMLInputElement>) => onChange(event.currentTarget.value);
+  return <label className="locationFieldControl"><span>{label}{required && <em> *</em>}</span><input value={value} placeholder={placeholder} onChange={handleInput} onInput={handleInput} /></label>;
 }
 
-export function HotelLocation({ hotel: initialHotel, busy, onHotelChange }: { hotel: LocationHotel; busy: boolean; onHotelChange: (hotel: LocationHotel) => void }) {
+export function HotelLocation({ hotel: initialHotel, busy, onHotelChange, onSaved, onDirty, onContinue, onBack }: { hotel: LocationHotel; busy: boolean; onHotelChange: (hotel: LocationHotel) => void; onSaved?: () => void; onDirty?: () => void; onContinue?: () => void; onBack?: () => void }) {
   const dialog = useDialog();
   const [hotel, setHotel] = useState(() => normalizeHotel(initialHotel));
+  const hotelRef = useRef(hotel);
   const [profile, setProfile] = useState<LocationProfile>(defaultProfile);
   const [attractions, setAttractions] = useState<Attraction[]>([]);
   const [transports, setTransports] = useState<Transport[]>([]);
@@ -101,7 +103,6 @@ export function HotelLocation({ hotel: initialHotel, busy, onHotelChange }: { ho
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  useEffect(() => setHotel(normalizeHotel(initialHotel)), [initialHotel.id, initialHotel.city, initialHotel.state, initialHotel.country, initialHotel.pincode, initialHotel.latitude, initialHotel.longitude, initialHotel.address]);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -119,19 +120,24 @@ export function HotelLocation({ hotel: initialHotel, busy, onHotelChange }: { ho
   }, [initialHotel.id, initialHotel.address]);
 
   const mapUrl = useMemo(() => `https://www.google.com/maps?q=${hotel.latitude ?? ''},${hotel.longitude ?? ''}`, [hotel.latitude, hotel.longitude]);
-  const updateHotel = (next: Partial<LocationHotel>) => { const value = { ...hotel, ...next }; setHotel(value); onHotelChange(value); };
+  const updateHotel = (next: Partial<LocationHotel>) => { const value = { ...hotelRef.current, ...next }; hotelRef.current = value; setHotel(value); onHotelChange(value); onDirty?.(); };
 
-  async function saveAll(event?: FormEvent) {
+  async function saveAll(event?: FormEvent, continueAfterSave = false) {
     event?.preventDefault();
     setMessage(''); setError(''); setSaving(true);
     try {
-      const address = [profile.addressLine1, profile.addressLine2, hotel.city, hotel.state, hotel.pincode].filter(Boolean).join(', ');
-      const savedHotel = await apiRequest<LocationHotel>(`/hotels/${hotel.id}`, { method: 'PATCH', body: JSON.stringify({ address, city: hotel.city, state: hotel.state, country: hotel.country, pincode: hotel.pincode, latitude: hotel.latitude, longitude: hotel.longitude, location: profile.addressLine1 }) });
-      const savedProfile = await apiRequest<Partial<LocationProfile>>(`/hotels/${hotel.id}/location`, { method: 'PUT', body: JSON.stringify(normalizeProfile(profile)) });
+      const currentHotel = hotelRef.current;
+      const address = [profile.addressLine1, profile.addressLine2, currentHotel.city, currentHotel.state, currentHotel.pincode].filter(Boolean).join(', ');
+      const savedHotel = await apiRequest<LocationHotel>(`/hotels/${currentHotel.id}`, { method: 'PATCH', body: JSON.stringify({ address, city: currentHotel.city, state: currentHotel.state, country: currentHotel.country, pincode: currentHotel.pincode, latitude: currentHotel.latitude, longitude: currentHotel.longitude, location: profile.addressLine1 }) });
+      const savedProfile = await apiRequest<Partial<LocationProfile>>(`/hotels/${currentHotel.id}/location`, { method: 'PUT', body: JSON.stringify(normalizeProfile(profile)) });
       const mergedProfile = normalizeProfile({ ...profile, ...savedProfile }, profile.addressLine1);
       setProfile(mergedProfile);
-      updateHotel(savedHotel);
+      hotelRef.current = savedHotel;
+      setHotel(savedHotel);
+      onHotelChange(savedHotel);
       setMessage('Location updated successfully.');
+      onSaved?.();
+      if (continueAfterSave) window.setTimeout(() => onContinue?.(), 800);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update location'); }
     finally { setSaving(false); }
   }
@@ -231,6 +237,6 @@ export function HotelLocation({ hotel: initialHotel, busy, onHotelChange }: { ho
         {([['timezone', 'Local Time Zone', <Clock size={14} />], ['bestTimeToVisit', 'Best Time to Visit', <Sun size={14} />], ['elevation', 'Elevation', <Mountain size={14} />], ['weather', 'Weather', <CloudSun size={14} />], ['nearbyCity', 'Nearby City', <Info size={14} />], ['accessRoad', 'Access Road', <Route size={14} />] ] as [keyof LocationProfile, string, React.ReactNode][]).map(([key, label, icon]) => <div className="locationFact" key={key}><span><i>{icon}</i>{label}</span><b>{profile[key]}</b><button type="button" aria-label={`Edit ${label}`} onClick={() => void editProfile(key, label)}><EditIcon size={12} /></button></div>)}
       </div><div className="locationNotes"><div><FileText size={16} /><span><b>Location Notes</b><small>{profile.notes}</small></span></div><button type="button" aria-label="Edit Location Notes" onClick={() => editProfile('notes', 'Location Notes')}><EditIcon size={13} /></button></div></section>
     </section>
-    <div className="locationSaveBar"><button className="btn" type="button" disabled={busy || saving || loading} onClick={() => void saveAll()}>{busy || saving ? 'Saving...' : 'Update & Continue'}</button></div>
+    <div className="locationSaveBar"><button className="btn secondary" type="button" onClick={onBack}>Back</button><button className="btn" type="button" disabled={busy || saving || loading} onClick={() => void saveAll(undefined, true)}>{busy || saving ? 'Saving...' : 'Update & Continue'}</button></div>
   </div>;
 }

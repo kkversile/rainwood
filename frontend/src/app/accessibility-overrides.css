@@ -1,0 +1,93 @@
+/* RainWood admin action teal: 4.5:1+ white-text contrast target. */
+.adminTopShell .adminTopNav a.active,
+.adminTopShell .adminGroupedNav>a.active,
+.adminTopShell .adminNavGroupButton.active,
+.adminTopShell .adminNavDropdown a.active,
+.adminAppShell:not(.hotelEditShell)>.adminNav a.active,
+.adminAppShell.hotelEditShell>.adminNav a.active,
+.adminAppShell:not(.hotelEditShell) .btn:not(.secondary),
+.adminAppShell:not(.hotelEditShell) .smallBtn:not(.secondary),
+.adminAppShell.hotelEditShell .btn:not(.secondary),
+.adminTopShell .btn:not(.secondary),
+.adminTopShell .smallBtn:not(.secondary),
+.adminLoginPage .adminLoginButton,
+.loginRoleLinks a:hover,
+.loginRoleLinks a.active,
+.maintenanceTabs button.active {
+  background: #087f87;
+  color: #fff;
+}
+
+.adminTopShell .eyebrow,
+.adminTopShell .pageTitle span,
+.adminTopShell .sectionHead span,
+.adminLoginPage .adminLoginEyebrow {
+  color: #087f87;
+}
+
+.staffSearch button,
+.staffButton {
+  background: #087f87;
+}
+
+.arrivalsTable {
+  min-width: 980px;
+}
+
+.arrivalsTable td small,
+.arrivalsPrimaryGuest small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: normal;
+}
+
+.arrivalsPrimaryGuest {
+  display: grid;
+  gap: 3px;
+  min-width: 190px;
+  white-space: normal;
+}
+
+.arrivalsTable td:nth-child(2) {
+  min-width: 180px;
+  white-space: normal;
+}
+
+.arrivalsTable td:nth-child(6) {
+  min-width: 170px;
+}
+
+.arrivalsReconfirmed {
+  color: var(--green) !important;
+  font-weight: 800;
+}
+
+.staffEyebrow {
+  color: #087f87;
+}
+
+.operationsCommandResults a.active {
+  background: #d9f0f1;
+  outline: 2px solid #087f87;
+  outline-offset: -2px;
+}
+
+.arrivalsPagination,
+.contactsWizardActions,
+.documentsWizardActions,
+.locationSaveBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.arrivalsPagination strong,
+.contactsSavedStatus,
+.documentsSavedStatus {
+  color: var(--muted);
+  font-size: 12px;
+}

@@ -12,8 +12,9 @@ async function main() {
   const seedPassword = process.env.SEED_ADMIN_PASSWORD ?? 'change_me_after_seed';
   const passwordHash = await bcrypt.hash(seedPassword, 12);
   const admin = await prisma.user.upsert({ where: { email: 'admin@rainwood.demo' }, update: { active: true, role: 'SUPER_ADMIN', passwordHash, failedLoginCount: 0, lockedUntil: null }, create: { email: 'admin@rainwood.demo', name: 'RainWood Admin', passwordHash, role: 'SUPER_ADMIN' } });
-  await prisma.user.upsert({ where: { email: 'reservation@rainwood.demo' }, update: { active: true, role: 'RESERVATION' }, create: { email: 'reservation@rainwood.demo', name: 'Reservation Desk', passwordHash, role: 'RESERVATION' } });
-  await prisma.user.upsert({ where: { email: 'accounts@rainwood.demo' }, update: { active: true, role: 'ACCOUNTS' }, create: { email: 'accounts@rainwood.demo', name: 'Accounts Team', passwordHash, role: 'ACCOUNTS' } });
+  await prisma.user.upsert({ where: { email: 'reservation@rainwood.demo' }, update: { active: true, role: 'RESERVATION', passwordHash }, create: { email: 'reservation@rainwood.demo', name: 'Reservation Desk', passwordHash, role: 'RESERVATION' } });
+  await prisma.user.upsert({ where: { email: 'accounts@rainwood.demo' }, update: { active: true, role: 'ACCOUNTS', passwordHash }, create: { email: 'accounts@rainwood.demo', name: 'Accounts Team', passwordHash, role: 'ACCOUNTS' } });
+  await prisma.user.upsert({ where: { email: 'viewer@rainwood.demo' }, update: { active: true, role: 'VIEWER', passwordHash }, create: { email: 'viewer@rainwood.demo', name: 'RainWood Viewer', passwordHash, role: 'VIEWER' } });
 
   const permissions = [
     ['RESERVATION_READ', 'Read reservations'],

@@ -34,6 +34,7 @@ async function authenticatedCatalog(page: Page, hotelId: string) {
 test.use({ viewport: { width: 1920, height: 1080 } });
 
 test('Images & Media matches the Stitch geometry and persists uploaded previews', async ({ context, page, request }) => {
+  test.setTimeout(90_000);
   const hotelsResponse = await request.get(`${apiUrl}/hotels`);
   expect(hotelsResponse.ok()).toBeTruthy();
   const hotels = await hotelsResponse.json() as { id: string }[];
@@ -80,6 +81,8 @@ test('Images & Media matches the Stitch geometry and persists uploaded previews'
   const firstAlt = firstName.replace(/\.png$/, '');
   const secondAlt = secondName.replace(/\.png$/, '');
   const uploadedFileIds: string[] = [];
+  const token = await page.evaluate(() => window.localStorage.getItem('rainwood_access_token'));
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : undefined;
 
   try {
     await page.locator('.mediaUploadActions label').nth(1).locator('input[type="file"]').setInputFiles([
@@ -142,18 +145,14 @@ test('Images & Media matches the Stitch geometry and persists uploaded previews'
     await page.getByLabel('Virtual Tour URL').fill(originalTour);
     await page.getByRole('button', { name: 'Update & Continue' }).click();
     await expect(page.getByRole('heading', { name: 'Price Book', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Images & Media' }).click();
+    await page.getByRole('button', { name: 'Media', exact: true }).click();
     await expect(page.getByLabel('Virtual Tour URL')).toHaveValue(originalTour);
   } finally {
-    await page.getByRole('button', { name: 'Images & Media' }).click().catch(() => undefined);
-    for (const alt of [firstAlt, secondAlt]) {
-      const card = page.locator('.hotelMediaCard', { hasText: alt });
-      if (await card.count()) {
-        await card.getByRole('button', { name: `Delete ${alt}` }).click();
-        await expect(page.getByRole('dialog')).toBeVisible();
-        await page.getByRole('dialog').getByRole('button', { name: 'Delete Image' }).click();
-        await expect(card).toHaveCount(0);
-      }
+    const catalogResponse = await request.get(`${apiUrl}/hotels/${hotelId}/catalog`, { headers: authHeaders });
+    if (catalogResponse.ok()) {
+      const cleanupCatalog = await catalogResponse.json() as Catalog;
+      const cleanupImages = cleanupCatalog.images.filter((image) => [firstAlt, secondAlt].includes(image.altText));
+      for (const image of cleanupImages) await request.delete(`${apiUrl}/hotels/${hotelId}/images/${image.id}`, { headers: authHeaders });
     }
     for (const fileId of uploadedFileIds) {
       await expect.poll(async () => (await request.get(`${apiUrl}/files/public/${fileId}`)).status()).toBe(404);

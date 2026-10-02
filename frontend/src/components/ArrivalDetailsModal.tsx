@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { apiRequest } from '../lib/api';
+import { todayInHotelTimezone } from '../lib/hotel-date-time';
 import { CheckInDialog } from './CheckInDialog';
 import { RoomChangeDialog } from './RoomChangeDialog';
 import { CheckoutSettlementDialog } from './CheckoutSettlementDialog';
@@ -97,7 +98,7 @@ export function ArrivalDetailsModal({ reference, onClose, onReconfirmed }: { ref
   const [voidReason, setVoidReason] = useState('');
   const [folioBusy, setFolioBusy] = useState(false);
   const [userRole, setUserRole] = useState('');
-  const [chargeForm, setChargeForm] = useState<ChargeForm>({ category: 'FOOD_AND_BEVERAGE', description: '', quantity: '1', unitAmount: '', postingDate: new Date().toISOString().slice(0, 10), note: '' });
+  const [chargeForm, setChargeForm] = useState<ChargeForm>({ category: 'FOOD_AND_BEVERAGE', description: '', quantity: '1', unitAmount: '', postingDate: todayInHotelTimezone(), note: '' });
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [roomChangeOpen, setRoomChangeOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -144,7 +145,7 @@ export function ArrivalDetailsModal({ reference, onClose, onReconfirmed }: { ref
   const chargePreview = Math.max(0, Number(chargeForm.quantity || 0) * Number(chargeForm.unitAmount || 0));
 
   function openChargeDialog() {
-    setFolioActionError(''); setChargeForm({ category: 'FOOD_AND_BEVERAGE', description: '', quantity: '1', unitAmount: '', postingDate: new Date().toISOString().slice(0, 10), note: '' }); setChargeDialogOpen(true);
+    setFolioActionError(''); setChargeForm({ category: 'FOOD_AND_BEVERAGE', description: '', quantity: '1', unitAmount: '', postingDate: todayInHotelTimezone(), note: '' }); setChargeDialogOpen(true);
   }
 
   async function submitCharge(event: React.FormEvent<HTMLFormElement>) {

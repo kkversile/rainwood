@@ -25,6 +25,8 @@ type Props = {
   busy: boolean;
   onSave: (contact: HotelContactDraft, editingId?: string) => Promise<boolean>;
   onDelete: (id: string) => void;
+  onBack?: () => void;
+  onContinue?: () => void;
 };
 
 const blankContact: HotelContactDraft = {
@@ -105,7 +107,7 @@ function FieldLabel({ children, required = false }: { children: React.ReactNode;
   return <span className="contactsFieldLabel">{children}{required && <em> *</em>}</span>;
 }
 
-export function HotelContacts({ contacts, busy, onSave, onDelete }: Props) {
+export function HotelContacts({ contacts, busy, onSave, onDelete, onBack, onContinue }: Props) {
   const [draft, setDraft] = useState<HotelContactDraft>({ ...blankContact });
   const [editingId, setEditingId] = useState<string>();
   const [search, setSearch] = useState('');
@@ -185,5 +187,6 @@ export function HotelContacts({ contacts, busy, onSave, onDelete }: Props) {
         {!filteredContacts.length && <tr><td colSpan={11} className="contactsEmpty">No contacts added yet.</td></tr>}
       </tbody></table></div>
     </section>
+    <div className="contactsWizardActions"><button type="button" className="btn secondary" onClick={onBack}>Back</button><span className="contactsSavedStatus" role="status">All changes saved</span><button type="button" className="btn" onClick={onContinue}>Continue</button></div>
   </div>;
 }

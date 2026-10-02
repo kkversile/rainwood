@@ -11,9 +11,9 @@ import { HotelDocuments, type HotelDocumentRecord } from './HotelDocuments';
 type Hotel = { id: string; name: string; address?: string | null; city: string; state?: string | null; country?: string | null; pincode?: string | null; latitude?: string | null; longitude?: string | null };
 type Doc = HotelDocumentRecord;
 type ExtendedSection = 'policy' | 'contacts' | 'location' | 'documents';
-type NavigateSection = ExtendedSection | 'preview';
+type NavigateSection = ExtendedSection | 'rates' | 'guestReviews';
 
-export function HotelExtendedSections({ hotelId, hotel: initialHotel, initialSection, onNavigate }: { hotelId: string; hotel: Hotel; initialSection: ExtendedSection; onNavigate?: (section: NavigateSection) => void }) {
+export function HotelExtendedSections({ hotelId, hotel: initialHotel, initialSection, onNavigate, onSaved, onDirty }: { hotelId: string; hotel: Hotel; initialSection: ExtendedSection; onNavigate?: (section: NavigateSection, skipGuard?: boolean) => void; onSaved?: () => void; onDirty?: () => void }) {
   const dialog = useDialog();
   const [section, setSection] = useState(initialSection);
   const [policy, setPolicy] = useState<HotelPolicyValue>(createDefaultPolicy);
@@ -53,6 +53,7 @@ export function HotelExtendedSections({ hotelId, hotel: initialHotel, initialSec
       const saved = await apiRequest<Partial<HotelPolicyValue>>(`/hotels/${hotelId}/policy`, { method: 'PUT', body: JSON.stringify(payload) });
       setPolicy(normalizePolicy(saved));
       setMessage('Policies saved.');
+      onSaved?.();
       return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not save policies');
@@ -69,6 +70,7 @@ export function HotelExtendedSections({ hotelId, hotel: initialHotel, initialSec
         return editingId ? next : [saved, ...next];
       });
       setMessage(editingId ? 'Contact updated.' : 'Contact added.');
+      onSaved?.();
       return true;
     } catch (reason) { setError(reason instanceof Error ? reason.message : editingId ? 'Could not update contact' : 'Could not add contact'); return false; } finally { setBusy(false); }
   }
@@ -76,7 +78,7 @@ export function HotelExtendedSections({ hotelId, hotel: initialHotel, initialSec
   async function removeContact(id: string) {
     if (!await dialog.confirm({ title: 'Delete hotel contact?', message: 'This contact will be permanently removed from the hotel profile.', confirmLabel: 'Delete Contact', danger: true })) return;
     setBusy(true);
-    try { await apiRequest(`/hotels/contacts/${id}`, { method: 'DELETE' }); setContacts((current) => current.filter((item) => item.id !== id)); setMessage('Contact deleted.'); }
+    try { await apiRequest(`/hotels/contacts/${id}`, { method: 'DELETE' }); setContacts((current) => current.filter((item) => item.id !== id)); setMessage('Contact deleted.'); onSaved?.(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not delete contact'); }
     finally { setBusy(false); }
   }
@@ -87,7 +89,7 @@ export function HotelExtendedSections({ hotelId, hotel: initialHotel, initialSec
       const form = new FormData(); form.append('file', file);
       const stored = await apiRequest<{ id: string }>('/files/hotel-document', { method: 'POST', body: form });
       const saved = await apiRequest<Doc>(`/hotels/${hotelId}/documents`, { method: 'POST', body: JSON.stringify({ documentType, name: file.name.replace(/\.[^.]+$/, ''), fileId: stored.id, fileName: file.name }) });
-      setDocuments((current) => [saved, ...current]); setMessage('Document uploaded.');
+      setDocuments((current) => [saved, ...current]); setMessage('Document uploaded.'); onSaved?.();
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not upload document'); }
     finally { setBusy(false); }
   }
@@ -97,7 +99,7 @@ export function HotelExtendedSections({ hotelId, hotel: initialHotel, initialSec
     try {
       const saved = await apiRequest<Doc>(`/hotels/documents/${id}`, { method: 'PATCH', body: JSON.stringify(changes) });
       setDocuments((current) => current.map((document) => document.id === id ? { ...document, ...saved } : document));
-      setMessage('Document updated.');
+      setMessage('Document updated.'); onSaved?.();
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update document'); }
     finally { setBusy(false); }
   }
@@ -105,7 +107,7 @@ export function HotelExtendedSections({ hotelId, hotel: initialHotel, initialSec
   async function removeDocument(item: Doc) {
     if (!await dialog.confirm({ title: 'Delete document?', message: `${item.name} will be permanently removed from this hotel.`, confirmLabel: 'Delete Document', danger: true })) return;
     setBusy(true);
-    try { await apiRequest(`/hotels/documents/${item.id}`, { method: 'DELETE' }); setDocuments((current) => current.filter((doc) => doc.id !== item.id)); }
+    try { await apiRequest(`/hotels/documents/${item.id}`, { method: 'DELETE' }); setDocuments((current) => current.filter((doc) => doc.id !== item.id)); onSaved?.(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not delete document'); }
     finally { setBusy(false); }
   }
@@ -118,15 +120,15 @@ export function HotelExtendedSections({ hotelId, hotel: initialHotel, initialSec
     {section === 'policy' && policyLoaded && <HotelPolicies
       value={policy}
       busy={busy}
-      onChange={(next) => { clearNotice(); setPolicy(next); }}
-      onBack={() => onNavigate?.('preview')}
-      onSave={(continueToNext) => { void savePolicy().then((saved) => { if (saved && continueToNext) onNavigate?.('contacts'); }); }}
+      onChange={(next) => { clearNotice(); setPolicy(next); onDirty?.(); }}
+      onBack={() => onNavigate?.('rates')}
+      onSave={(continueToNext) => { void savePolicy().then((saved) => { if (saved && continueToNext) onNavigate?.('contacts', true); }); }}
     />}
 
-    {section === 'contacts' && <HotelContacts contacts={contacts} busy={busy} onSave={saveContact} onDelete={(id) => void removeContact(id)} />}
+    {section === 'contacts' && <HotelContacts contacts={contacts} busy={busy} onSave={saveContact} onDelete={(id) => void removeContact(id)} onBack={() => onNavigate?.('policy')} onContinue={() => onNavigate?.('location', true)} />}
 
-    {section === 'location' && <HotelLocation hotel={hotel} busy={busy} onHotelChange={setHotel} />}
+    {section === 'location' && hotel.name ? <HotelLocation hotel={hotel} busy={busy} onHotelChange={setHotel} onSaved={onSaved} onDirty={onDirty} onBack={() => onNavigate?.('contacts')} onContinue={() => onNavigate?.('documents', true)} /> : section === 'location' ? <section className="panel loading" role="status">Loading location details…</section> : null}
 
-    {section === 'documents' && <HotelDocuments documents={documents} busy={busy} onUpload={uploadDocument} onUpdate={updateDocument} onDelete={removeDocument} />}
+    {section === 'documents' && <HotelDocuments documents={documents} busy={busy} onUpload={uploadDocument} onUpdate={updateDocument} onDelete={removeDocument} onBack={() => onNavigate?.('location')} onContinue={() => onNavigate?.('guestReviews', true)} />}
   </section>;
 }

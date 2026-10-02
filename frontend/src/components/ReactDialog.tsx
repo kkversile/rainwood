@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useContext, useEffect, useRef, useState, createContext } from 'react';
+import { FormEvent, useContext, useEffect, useRef, useState, createContext, useId } from 'react';
 import { AlertTriangle, HelpCircle, Info, X } from 'lucide-react';
 
 type PromptOptions = {
@@ -45,6 +45,28 @@ export function useDialog() {
   return value;
 }
 
+export function AccessibleDialog({ title, eyebrow, onClose, children, actions, className = '' }: { title: string; eyebrow?: string; onClose: () => void; children: React.ReactNode; actions?: React.ReactNode; className?: string }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const previousActiveRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+  useEffect(() => {
+    previousActiveRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')?.focus());
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); return; }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])')).filter((element) => !element.hasAttribute('disabled'));
+      if (!focusable.length) return;
+      const first = focusable[0]; const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => { cancelAnimationFrame(frame); document.removeEventListener('keydown', onKeyDown); previousActiveRef.current?.focus(); };
+  }, [onClose]);
+  return <div className="dialogBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className={`dialogCard ${className}`} role="dialog" aria-modal="true" aria-labelledby={titleId}><div className="dialogHeader"><div>{eyebrow && <span className="eyebrow">{eyebrow}</span>}<h2 id={titleId}>{title}</h2></div><button className="iconButton" type="button" aria-label="Close dialog" onClick={onClose}><X size={17} /></button></div>{children}{actions && <div className="dialogActions">{actions}</div>}</section></div>;
+}
+
 export function DialogProvider({ children }: { children: React.ReactNode }) {
   const [dialog, setDialog] = useState<DialogState | null>(null);
 
@@ -80,21 +102,34 @@ export function DialogProvider({ children }: { children: React.ReactNode }) {
 
 function DialogSurface({ dialog, onPrompt, onConfirm, onAlert }: { dialog: DialogState; onPrompt: (value: string | null) => void; onConfirm: (value: boolean) => void; onAlert: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLFormElement>(null);
+  const previousActiveRef = useRef<HTMLElement | null>(null);
   const [value, setValue] = useState(dialog.kind === 'prompt' ? dialog.value : '');
 
   useEffect(() => {
+    previousActiveRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (dialog.kind === 'prompt') {
       setValue(dialog.value);
-      requestAnimationFrame(() => inputRef.current?.focus());
     }
+    const frame = requestAnimationFrame(() => inputRef.current?.focus() ?? dialogRef.current?.querySelector<HTMLElement>('button')?.focus());
+    return () => { cancelAnimationFrame(frame); previousActiveRef.current?.focus(); };
   }, [dialog]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== 'Escape') return;
-      if (dialog.kind === 'prompt') onPrompt(null);
-      else if (dialog.kind === 'confirm') onConfirm(false);
-      else onAlert();
+      if (event.key === 'Escape') {
+        if (dialog.kind === 'prompt') onPrompt(null);
+        else if (dialog.kind === 'confirm') onConfirm(false);
+        else onAlert();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])')).filter((element) => !element.hasAttribute('disabled'));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
@@ -112,7 +147,7 @@ function DialogSurface({ dialog, onPrompt, onConfirm, onAlert }: { dialog: Dialo
   const icon = dialog.kind === 'confirm' ? (isDanger ? <AlertTriangle size={18} /> : <HelpCircle size={18} />) : dialog.kind === 'alert' ? <Info size={18} /> : <HelpCircle size={18} />;
 
   return <div className="uiModalBackdrop" role="presentation" onMouseDown={(event) => { if (event.target !== event.currentTarget) return; if (dialog.kind === 'prompt') onPrompt(null); else if (dialog.kind === 'confirm') onConfirm(false); }}>
-    <form className={`uiModal${isDanger ? ' uiModalDanger' : ''}`} role="dialog" aria-modal="true" aria-labelledby="ui-modal-title" onSubmit={submit}>
+    <form ref={dialogRef} className={`uiModal${isDanger ? ' uiModalDanger' : ''}`} role="dialog" aria-modal="true" aria-labelledby="ui-modal-title" onSubmit={submit}>
       <header className="uiModalHeader"><div className="uiModalHeading"><span className="uiModalIcon">{icon}</span><h2 id="ui-modal-title">{title}</h2></div><button className="uiModalClose" type="button" aria-label="Close dialog" onClick={() => dialog.kind === 'prompt' ? onPrompt(null) : dialog.kind === 'confirm' ? onConfirm(false) : onAlert()}><X size={17} /></button></header>
       <div className="uiModalBody">
         {dialog.kind === 'prompt' && <label className="uiModalField"><span>{dialog.options.label ?? 'Value'}</span><input ref={inputRef} value={value} placeholder={dialog.options.placeholder} onChange={(event) => setValue(event.target.value)} /></label>}

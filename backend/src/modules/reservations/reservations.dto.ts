@@ -120,6 +120,14 @@ export class ModificationDto {
 
 export class ReservationListQueryDto {
   @IsOptional()
+  @IsString()
+  hotelId?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

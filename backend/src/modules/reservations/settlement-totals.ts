@@ -1,12 +1,19 @@
 /** The single pre-checkout financial calculation used by checkout preview,
  * checkout, and corporate receivables. */
 export function calculateSettlementTotals(reservation: any) {
+  // Rainwood pricing stores the room/reservation and folio totalAmount as
+  // tax-inclusive amounts. Their taxAmount fields are the persisted tax
+  // snapshot; checkout must carry those facts forward instead of calculating
+  // a second statutory tax layer.
   const reservationAmount = Number(reservation.totalAmount ?? 0);
   const incidentalAmount = (reservation.folioCharges ?? []).reduce((sum: number, charge: any) => sum + Number(charge.totalAmount ?? 0), 0);
-  const paidAmount = (reservation.payments ?? []).filter((payment: any) => payment.verified !== false).reduce((sum: number, payment: any) => sum + Number(payment.amount ?? 0), 0);
+  const reservationTaxAmount = Number(reservation.taxAmount ?? 0);
+  const incidentalTaxAmount = (reservation.folioCharges ?? []).reduce((sum: number, charge: any) => sum + Number(charge.taxAmount ?? 0), 0);
+  const paidAmount = (reservation.payments ?? []).filter((payment: any) => payment.verified === true).reduce((sum: number, payment: any) => sum + Number(payment.amount ?? 0), 0);
   const grossAmount = Number((reservationAmount + incidentalAmount).toFixed(2));
   const outstandingAmount = Math.max(Number((grossAmount - paidAmount).toFixed(2)), 0);
-  return { reservationAmount, incidentalAmount, taxAmount: 0, paidAmount, grossAmount, outstandingAmount };
+  const taxAmount = Number((reservationTaxAmount + incidentalTaxAmount).toFixed(2));
+  return { reservationAmount, incidentalAmount, taxAmount, paidAmount, grossAmount, outstandingAmount };
 }
 
 export function authoritativeReceivable(reservation: any) {

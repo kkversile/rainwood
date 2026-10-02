@@ -1,7 +1,7 @@
  'use client';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { BedDouble } from 'lucide-react';
 import { AdminAuthGate, invalidateStaffSession, useAdminProfile } from './AdminData';
 import { apiAssetUrl, apiRequest, clearAccessToken } from '../lib/api';
@@ -14,6 +14,7 @@ export const adminLinks = [
   { key: 'manageHotels', href: '/admin/hotels', label: 'Manage Hotels' },
   { key: 'roomsInventory', href: '/admin/rooms-inventory', label: 'Rooms & Inventory' },
   { key: 'physicalRooms', href: '/admin/rooms', label: 'Physical Rooms' },
+  { key: 'roomRack', href: '/admin/room-rack', label: 'Room Rack' },
   { key: 'housekeeping', href: '/admin/housekeeping', label: 'Housekeeping' },
   { key: 'maintenance', href: '/admin/maintenance', label: 'Maintenance' },
   { key: 'ratePlans', href: '/admin/rate-plans', label: 'Rate Plans' },
@@ -35,6 +36,7 @@ export const adminLinks = [
   { key: 'corporates', href: '/admin/corporates', label: 'Corporates' },
   { key: 'inquiries', href: '/admin/inquiries', label: 'Inquiries' },
   { key: 'reservations', href: '/admin/reservations', label: 'Reservations' },
+  { key: 'frontDesk', href: '/admin/front-desk', label: 'Front Desk' },
   { key: 'arrivals', href: '/admin/arrivals', label: 'Arrivals' },
   { key: 'inHouse', href: '/admin/in-house', label: 'In-house' },
   { key: 'lostFound', href: '/admin/lost-found', label: 'Lost & Found' },
@@ -49,26 +51,30 @@ export const adminLinks = [
   { key: 'siteSettings', href: '/admin/settings', label: 'Site Settings' },
   { key: 'auditLogs', href: '/admin/audit-logs', label: 'Audit Logs' },
 ] as const satisfies readonly AdminLink[];
-const reservationLinks = new Set(['/admin/dashboard', '/admin/reservations', '/admin/arrivals', '/admin/in-house', '/admin/lost-found', '/admin/guests', '/admin/payments', '/admin/reports', '/admin/inquiries', '/admin/cashier', '/admin/tax-invoices']);
+const reservationLinks = new Set(['/admin/dashboard', '/admin/reservations', '/admin/front-desk', '/admin/room-rack', '/admin/arrivals', '/admin/in-house', '/admin/lost-found', '/admin/guests', '/admin/payments', '/admin/reports', '/admin/inquiries', '/admin/cashier', '/admin/tax-invoices']);
 const propertyHiddenLinks = new Set(['/admin/hotels', '/admin/settings', '/admin/axisrooms', '/admin/jobs', '/admin/audit-logs']);
 const adminGroupDefinitions = [
-  { key: 'operations', label: 'Operations', itemKeys: ['roomsInventory', 'physicalRooms', 'housekeeping', 'maintenance', 'supplementaryCharges', 'expenses', 'serviceItems', 'cashier'] },
-  { key: 'reservations', label: 'Reservations', itemKeys: ['reservations', 'arrivals', 'inHouse', 'lostFound', 'payments', 'contactRequests'] },
+  { key: 'operations', label: 'Operations', itemKeys: ['roomsInventory', 'physicalRooms', 'roomRack', 'housekeeping', 'maintenance', 'supplementaryCharges', 'expenses', 'serviceItems', 'cashier'] },
+  { key: 'reservations', label: 'Reservations', itemKeys: ['reservations', 'frontDesk', 'arrivals', 'inHouse', 'lostFound', 'payments', 'contactRequests'] },
   { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rates', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
   { key: 'crmSales', label: 'CRM & Sales', itemKeys: ['guests', 'agents', 'corporates', 'inquiries'] },
   { key: 'reports', label: 'Reports', itemKeys: ['reports', 'taxInvoices', 'creditNotes', 'tds', 'nightAudit'] },
   { key: 'system', label: 'System', itemKeys: ['manageHotels', 'taxSettings', 'axisRooms', 'jobs', 'users', 'siteSettings', 'auditLogs'] },
 ] as const;
 
-function allowedAdminLinksForRole(role?: string | null): readonly AdminLink[] {
+export function allowedAdminLinksForRole(role?: string | null): readonly AdminLink[] {
   if (!role) return [];
   if (role === 'SUPER_ADMIN') return adminLinks;
   if (role === 'RESERVATION') return adminLinks.filter((item) => reservationLinks.has(item.href));
   if (role === 'ADMIN') return adminLinks.filter((item) => !propertyHiddenLinks.has(item.href));
   if (role === 'CORPORATE_ADMIN') return adminLinks.filter((item) => item.href !== '/admin/settings');
   if (role === 'ACCOUNTS') return adminLinks.filter((item) => ['/admin/dashboard', '/admin/payments', '/admin/reports', '/admin/expenses', '/admin/corporates', '/admin/lost-found', '/admin/cashier', '/admin/tax-settings', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds'].includes(item.href));
-  if (role === 'VIEWER') return adminLinks.filter((item) => ['/admin/dashboard', '/admin/reports'].includes(item.href));
+  if (role === 'VIEWER') return adminLinks.filter((item) => ['/admin/dashboard', '/admin/reports', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds'].includes(item.href));
   return [];
+}
+
+export function canAccessAdminRoute(role: string | null | undefined, href: string) {
+  return allowedAdminLinksForRole(role).some((item) => item.href === href);
 }
 
 export function linksForRole(role?: string | null) {
@@ -176,7 +182,81 @@ function AdminTopShell({ title, editClass, children }: { title: string; editClas
   async function signOut() { try { await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({ allDevices: false }) }); } catch { /* Local session is cleared below. */ } finally { invalidateStaffSession(); clearAccessToken(); window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login`; } }
   const greeting = profile?.name ?? 'Staff';
   const organization = profile?.role === 'CORPORATE_ADMIN' ? 'Corporate Administration' : profile?.staffHotel?.name ?? (profile?.role === 'RESERVATION' ? 'Front Office' : 'RainWood Hotels');
-  return <main className={`legacyAgentShell adminTopShell${editClass}`}><header className="legacyAgentHeader"><div className="legacyAgentBrand"><span className="legacyAgentLogo">RW</span><b>RAINWOOD</b><small>HOTELS</small></div><div className="legacyAgentGreeting">Hi, {greeting}<span>{organization}</span></div><div className="legacyAgentHeaderLinks"><Link href="/admin/dashboard">Profile</Link><Link href="/admin/contact-requests">Announcements</Link>{role !== 'RESERVATION' && <Link href="/agent/login">Agent Login</Link>}<button type="button" onClick={() => void signOut()}>Sign out</button></div></header><GroupedAdminNavigation links={visibleAdminLinks} pathname={pathname} /><div className="legacyAgentSectionTitle">{title}</div><section className="adminContent legacyAgentContent legacyAgentPortalContent adminTopContent">{children}</section></main>;
+  return <main className={`legacyAgentShell adminTopShell${editClass}`}><header className="legacyAgentHeader"><div className="legacyAgentBrand"><span className="legacyAgentLogo">RW</span><b>RAINWOOD</b><small>HOTELS</small></div><div className="legacyAgentGreeting">Hi, {greeting}<span>{organization}</span></div><div className="legacyAgentHeaderLinks">{canAccessAdminRoute(role, '/admin/contact-requests') && <Link href="/admin/contact-requests">Contact Requests</Link>}{canAccessAdminRoute(role, '/admin/reservations') && <Link href="/agent/login">Agent Login</Link>}<button type="button" onClick={() => void signOut()}>Sign out</button></div></header><OperationsCommandBar role={role} /><GroupedAdminNavigation links={visibleAdminLinks} pathname={pathname} /><div className="legacyAgentSectionTitle">{title}</div><section className="adminContent legacyAgentContent legacyAgentPortalContent adminTopContent">{children}</section></main>;
+}
+
+function OperationsCommandBar({ role }: { role?: string }) {
+  const router = useRouter();
+  const barRef = useRef<HTMLDivElement>(null);
+  const [value, setValue] = useState('');
+  const [hotelId, setHotelId] = useState('');
+  const [businessDate, setBusinessDate] = useState('');
+  const [hotels, setHotels] = useState<{ id: string; name: string }[]>([]);
+  const [results, setResults] = useState<{ reference: string; guestName: string; checkIn: string; status: string }[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [activeResultIndex, setActiveResultIndex] = useState(-1);
+  const reservationAccess = canAccessAdminRoute(role, '/admin/reservations');
+  useEffect(() => { if (!reservationAccess) return; apiRequest<{ id: string; name: string }[]>('/hotels').then(setHotels).catch(() => setHotels([])); }, [reservationAccess]);
+  useEffect(() => {
+    const query = value.trim();
+    if (!reservationAccess || !query) { setResults([]); setSearching(false); return;
+    }
+    setSearching(true);
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({ search: query, page: '1', limit: '5' });
+      if (hotelId) params.set('hotelId', hotelId);
+      apiRequest<{ items: { reference: string; guestName: string; checkIn: string; status: string }[] }>(`/reservations?${params}`)
+        .then((body) => { setResults(body.items); setActiveResultIndex(-1); })
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [hotelId, reservationAccess, value]);
+  useEffect(() => {
+    const input = barRef.current?.querySelector('input');
+    const panel = barRef.current?.querySelector('.operationsCommandResults');
+    if (!input) return;
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-expanded', String(Boolean(open && value.trim())));
+    input.setAttribute('aria-controls', 'operations-command-results');
+    if (panel) {
+      panel.id = 'operations-command-results';
+      panel.setAttribute('role', 'listbox');
+      panel.querySelectorAll('a').forEach((option, index) => {
+        option.setAttribute('role', 'option');
+        option.id = `operations-command-result-${index}`;
+        option.setAttribute('aria-selected', String(index === activeResultIndex));
+        option.classList.toggle('active', index === activeResultIndex);
+      });
+      if (activeResultIndex >= 0 && activeResultIndex < results.length) input.setAttribute('aria-activedescendant', `operations-command-result-${activeResultIndex}`);
+      else input.removeAttribute('aria-activedescendant');
+    }
+  }, [activeResultIndex, open, results, value]);
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as Node | null;
+      if (!open || !value.trim() || !barRef.current?.contains(target) || !results.length) return;
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault(); event.stopPropagation();
+        setActiveResultIndex((current) => event.key === 'ArrowDown' ? (current + 1) % results.length : (current <= 0 ? results.length - 1 : current - 1));
+      } else if (event.key === 'Enter' && activeResultIndex >= 0) {
+        event.preventDefault(); event.stopPropagation();
+        router.push(`/admin/reservations?open=${encodeURIComponent(results[activeResultIndex].reference)}`); setOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [activeResultIndex, open, results, router, value]);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: PointerEvent) => { if (!barRef.current?.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [open]);
+  if (!reservationAccess) return null;
+  function search() { const params = new URLSearchParams(); if (value.trim()) params.set('search', value.trim()); if (hotelId) params.set('hotelId', hotelId); if (businessDate) { params.set('from', businessDate); params.set('to', businessDate); } router.push(`/admin/reservations${params.toString() ? `?${params.toString()}` : ''}`); setOpen(false); }
+  return <div ref={barRef} className="operationsCommandBar"><label><span className="srOnly">Search reservations</span><input value={value} onFocus={() => setOpen(Boolean(value.trim()))} onChange={(event) => { setValue(event.target.value); setOpen(Boolean(event.target.value.trim())); }} onKeyDown={(event) => { if (event.key === 'Enter') search(); if (event.key === 'Escape') { setValue(''); setResults([]); setOpen(false); } }} placeholder="Search booking, guest, mobile or email…" /></label><label><span className="srOnly">Operations scope</span><select aria-label="Operations scope" value={hotelId} onChange={(event) => setHotelId(event.target.value)}><option value="">All hotels</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label><label><span className="srOnly">Business date</span><input aria-label="Business date" type="date" value={businessDate} onChange={(event) => setBusinessDate(event.target.value)} /></label><button className="smallBtn" type="button" onClick={search}>Search</button><Link className="smallBtn secondary" href="/admin/reservations?create=1">+ New Reservation</Link>{open && value.trim() && <div className="operationsCommandResults" role="dialog" aria-label="Reservation search results">{searching ? <p role="status">Searching reservations…</p> : results.length ? results.map((item) => <Link key={item.reference} href={`/admin/reservations?search=${encodeURIComponent(item.reference)}`} onClick={() => setOpen(false)}><b>{item.reference}</b><span>{item.guestName} · {item.checkIn.slice(0, 10)} · {item.status}</span></Link>) : <p role="status">No reservations found. Press Enter to open the full search.</p>}</div>}</div>;
 }
 
 export function AdminLayout({ title, children }: { title: string; children: React.ReactNode }) {

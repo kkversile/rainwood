@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { adminLinks, buildNavigationGroups, isAdminRouteActive, linksForRole } from '../src/components/Shell';
+import { adminLinks, buildNavigationGroups, canAccessAdminRoute, isAdminRouteActive, linksForRole } from '../src/components/Shell';
 import { bookingCurveAxisLabels, bookingCurveX, recommendationLabel, scopedRevenueForecastHotels } from '../src/components/RevenueForecast';
 
 const asAdminLinks = (role: string) => {
@@ -11,8 +11,8 @@ const asAdminLinks = (role: string) => {
 test('grouped admin navigation keeps the requested information architecture', () => {
   const groups = buildNavigationGroups(asAdminLinks('SUPER_ADMIN'));
   assert.deepEqual(groups.map((group) => group.label), ['Operations', 'Reservations', 'Revenue', 'CRM & Sales', 'Reports', 'System']);
-  assert.deepEqual(groups[0].items.map((item) => item.label), ['Rooms & Inventory', 'Physical Rooms', 'Housekeeping', 'Maintenance', 'Supplementary Charges', 'Expenses', 'Service Items', 'Cashier Shift']);
-  assert.deepEqual(groups[1].items.map((item) => item.label), ['Reservations', 'Arrivals', 'In-house', 'Lost & Found', 'Payments', 'Contact Requests']);
+  assert.deepEqual(groups[0].items.map((item) => item.label), ['Rooms & Inventory', 'Physical Rooms', 'Room Rack', 'Housekeeping', 'Maintenance', 'Supplementary Charges', 'Expenses', 'Service Items', 'Cashier Shift']);
+  assert.deepEqual(groups[1].items.map((item) => item.label), ['Reservations', 'Front Desk', 'Arrivals', 'In-house', 'Lost & Found', 'Payments', 'Contact Requests']);
   assert.deepEqual(groups[2].items.map((item) => item.label), ['Revenue Forecast', 'Rate Plans', 'Rates', 'Rate Seasons', 'Yield Rules', 'Rate Simulator', 'Promotions', 'Rate Import']);
   assert.deepEqual(groups[3].items.map((item) => item.label), ['Guests', 'Agents', 'Corporates', 'Inquiries']);
   assert.deepEqual(groups[4].items.map((item) => item.label), ['Reports', 'Tax Invoices', 'Credit Notes', 'TDS Register', 'Night Audit']);
@@ -25,6 +25,15 @@ test('role filtering is fail-closed and groups only allowed links', () => {
   assert.deepEqual(buildNavigationGroups(asAdminLinks('RESERVATION')).map((group) => group.label), ['Operations', 'Reservations', 'CRM & Sales', 'Reports']);
   assert.equal(buildNavigationGroups(asAdminLinks('ADMIN')).some((group) => group.key === 'system' && group.items.some((item) => item.label === 'Manage Hotels')), false);
   assert.equal(buildNavigationGroups(asAdminLinks('CORPORATE_ADMIN')).some((group) => group.items.some((item) => item.label === 'Site Settings')), false);
+});
+
+test('header and operations command permissions share the admin route metadata', () => {
+  assert.equal(canAccessAdminRoute('ACCOUNTS', '/admin/reservations'), false);
+  assert.equal(canAccessAdminRoute('VIEWER', '/admin/contact-requests'), false);
+  assert.equal(canAccessAdminRoute('SERVICE_STAFF', '/admin/reservations'), false);
+  assert.equal(canAccessAdminRoute('RESERVATION', '/admin/reservations'), true);
+  assert.equal(canAccessAdminRoute('ADMIN', '/admin/contact-requests'), true);
+  assert.equal(canAccessAdminRoute('SUPER_ADMIN', '/admin/contact-requests'), true);
 });
 
 test('active route matching handles nested pages without prefix collisions', () => {

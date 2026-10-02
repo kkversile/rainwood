@@ -71,6 +71,23 @@ describe('reservation due milestone payments', () => {
   });
 });
 
+describe('reservation list query contract', () => {
+  it('uses server-side search and pagination without loading the full database', async () => {
+    const p: any = {
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'admin-1', role: 'SUPER_ADMIN', staffHotelId: null, staffHotel: null }) },
+      reservation: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+    };
+    const service = new ReservationsService(p, {} as any, {} as any, {} as any);
+    await service.list({ page: 2, limit: 25, search: 'Ravi Kumar' } as any, 'admin-1');
+    expect(p.reservation.findMany).toHaveBeenCalledWith(expect.objectContaining({ skip: 25, take: 25, where: expect.objectContaining({ OR: [
+      { reference: { contains: 'Ravi Kumar', mode: 'insensitive' } },
+      { guestName: { contains: 'Ravi Kumar', mode: 'insensitive' } },
+      { email: { contains: 'Ravi Kumar', mode: 'insensitive' } },
+      { mobile: { contains: 'Ravi Kumar', mode: 'insensitive' } },
+    ] }) }));
+  });
+});
+
 describe('reservation detail projection', () => {
   function detailFixture() {
     return {

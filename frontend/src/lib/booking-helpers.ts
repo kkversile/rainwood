@@ -1,15 +1,51 @@
+import { addHotelDays, todayInHotelTimezone } from './hotel-date-time';
+
+export type BookingSearchState = {
+  hotel?: string;
+  checkIn: string;
+  checkOut: string;
+  adults: number;
+  children: number;
+  rooms: number;
+};
+
 export function dateInDays(days: number, now = new Date()) {
-  const date = new Date(now);
-  date.setUTCHours(0, 0, 0, 0);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
+  return addHotelDays(todayInHotelTimezone(undefined, now), days);
 }
 
 export function nextDate(value: string) {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) return dateInDays(1);
-  date.setUTCDate(date.getUTCDate() + 1);
-  return date.toISOString().slice(0, 10);
+  return addHotelDays(value, 1);
+}
+
+function integerParam(value: string | null, minimum: number, maximum: number, fallback: number) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) return fallback;
+  return Math.min(maximum, Math.max(minimum, parsed));
+}
+
+export function parseBookingSearch(input: URLSearchParams | string, now = new Date()): BookingSearchState {
+  const params = typeof input === 'string' ? new URLSearchParams(input.startsWith('?') ? input.slice(1) : input) : input;
+  const today = dateInDays(0, now);
+  const requestedCheckIn = params.get('checkIn');
+  const checkIn = requestedCheckIn && requestedCheckIn >= today ? requestedCheckIn : dateInDays(1, now);
+  const requestedCheckOut = params.get('checkOut');
+  const checkOut = requestedCheckOut && requestedCheckOut > checkIn ? requestedCheckOut : nextDate(checkIn);
+  const result: BookingSearchState = {
+    checkIn,
+    checkOut,
+    adults: integerParam(params.get('adults'), 1, 100, 2),
+    children: integerParam(params.get('children'), 0, 100, 0),
+    rooms: integerParam(params.get('rooms'), 1, 20, 1),
+  };
+  const hotel = params.get('hotel')?.trim();
+  if (hotel && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(hotel)) result.hotel = hotel;
+  return result;
+}
+
+export function serializeBookingSearch(state: BookingSearchState) {
+  const params = new URLSearchParams({ checkIn: state.checkIn, checkOut: state.checkOut, adults: String(state.adults), children: String(state.children), rooms: String(state.rooms) });
+  if (state.hotel) params.set('hotel', state.hotel);
+  return params;
 }
 
 export function validateSearchInput(input: {

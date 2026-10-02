@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
-import { TaxCustomerType, TaxInvoiceStatus, TdsStatus } from '@prisma/client';
+import { ArrayMinSize, IsArray, IsBoolean, IsDateString, IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { TaxCategory, TaxCustomerType, TaxInvoiceStatus, TdsStatus } from '@prisma/client';
 
 export class TaxProfileDto {
   @IsOptional() @IsString() id?: string;
@@ -8,6 +8,7 @@ export class TaxProfileDto {
   @IsString() legalName!: string;
   @IsOptional() @IsString() tradeName?: string;
   @IsOptional() @IsString() gstin?: string;
+  @IsOptional() @IsBoolean() gstRegistered?: boolean;
   @IsOptional() @IsString() pan?: string;
   @IsOptional() @IsString() registeredAddress?: string;
   @IsOptional() @IsString() city?: string;
@@ -21,14 +22,28 @@ export class TaxProfileDto {
 }
 
 export class TaxRuleDto {
+  @IsOptional() @IsString() id?: string;
   @IsOptional() @IsString() hotelId?: string;
   @IsString() name!: string;
+  @IsEnum(TaxCategory) taxCategory!: TaxCategory;
   @IsOptional() @IsString() serviceCode?: string;
   @IsOptional() @IsString() description?: string;
   @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) ratePercent!: number;
   @IsDateString() effectiveFrom!: string;
   @IsOptional() @IsDateString() effectiveTo?: string;
   @IsOptional() active?: boolean;
+}
+
+export class TaxRuleUpdateDto {
+  @IsOptional() @IsString() hotelId?: string;
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsEnum(TaxCategory) taxCategory?: TaxCategory;
+  @IsOptional() @IsString() serviceCode?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) ratePercent?: number;
+  @IsOptional() @IsDateString() effectiveFrom?: string;
+  @IsOptional() @IsDateString() effectiveTo?: string;
+  @IsOptional() @IsBoolean() active?: boolean;
 }
 
 export class TaxInvoiceCustomerDto {
@@ -53,7 +68,15 @@ export class TaxInvoiceQueryDto {
 
 export class CreditNoteDto {
   @IsString() reason!: string;
+  @IsOptional() @IsBoolean() fullCredit?: boolean;
+  @IsOptional() @IsArray() @ArrayMinSize(1) @Type(() => CreditNoteLineDto) lines?: CreditNoteLineDto[];
+  /** Legacy single-line input is accepted only when the invoice has one line. */
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) taxableAmount?: number;
+}
+
+export class CreditNoteLineDto {
+  @IsString() invoiceLineId!: string;
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) taxableAmount!: number;
 }
 
 export class TdsDto {
@@ -71,4 +94,11 @@ export class TdsDto {
 
 export class TdsReverseDto {
   @IsString() reason!: string;
+}
+
+export class TdsCertificateDto {
+  @IsString() certificateNumber!: string;
+  @IsDateString() certificateDate!: string;
+  @IsOptional() @IsString() financialYear?: string;
+  @IsOptional() @IsString() notes?: string;
 }

@@ -28,7 +28,7 @@ test('expired protected sessions clear auth state and redirect to login', async 
   globalThis.fetch = async () => new Response(JSON.stringify({ message: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
 
   try {
-    await assert.rejects(apiRequest('/users/agents'), /Unauthorized/);
+    await assert.rejects(apiRequest('/users/agents'), /session has expired/i);
     assert.equal(values.has('rainwood_access_token'), false);
     assert.equal(values.has('rainwood_user_role'), false);
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';

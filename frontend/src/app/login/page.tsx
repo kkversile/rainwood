@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { apiRequest, setAccessToken } from '../../lib/api';
 import { demoLogin } from '../../lib/demo-login';
+import { getSafePostLoginRoute } from '../../lib/role-landing';
 
 export default function Login() {
   const router = useRouter();
@@ -21,15 +22,12 @@ export default function Login() {
     try {
       const result = await apiRequest<{ accessToken: string; user: { role: string } }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
       setAccessToken(result.accessToken, result.user.role);
-      const configuredBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+      const configuredBasePath = process.env.NEXT_PUBLIC_BASE_PATH || '/rainwood';
       const requestedPath = params.get('next') ?? '/admin/dashboard';
       const pathWithoutBase = configuredBasePath && requestedPath.startsWith(`${configuredBasePath}/`)
         ? requestedPath.slice(configuredBasePath.length)
         : requestedPath;
-      const safeStaffPath = pathWithoutBase.startsWith('/') && !pathWithoutBase.startsWith('//')
-        ? pathWithoutBase
-        : '/admin/dashboard';
-      router.replace(result.user.role === 'AGENT' ? '/agent' : result.user.role === 'SERVICE_STAFF' ? '/staff' : safeStaffPath);
+      router.replace(getSafePostLoginRoute(result.user.role, pathWithoutBase));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Login failed');
     } finally {

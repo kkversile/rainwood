@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BedDouble,
   CloudUpload,
@@ -127,9 +127,19 @@ export function HotelImagesMedia({
 }) {
   const [filter, setFilter] = useState<MediaFilter>('All');
   const [virtualTourUrl, setVirtualTourUrl] = useState(savedVirtualTourUrl ?? '');
+  const virtualTourInputRef = useRef<HTMLInputElement>(null);
+  const virtualTourDirtyRef = useRef(false);
+  const lastSavedVirtualTourRef = useRef(savedVirtualTourUrl ?? '');
   const [draggedImageId, setDraggedImageId] = useState('');
 
-  useEffect(() => setVirtualTourUrl(savedVirtualTourUrl ?? ''), [savedVirtualTourUrl]);
+  useEffect(() => {
+    const next = savedVirtualTourUrl ?? '';
+    if (next === lastSavedVirtualTourRef.current) return;
+    lastSavedVirtualTourRef.current = next;
+    virtualTourDirtyRef.current = false;
+    setVirtualTourUrl(next);
+    if (virtualTourInputRef.current) virtualTourInputRef.current.value = next;
+  }, [savedVirtualTourUrl]);
 
   const orderedImages = useMemo(
     () => [...images].sort((a, b) => Number(b.isMain) - Number(a.isMain) || a.sortOrder - b.sortOrder),
@@ -148,7 +158,7 @@ export function HotelImagesMedia({
   };
 
   const previewTour = async () => {
-    const url = virtualTourUrl.trim();
+    const url = (virtualTourInputRef.current?.value ?? virtualTourUrl).trim();
     if (!/^https?:\/\//i.test(url)) return;
     const previewWindow = window.open('about:blank', '_blank');
     if (await onSaveVirtualTour(url)) {
@@ -308,7 +318,7 @@ export function HotelImagesMedia({
             <header><div><span><Orbit /></span><div><h3>Virtual Tour</h3><p>Add a 360° virtual tour link (optional)</p></div></div></header>
             <label>
               Virtual Tour URL
-              <div><input type="url" value={virtualTourUrl} onChange={(event) => setVirtualTourUrl(event.target.value)} placeholder="https://" /><button type="button" disabled={!/^https?:\/\//i.test(virtualTourUrl.trim())} onClick={previewTour}><ExternalLink /> Preview</button></div>
+              <div><input ref={virtualTourInputRef} type="url" defaultValue={virtualTourUrl} onChange={(event) => { virtualTourDirtyRef.current = true; setVirtualTourUrl(event.target.value); }} onInput={(event) => { virtualTourDirtyRef.current = true; setVirtualTourUrl(event.currentTarget.value); }} placeholder="https://" /><button type="button" disabled={!/^https?:\/\//i.test(virtualTourUrl.trim())} onClick={previewTour}><ExternalLink /> Preview</button></div>
             </label>
           </div>
           <small><Globe2 /> Supports Google Street View, Matterport or any 360° tour link</small>
@@ -317,7 +327,7 @@ export function HotelImagesMedia({
 
       <div className="imagesMediaFooter">
         <button type="button" className="btn secondary" onClick={onBack}>Back</button>
-        <button type="button" className="btn" disabled={busy} onClick={async () => { if (await onSaveVirtualTour(virtualTourUrl.trim())) onContinue(); }}>Update &amp; Continue</button>
+        <button type="button" className="btn" disabled={busy} onClick={async () => { const value = (virtualTourInputRef.current?.value ?? virtualTourUrl).trim(); if (await onSaveVirtualTour(value)) onContinue(); }}>Update &amp; Continue</button>
       </div>
     </section>
   );

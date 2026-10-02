@@ -48,6 +48,7 @@ test('Documents matches the Stitch layout and persists upload, preview, edit, do
       await expect(row).toHaveCount(1);
       await expect(row).toContainText(item.type);
       await expect(row.locator('.documentStatus')).toHaveText('Active');
+      await expect(page.getByRole('button', { name: 'Upload File' }).first()).toBeEnabled();
     }
 
     const headers = { Authorization: `Bearer ${await page.evaluate(() => window.localStorage.getItem('rainwood_access_token'))}` };
@@ -99,6 +100,7 @@ test('Documents matches the Stitch layout and persists upload, preview, edit, do
       await expect(confirmDialog).toContainText('will be permanently removed');
       await confirmDialog.getByRole('button', { name: 'Delete Document' }).click();
       await expect(page.locator('.documentsTable tbody tr', { hasText: updatedName })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Upload File' }).first()).toBeEnabled();
     }
   } finally {
     if (documentIds.length) {
