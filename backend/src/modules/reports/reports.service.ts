@@ -115,6 +115,7 @@ export class ReportsService {
         orderBy: [{ checkIn: 'asc' }, { reference: 'asc' }],
         select: {
           id: true, reference: true, guestName: true, checkIn: true, checkOut: true, status: true, stayStatus: true, source: true, balanceAmount: true,
+          groupReservation: { select: { id: true, groupCode: true, groupName: true, status: true } },
           lines: { select: { id: true, rooms: true, adults: true, children: true, checkIn: true, checkOut: true, roomType: { select: { id: true, name: true } } } },
           roomAssignments: { where: { assignedAt: { lt: rangeTo }, OR: [{ unassignedAt: null }, { unassignedAt: { gte: from } }] }, orderBy: { assignedAt: 'asc' }, select: { id: true, reservationLineId: true, roomId: true, assignedAt: true, unassignedAt: true, reason: true, room: { select: { id: true, roomNumber: true, floor: true, wing: true, roomType: { select: { id: true, name: true } } } } } },
         },
@@ -157,7 +158,7 @@ export class ReportsService {
         const rooms = unassignedLines.reduce((sum, line) => sum + line.requiredRooms, 0);
         const assignedRooms = unassignedLines.reduce((sum, line) => sum + line.assignedRooms, 0);
         const remainingRooms = unassignedLines.reduce((sum, line) => sum + line.remainingRooms, 0);
-        unassignedReservations.push({ reservationId: reservation.id, reference: reservation.reference, guestName: reservation.guestName, checkIn: dateOnly(reservation.checkIn), checkOut: dateOnly(reservation.checkOut), rooms, assignedRooms, remainingRooms, adults: reservation.lines.reduce((sum, line) => sum + line.adults, 0), children: reservation.lines.reduce((sum, line) => sum + line.children, 0), roomTypes: unassignedLines.map((line) => line.roomType), unassignedLines, status: reservation.status, stayStatus: reservation.stayStatus, source: reservation.source, balanceAmount: Number(reservation.balanceAmount) });
+        unassignedReservations.push({ reservationId: reservation.id, reference: reservation.reference, guestName: reservation.guestName, checkIn: dateOnly(reservation.checkIn), checkOut: dateOnly(reservation.checkOut), rooms, assignedRooms, remainingRooms, adults: reservation.lines.reduce((sum, line) => sum + line.adults, 0), children: reservation.lines.reduce((sum, line) => sum + line.children, 0), roomTypes: unassignedLines.map((line) => line.roomType), unassignedLines, status: reservation.status, stayStatus: reservation.stayStatus, source: reservation.source, balanceAmount: Number(reservation.balanceAmount), groupReservation: reservation.groupReservation });
       }
       for (const assignment of reservation.roomAssignments) {
         if (!roomIds.has(assignment.roomId)) continue;
@@ -166,7 +167,7 @@ export class ReportsService {
         const start = clampStart(clampStart(dateOnly(line.checkIn), assignmentDateOnly(assignment.assignedAt)), query.from ?? dateOnly(from));
         const end = clampEnd(clampEnd(dateOnly(line.checkOut), assignment.unassignedAt ? assignmentDateOnly(assignment.unassignedAt) : dateOnly(rangeTo)), dateOnly(rangeTo));
         if (start >= end) continue;
-        const block = { id: assignment.id, reservationId: reservation.id, reservationLineId: assignment.reservationLineId, roomId: assignment.roomId, reference: reservation.reference, guestName: reservation.guestName, roomType: line.roomType, checkIn: start, checkOut: end, adults: line.adults, children: line.children, status: reservation.status, stayStatus: reservation.stayStatus, source: reservation.source, balanceAmount: Number(reservation.balanceAmount), reason: assignment.reason ?? null };
+        const block = { id: assignment.id, reservationId: reservation.id, reservationLineId: assignment.reservationLineId, roomId: assignment.roomId, reference: reservation.reference, guestName: reservation.guestName, roomType: line.roomType, checkIn: start, checkOut: end, adults: line.adults, children: line.children, status: reservation.status, stayStatus: reservation.stayStatus, source: reservation.source, balanceAmount: Number(reservation.balanceAmount), reason: assignment.reason ?? null, groupReservation: reservation.groupReservation };
         if (search && !`${block.reference} ${block.guestName} ${block.roomType.name} ${assignment.room.roomNumber}`.toLowerCase().includes(search)) continue;
         blocks.push(block);
         for (let date = start; date < end; date = addDays(parseDateOnly(date, 'rack date'), 1).toISOString().slice(0, 10)) {
@@ -225,6 +226,7 @@ export class ReportsService {
         where: { ...where, id: { in: reservationIds } },
         select: {
           id: true, reference: true, hotel: { select: { id: true, name: true } }, guestName: true, checkIn: true, checkOut: true, stayStatus: true, checkedInAt: true, checkedInBy: { select: { id: true, name: true } },
+          groupReservation: { select: { id: true, groupCode: true, groupName: true, status: true } },
           source: true, sourceName: true, status: true, paymentStatus: true, totalAmount: true, advanceAmount: true, balanceAmount: true,
           mobile: true, gstin: true, specialRequest: true, billingInstruction: true, internalRemark: true,
           guestProfile: { select: { id: true, preferences: true, reservations: { where: { status: { notIn: [ReservationStatus.CANCELLED, ReservationStatus.EXPIRED] }, OR: [{ stayStatus: StayStatus.CHECKED_OUT }, { status: ReservationStatus.COMPLETED }] }, select: { status: true, stayStatus: true, checkOut: true }, orderBy: { checkOut: 'desc' } } } },
@@ -270,7 +272,7 @@ export class ReportsService {
         creditDate: dateValue(selectedPayment ? (selectedPayment.paidAt ?? selectedPayment.createdAt) : null), bookedBy: reservation.createdBy, mobile: reservation.mobile, gstin: reservation.gstin,
         specialRequest, billingInstruction, internalRemark, instruction: [specialRequest, billingInstruction].filter(Boolean).join(' | '),
         reconfirmed: Boolean(reservation.reconfirmedAt), reconfirmedAt: dateValue(reservation.reconfirmedAt), reconfirmedBy: reservation.reconfirmedBy,
-        stayStatus: reservation.stayStatus, checkedInAt: reservation.checkedInAt, checkedInBy: reservation.checkedInBy,
+        stayStatus: reservation.stayStatus, checkedInAt: reservation.checkedInAt, checkedInBy: reservation.checkedInBy, groupReservation: reservation.groupReservation,
         guestProfile: guestArrivalContext(reservation.guestProfile),
         assignedRooms: (reservation.roomAssignments ?? []).map((assignment) => assignment.room),
         confirmed: ['CONFIRMED', 'COMPLETED'].includes(reservation.status), amount: Number(reservation.totalAmount),

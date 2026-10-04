@@ -5,7 +5,7 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 10_000 },
   reporter: [['list']],
-  use: { baseURL: 'http://localhost:3001/rainwood', trace: 'retain-on-failure', ...devices['Desktop Chrome'] },
+  use: { baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3001/rainwood', trace: 'retain-on-failure', ...devices['Desktop Chrome'] },
   webServer: {
     command: 'npm.cmd run dev',
     url: 'http://localhost:3001/rainwood',

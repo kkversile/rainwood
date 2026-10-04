@@ -7,7 +7,7 @@ import { addDays, eachNight, parseDateOnly } from '../../common/dates';
 import { randomToken, sha256 } from '../../common/security';
 import { HoldCreateDto, HoldLineDto } from './holds.dto';
 
-type LockRow = { id: string; roomTypeId: string; date: Date; available: number; held: number; sold: number; stopSell: boolean };
+type LockRow = { id: string; roomTypeId: string; date: Date; available: number; held: number; sold: number; groupBlocked: number; stopSell: boolean };
 
 @Injectable()
 export class HoldsService {
@@ -33,8 +33,8 @@ export class HoldsService {
         const expected = eachNight(parseDateOnly(line.checkIn, 'checkIn'), parseDateOnly(line.checkOut, 'checkOut')).map((date) => `${line.roomTypeId}:${date.toISOString().slice(0, 10)}`);
         for (const key of expected) {
           const row = lockRows.find((candidate) => `${candidate.roomTypeId}:${candidate.date.toISOString().slice(0, 10)}` === key);
-          if (!row || row.stopSell || row.available - row.held - row.sold < line.rooms) throw new BadRequestException('Inventory changed while creating the hold');
-          const updated = await tx.inventoryDay.updateMany({ where: { id: row.id, held: { lte: row.available - row.sold - line.rooms } }, data: { held: { increment: line.rooms }, version: { increment: 1 } } });
+          if (!row || row.stopSell || row.available - row.held - row.sold - row.groupBlocked < line.rooms) throw new BadRequestException('Inventory changed while creating the hold');
+          const updated = await tx.inventoryDay.updateMany({ where: { id: row.id, held: { lte: row.available - row.sold - row.groupBlocked - line.rooms } }, data: { held: { increment: line.rooms }, version: { increment: 1 } } });
           if (updated.count !== 1) throw new BadRequestException('Inventory changed while creating the hold');
         }
       }
@@ -120,7 +120,7 @@ export class HoldsService {
     for (const roomTypeId of roomIds) {
       const dates = [...keys].filter((key) => key.startsWith(`${roomTypeId}:`)).map((key) => key.slice(roomTypeId.length + 1)).sort();
       if (!dates.length) continue;
-      const locked = await tx.$queryRaw<LockRow[]>(Prisma.sql`SELECT id, "roomTypeId", date, available, held, sold, "stopSell" FROM public."InventoryDay" WHERE "roomTypeId" = ${roomTypeId} AND date >= ${dates[0]}::date AND date <= ${dates[dates.length - 1]}::date ORDER BY date FOR UPDATE`);
+      const locked = await tx.$queryRaw<LockRow[]>(Prisma.sql`SELECT id, "roomTypeId", date, available, held, sold, "groupBlocked", "stopSell" FROM public."InventoryDay" WHERE "roomTypeId" = ${roomTypeId} AND date >= ${dates[0]}::date AND date <= ${dates[dates.length - 1]}::date ORDER BY date FOR UPDATE`);
       rows.push(...locked.filter((row) => keys.has(`${row.roomTypeId}:${row.date.toISOString().slice(0, 10)}`)));
     }
     return rows.sort((a, b) => `${a.roomTypeId}:${a.date.toISOString()}`.localeCompare(`${b.roomTypeId}:${b.date.toISOString()}`));

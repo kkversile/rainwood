@@ -2121,7 +2121,7 @@ export default function NewHotelWizard() {
         )}
         {hotelId && step >= 5 && step <= 8 && (
           <HotelExtendedSections
-            key={`${hotelId}-${extendedResetKey}`}
+            key={`${hotelId}-${extendedResetKey}-${step}`}
             hotelId={hotelId}
             hotel={{ id: hotelId, ...hotel }}
             initialSection={(["policy", "contacts", "location", "documents"] as const)[step - 5]}

@@ -36,6 +36,9 @@ import { RevenueForecastModule } from './modules/revenue-forecast/revenue-foreca
 import { GuestServicesModule } from './modules/guest-services/guest-services.module';
 import { CashierShiftsModule } from './modules/cashier-shifts/cashier-shifts.module';
 import { TaxDocumentsModule } from './modules/tax-documents/tax-documents.module';
+import { OperationsLogbookModule } from './modules/operations-logbook/operations-logbook.module';
+import { GroupsModule } from './modules/groups/groups.module';
+import { BanquetsModule } from './modules/banquets/banquets.module';
 
 @Module({
   imports: [
@@ -75,6 +78,9 @@ import { TaxDocumentsModule } from './modules/tax-documents/tax-documents.module
     GuestServicesModule,
     CashierShiftsModule,
     TaxDocumentsModule,
+    OperationsLogbookModule,
+    GroupsModule,
+    BanquetsModule,
   ],
 })
 export class AppModule {}

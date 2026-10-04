@@ -122,7 +122,7 @@ export class AvailabilityService {
     const ratesComplete = occupiedNights.every((night) => rateByDate.has(toDateOnly(night)));
     const inventoryAvailable = inventoryComplete && occupiedNights.every((night) => {
       const day = inventoryByDate.get(toDateOnly(night));
-      return !day.stopSell && day.available - day.held - day.sold >= input.rooms;
+      return !day.stopSell && day.available - day.held - day.sold - Number(day.groupBlocked ?? 0) >= input.rooms;
     });
     const restrictionsValid = Boolean(arrivalRate) && ratesComplete && !arrivalRate.cta && !departureRate?.ctd && (arrivalRate.minLos ?? 1) <= nights && (arrivalRate.maxLos == null || nights <= arrivalRate.maxLos);
     const maxOccupancy = room.maxOccupancy ?? room.maxAdults + room.maxChildren;
@@ -207,7 +207,7 @@ export class AvailabilityService {
       available: inventoryAvailable && restrictionsValid && occupancyValid,
       availableRooms: inventoryComplete ? Math.min(...occupiedNights.map((night) => {
         const day = inventoryByDate.get(toDateOnly(night));
-        return Math.max(0, day.available - day.held - day.sold);
+        return Math.max(0, day.available - day.held - day.sold - Number(day.groupBlocked ?? 0));
       })) : 0,
       priceBreakdown: breakdown,
       priceSource: 'RATE_PLAN',

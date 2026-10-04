@@ -12,6 +12,7 @@ function localEnv(name: string) {
 
 test('role browser matrix reaches each authorized portal landing page', async ({ page }) => {
   const password = localEnv('NEXT_PUBLIC_DEMO_ADMIN_PASSWORD');
+  const staffPassword = localEnv('NEXT_PUBLIC_DEMO_STAFF_PASSWORD') || 'StaffDemo@2026!';
   const roles: Array<[string, string, string]> = [
     ['SUPER_ADMIN', 'admin@rainwood.demo', '/admin/dashboard'],
     ['CORPORATE_ADMIN', 'corporate@rainwood.demo', '/admin/dashboard'],
@@ -62,7 +63,7 @@ test('role browser matrix reaches each authorized portal landing page', async ({
   await page.context().clearCookies();
   await page.goto(frontendUrl + '/staff/login');
   await page.getByLabel('Email').fill('service.staff.test@rainwood.demo');
-  await page.getByLabel('Password').fill(password);
+  await page.getByLabel('Password').fill(staffPassword);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(frontendUrl + '/staff', { timeout: 15_000 });
   await expect(page.locator('body')).toContainText(/housekeeping|room attendant/i);

@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../../common/prisma.service';
 import { AuditService } from '../../common/audit.service';
 import { HoldsService } from '../holds/holds.service';
-import { CancellationDto, CheckInDto, CheckOutDto, CheckoutPaymentDto, CreateReservationDto, FolioChargeDto, ModificationDto, ReservationListQueryDto, RoomChangeDto, VoidFolioChargeDto } from './reservations.dto';
+import { CancellationDto, CheckInDto, CheckOutDto, CheckoutPaymentDto, CreateReservationDto, FolioChargeDto, ModificationDto, NoShowDto, ReservationListQueryDto, RoomChangeDto, VoidFolioChargeDto } from './reservations.dto';
 import { parseDateOnly, toDateOnly } from '../../common/dates';
 import { getHotelOperationalDate } from '../../common/hotel-dates';
 import { sha256 } from '../../common/security';
@@ -18,6 +18,7 @@ import { GuestsService, guestArrivalContext } from '../guests/guests.service';
 import { assertActorCanManageHotel, getActorScope } from '../../common/role-scope';
 import { calculateSettlementTotals } from './settlement-totals';
 import { CashierShiftsService } from '../cashier-shifts/cashier-shifts.service';
+import { GroupsService } from '../groups/groups.service';
 
 const checkoutInclude = {
   hotel: { select: { id: true, name: true, timezoneName: true } },
@@ -30,7 +31,7 @@ const checkoutInclude = {
 
 @Injectable()
 export class ReservationsService {
-  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService, @Optional() private readonly availability?: AvailabilityService, @Optional() private readonly cashierShifts?: CashierShiftsService) {}
+  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService, @Optional() private readonly availability?: AvailabilityService, @Optional() private readonly cashierShifts?: CashierShiftsService, @Optional() private readonly groups?: GroupsService) {}
 
   private operationalRoles = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'];
 
@@ -63,7 +64,7 @@ export class ReservationsService {
   async checkIn(reference: string, body: CheckInDto, user: { id: string; role?: string }) {
     this.assertOperationalRole(user.role);
     await this.assertReservationScope(reference, user.id);
-    return serializable(this.p, async (tx) => {
+    const result = await serializable(this.p, async (tx) => {
       const reservation = await tx.reservation.findUnique({ where: { reference }, include: { hotel: { select: { id: true, name: true, timezoneName: true } }, lines: { include: { roomType: { select: { id: true, name: true } } } }, roomAssignments: { where: { unassignedAt: null }, include: { room: true } } } });
       if (!reservation) throw new NotFoundException('Reservation not found');
       if (!([ReservationStatus.CONFIRMED, ReservationStatus.MODIFIED] as ReservationStatus[]).includes(reservation.status)) throw new BadRequestException('Only confirmed or modified reservations can be checked in.');
@@ -99,13 +100,15 @@ export class ReservationsService {
       await tx.auditLog.create({ data: { actorUserId: user.id, action: 'ROOM_ASSIGNED', entityType: 'Reservation', entityId: reservation.id, after: { reference, roomIds } } });
       return this.stayLifecycleResult(updated);
     });
+    await this.groups?.syncLifecycleForReservation(user.id, reference);
+    return result;
   }
 
   async roomChange(reference: string, body: RoomChangeDto, user: { id: string; role?: string }) {
     this.assertOperationalRole(user.role);
     await this.assertReservationScope(reference, user.id);
     const reason = body.reason.trim();
-    return serializable(this.p, async (tx) => {
+    const result = await serializable(this.p, async (tx) => {
       const reservation = await tx.reservation.findUnique({ where: { reference }, include: { roomAssignments: { where: { unassignedAt: null }, include: { room: true } }, hotel: { select: { id: true, name: true } } } });
       if (!reservation) throw new NotFoundException('Reservation not found');
       if (reservation.stayStatus !== StayStatus.CHECKED_IN) throw new BadRequestException('Room changes are only available for checked-in stays.');
@@ -125,12 +128,14 @@ export class ReservationsService {
       await tx.auditLog.create({ data: { actorUserId: user.id, action: 'ROOM_CHANGED', entityType: 'ReservationRoomAssignment', entityId: next.id, after: { reference, oldRoom: current.room.roomNumber, newRoom: target.roomNumber, reason } } });
       return this.getLifecycle(reference, tx);
     });
+    await this.groups?.syncLifecycleForReservation(user.id, reference);
+    return result;
   }
 
   async checkOut(reference: string, body: CheckOutDto, user: { id: string; role?: string; name?: string }) {
     this.assertOperationalRole(user.role);
     await this.assertReservationScope(reference, user.id);
-    return serializable(this.p, async (tx) => {
+    const result = await serializable(this.p, async (tx) => {
       const actor = await tx.user.findUnique({ where: { id: user.id }, select: { id: true, name: true, role: true } });
       if (!actor) throw new ForbiddenException('The authenticated user is no longer available.');
       const reservation = await tx.reservation.findUnique({ where: { reference }, include: checkoutInclude });
@@ -159,6 +164,30 @@ export class ReservationsService {
       await tx.auditLog.create({ data: { actorUserId: user.id, action: 'GUEST_CHECKED_OUT', entityType: 'Reservation', entityId: reservation.id, after: { reference, rooms: reservation.roomAssignments.map((assignment) => assignment.room.roomNumber), totalOutstanding: totals.outstandingAmount, settlementId: settlement.id, finalFolioNumber, note: body.note?.trim() || null } } });
       return { reference: updated.reference, stayStatus: updated.stayStatus, checkedOutAt: updated.checkedOutAt, checkedOutBy: updated.checkedOutBy, totalOutstanding: totals.outstandingAmount, settlement: this.settlementResult(settlement).settlement, finalFolioNumber, snapshot };
     });
+    await this.groups?.syncLifecycleForReservation(user.id, reference);
+    return result;
+  }
+
+  async markNoShow(reference: string, body: NoShowDto, user: { id: string; role?: string }) {
+    this.assertOperationalRole(user.role);
+    await this.assertReservationScope(reference, user.id);
+    const result = await this.p.$transaction(async (tx) => {
+      const reservation = await tx.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, hotelId: true, status: true, stayStatus: true, version: true } });
+      if (!reservation) throw new NotFoundException('Reservation not found');
+      if (reservation.status === ReservationStatus.NO_SHOW && reservation.stayStatus === StayStatus.NO_SHOW) return reservation;
+      if (!([ReservationStatus.CONFIRMED, ReservationStatus.MODIFIED] as ReservationStatus[]).includes(reservation.status)) throw new BadRequestException('Only confirmed or modified reservations can be marked as no-show.');
+      if (reservation.stayStatus !== StayStatus.EXPECTED) throw new ConflictException('Only expected stays can be marked as no-show.');
+      assertReservationTransition(reservation.status, ReservationStatus.NO_SHOW);
+      const updated = await tx.reservation.update({
+        where: { id: reservation.id, version: reservation.version },
+        data: { status: ReservationStatus.NO_SHOW, stayStatus: StayStatus.NO_SHOW, syncStatus: SyncStatus.PENDING, version: { increment: 1 } },
+        select: { reference: true, status: true, stayStatus: true, version: true },
+      });
+      await tx.auditLog.create({ data: { actorUserId: user.id, action: 'RESERVATION_MARKED_NO_SHOW', entityType: 'Reservation', entityId: reservation.id, before: { status: reservation.status, stayStatus: reservation.stayStatus }, after: { status: updated.status, stayStatus: updated.stayStatus, reason: body.reason?.trim() || null } } });
+      return updated;
+    });
+    await this.groups?.syncLifecycleForReservation(user.id, reference);
+    return result;
   }
 
   async checkoutPreview(reference: string, userId?: string) {
@@ -364,7 +393,7 @@ export class ReservationsService {
     }
     if (query.from || query.to) where.checkIn = { gte: query.from ? parseDateOnly(query.from, 'from') : undefined, lt: query.to ? parseDateOnly(query.to, 'to') : undefined };
     const [items, total] = await Promise.all([
-      this.p.reservation.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit, include: { hotel: true, payments: true, lines: { include: { roomType: true, ratePlan: true } } } }),
+      this.p.reservation.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit, include: { hotel: true, groupReservation: { select: { id: true, groupCode: true, groupName: true, status: true } }, payments: true, lines: { include: { roomType: true, ratePlan: true } } } }),
       this.p.reservation.count({ where }),
     ]);
     return { items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
@@ -401,6 +430,7 @@ export class ReservationsService {
         lines: { include: { roomType: true, ratePlan: true, nights: { orderBy: { date: 'asc' } } } },
         payments: { select: { id: true, amount: true, mode: true, verified: true, paidAt: true, createdAt: true }, orderBy: { createdAt: 'desc' } },
         guestProfile: { select: { id: true, preferences: true, reservations: { where: { status: { notIn: ['CANCELLED', 'EXPIRED'] }, OR: [{ stayStatus: 'CHECKED_OUT' }, { status: 'COMPLETED' }] }, select: { status: true, stayStatus: true, checkOut: true }, orderBy: { checkOut: 'desc' } } } },
+        groupReservation: { select: { id: true, groupCode: true, groupName: true, status: true } },
       },
     });
     if (!reservation) throw new NotFoundException('Reservation not found');
@@ -423,6 +453,7 @@ export class ReservationsService {
         source: reservation.source,
         sourceName: reservation.sourceName,
         businessType,
+        groupReservation: reservation.groupReservation,
         checkIn: reservation.checkIn,
         checkOut: reservation.checkOut,
         currency: reservation.currency,
@@ -645,7 +676,7 @@ export class ReservationsService {
     const current = await this.p.reservation.findUnique({ where: { reference }, select: { id: true } });
     if (!current) throw new NotFoundException('Reservation not found');
     const idempotencyKey = body.idempotencyKey ?? `cancel:${current.id}`;
-    return this.p.$transaction(async (tx) => {
+    const result = await this.p.$transaction(async (tx) => {
       const reservation = await tx.reservation.findUnique({ where: { id: current.id }, include: { lines: { include: { nights: true } }, payments: true, vouchers: true, createdBy: { select: { id: true, role: true } } } });
       if (!reservation) throw new NotFoundException('Reservation not found');
       const existing = await tx.cancellationRequest.findUnique({ where: { idempotencyKey } });
@@ -682,6 +713,8 @@ export class ReservationsService {
       await tx.auditLog.create({ data: { actorUserId: user.id, action: 'RESERVATION_CANCELLED', entityType: 'Reservation', entityId: reservation.id, after: { refundAmount, penalty } } });
       return cancellation;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    await this.groups?.syncLifecycleForReservation(user.id, reference);
+    return result;
   }
 
   async modify(reference: string, body: ModificationDto, user: { id: string }) {

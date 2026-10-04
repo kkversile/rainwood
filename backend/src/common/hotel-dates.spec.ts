@@ -1,4 +1,4 @@
-import { getHotelBusinessDayUtcRange, getHotelOperationalDate } from './hotel-dates';
+import { getHotelBusinessDayUtcRange, getHotelOperationalDate, hotelLocalDateTimeToUtc } from './hotel-dates';
 import { toDateOnly } from './dates';
 
 describe('hotel date utilities', () => {
@@ -30,5 +30,9 @@ describe('hotel date utilities', () => {
 
   it('keeps the local date after midnight at 00:30 IST', () => {
     expect(toDateOnly(getHotelOperationalDate('Asia/Kolkata', new Date('2026-09-27T19:00:00.000Z')))).toBe('2026-09-28');
+  });
+
+  it('converts hotel-local datetime values to UTC instants', () => {
+    expect(hotelLocalDateTimeToUtc('2026-10-03T01:15', 'Asia/Kolkata').toISOString()).toBe('2026-10-02T19:45:00.000Z');
   });
 });

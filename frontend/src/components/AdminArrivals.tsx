@@ -15,6 +15,7 @@ type ArrivalRow = {
   bookedBy: { id: string; name: string } | null; mobile: string | null; gstin: string | null; specialRequest: string | null; billingInstruction: string | null; internalRemark: string | null;
   reconfirmed: boolean; reconfirmedAt: string | null; reconfirmedBy: { id: string; name: string } | null;
   stayStatus?: string; assignedRooms?: { roomNumber: string; roomType?: { name: string } | null }[];
+  groupReservation?: { id: string; groupCode: string; groupName: string; status: string } | null;
   guestProfile?: { id: string; repeatGuest: boolean; completedStays: number; lastStay: string | null } | null;
 };
 type ArrivalResponse = { items: ArrivalRow[]; summary: { reservations: number; rooms: number; adults: number; children: number; pax: number; totalAmount: number; advance: number; balance: number; waitlist: number }; pagination: { page: number; limit: number; total: number; pages: number } };

@@ -123,7 +123,9 @@ test('Images & Media matches the Stitch geometry and persists uploaded previews'
       return Boolean(first && second && second.sortOrder < first.sortOrder);
     }).toBeTruthy();
 
-    await firstCard.getByRole('button', { name: /Set .* as main photo/ }).click();
+    if (await firstCard.locator('.mainPhotoBadge').count() === 0) {
+      await firstCard.getByRole('button', { name: /Set .* as main photo/ }).click();
+    }
     await expect(firstCard.locator('.mainPhotoBadge')).toHaveText('Main Photo');
     if (originalMain) {
       await page.locator(`[data-image-id="${originalMain.id}"]`).getByRole('button', { name: /Set .* as main photo/ }).click();

@@ -41,10 +41,10 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
   return <AdminProfileContext.Provider value={{ profile, loading: false }}>{children}</AdminProfileContext.Provider>;
 }
 
-function useData<T>(path: string) {
+function useData<T>(path: string, reloadKey = 0) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState('');
-  useEffect(() => { apiRequest<T>(path).then(setData).catch((reason: Error) => setError(reason.message)); }, [path]);
+  useEffect(() => { apiRequest<T>(path).then(setData).catch((reason: Error) => setError(reason.message)); }, [path, reloadKey]);
   return { data, error };
 }
 
@@ -109,8 +109,8 @@ export function ReservationData() {
   const searchParams = useSearchParams();
   const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get('page') ?? 1) || 1)); const [search, setSearch] = useState(() => searchParams.get('search') ?? ''); const [status, setStatus] = useState(() => searchParams.get('status') ?? ''); const [reload, setReload] = useState(0);
   useEffect(() => { setPage(Math.max(1, Number(searchParams.get('page') ?? 1) || 1)); setSearch(searchParams.get('search') ?? ''); setStatus(searchParams.get('status') ?? ''); }, [searchParams]);
-  const reservationQuery = new URLSearchParams({ page: String(page), limit: '25', ...(search.trim() ? { search: search.trim() } : {}), ...(status ? { status } : {}), ...(searchParams.get('hotelId') ? { hotelId: searchParams.get('hotelId')! } : {}), ...(searchParams.get('from') ? { from: searchParams.get('from')! } : {}), ...(searchParams.get('to') ? { to: searchParams.get('to')! } : {}), refresh: String(reload) }).toString();
-  const { data, error } = useData<ReservationList>(`/reservations?${reservationQuery}`);
+  const reservationQuery = new URLSearchParams({ page: String(page), limit: '25', ...(search.trim() ? { search: search.trim() } : {}), ...(status ? { status } : {}), ...(searchParams.get('hotelId') ? { hotelId: searchParams.get('hotelId')! } : {}), ...(searchParams.get('from') ? { from: searchParams.get('from')! } : {}), ...(searchParams.get('to') ? { to: searchParams.get('to')! } : {}) }).toString();
+  const { data, error } = useData<ReservationList>(`/reservations?${reservationQuery}`, reload);
   const { data: hotels, error: hotelError } = useData<ReservationHotel[]>('/hotels');
   const [form, setForm] = useState<ReservationForm>(blankReservation); const [detail, setDetail] = useState<ReservationDetail | null>(null); const [editReference, setEditReference] = useState(''); const [showForm, setShowForm] = useState(false); const [busy, setBusy] = useState(false); const [formError, setFormError] = useState(''); const [quote, setQuote] = useState<ReservationQuote | null>(null);
   const selectedHotel = hotels?.find((item) => item.id === form.hotelId); const selectedRoom = selectedHotel?.rooms.find((item) => item.id === form.roomTypeId); const plans = selectedRoom?.ratePlans ?? [];

@@ -22,7 +22,7 @@ async function signInAdmin(page: Page) {
 test.beforeAll(() => {
   const backendEnv = readFileSync(resolve(process.cwd(), '..', 'backend', '.env'), 'utf8');
   const databaseLine = backendEnv.split(/\r?\n/).find((item) => item.startsWith('DATABASE_URL=')) ?? '';
-  const databaseUrl = databaseLine.slice('DATABASE_URL='.length).replace(':55432/', ':55400/');
+  const databaseUrl = process.env.E2E_DATABASE_URL ?? databaseLine.slice('DATABASE_URL='.length).replace(':55432/', ':55400/');
   const prefix = `RW-RACK-BROWSER-${Date.now()}`;
   const tsxCli = resolve(process.cwd(), '..', 'backend', 'node_modules', 'tsx', 'dist', 'cli.mjs');
   const fixtureScript = resolve(process.cwd(), '..', 'backend', 'test', 'room-rack-browser-fixture.ts');
@@ -33,7 +33,7 @@ test.afterAll(() => {
   if (!fixture) return;
   const backendEnv = readFileSync(resolve(process.cwd(), '..', 'backend', '.env'), 'utf8');
   const databaseLine = backendEnv.split(/\r?\n/).find((item) => item.startsWith('DATABASE_URL=')) ?? '';
-  const databaseUrl = databaseLine.slice('DATABASE_URL='.length).replace(':55432/', ':55400/');
+  const databaseUrl = process.env.E2E_DATABASE_URL ?? databaseLine.slice('DATABASE_URL='.length).replace(':55432/', ':55400/');
   const tsxCli = resolve(process.cwd(), '..', 'backend', 'node_modules', 'tsx', 'dist', 'cli.mjs');
   const fixtureScript = resolve(process.cwd(), '..', 'backend', 'test', 'room-rack-browser-fixture.ts');
   execFileSync(process.execPath, [tsxCli, fixtureScript, 'cleanup', fixture.prefix], { cwd: resolve(process.cwd(), '..', 'backend'), env: { ...process.env, DATABASE_URL: databaseUrl }, stdio: 'ignore' });

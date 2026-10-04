@@ -255,7 +255,7 @@ export class HotelsController {
 
   @Get(':hotelId/catalog')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION')
   catalog(@Param('hotelId') hotelId: string, @Query('startDate') startDate?: string, @Query('endDate') endDate?: string) { return this.service.catalog(hotelId, startDate, endDate); }
 
   @Get(':hotelId/pricebook.xlsx')

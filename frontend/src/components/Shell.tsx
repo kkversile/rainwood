@@ -17,6 +17,9 @@ export const adminLinks = [
   { key: 'roomRack', href: '/admin/room-rack', label: 'Room Rack' },
   { key: 'housekeeping', href: '/admin/housekeeping', label: 'Housekeeping' },
   { key: 'maintenance', href: '/admin/maintenance', label: 'Maintenance' },
+  { key: 'logbook', href: '/admin/logbook', label: 'Operations Logbook' },
+  { key: 'banquets', href: '/admin/banquets', label: 'Banquets & Events' },
+  { key: 'functionSpaces', href: '/admin/function-spaces', label: 'Function Spaces' },
   { key: 'ratePlans', href: '/admin/rate-plans', label: 'Rate Plans' },
   { key: 'rates', href: '/admin/rates', label: 'Rates' },
   { key: 'rateSeasons', href: '/admin/rate-seasons', label: 'Rate Seasons' },
@@ -36,6 +39,7 @@ export const adminLinks = [
   { key: 'corporates', href: '/admin/corporates', label: 'Corporates' },
   { key: 'inquiries', href: '/admin/inquiries', label: 'Inquiries' },
   { key: 'reservations', href: '/admin/reservations', label: 'Reservations' },
+  { key: 'groups', href: '/admin/groups', label: 'Groups & Room Blocks' },
   { key: 'frontDesk', href: '/admin/front-desk', label: 'Front Desk' },
   { key: 'arrivals', href: '/admin/arrivals', label: 'Arrivals' },
   { key: 'inHouse', href: '/admin/in-house', label: 'In-house' },
@@ -51,11 +55,11 @@ export const adminLinks = [
   { key: 'siteSettings', href: '/admin/settings', label: 'Site Settings' },
   { key: 'auditLogs', href: '/admin/audit-logs', label: 'Audit Logs' },
 ] as const satisfies readonly AdminLink[];
-const reservationLinks = new Set(['/admin/dashboard', '/admin/reservations', '/admin/front-desk', '/admin/room-rack', '/admin/arrivals', '/admin/in-house', '/admin/lost-found', '/admin/guests', '/admin/payments', '/admin/reports', '/admin/inquiries', '/admin/cashier', '/admin/tax-invoices']);
+const reservationLinks = new Set(['/admin/dashboard', '/admin/reservations', '/admin/front-desk', '/admin/room-rack', '/admin/arrivals', '/admin/in-house', '/admin/lost-found', '/admin/guests', '/admin/payments', '/admin/reports', '/admin/inquiries', '/admin/cashier', '/admin/tax-invoices', '/admin/logbook', '/admin/groups', '/admin/banquets', '/admin/function-spaces']);
 const propertyHiddenLinks = new Set(['/admin/hotels', '/admin/settings', '/admin/axisrooms', '/admin/jobs', '/admin/audit-logs']);
 const adminGroupDefinitions = [
-  { key: 'operations', label: 'Operations', itemKeys: ['roomsInventory', 'physicalRooms', 'roomRack', 'housekeeping', 'maintenance', 'supplementaryCharges', 'expenses', 'serviceItems', 'cashier'] },
-  { key: 'reservations', label: 'Reservations', itemKeys: ['reservations', 'frontDesk', 'arrivals', 'inHouse', 'lostFound', 'payments', 'contactRequests'] },
+  { key: 'operations', label: 'Operations', itemKeys: ['roomsInventory', 'physicalRooms', 'roomRack', 'housekeeping', 'maintenance', 'logbook', 'banquets', 'functionSpaces', 'supplementaryCharges', 'expenses', 'serviceItems', 'cashier'] },
+  { key: 'reservations', label: 'Reservations', itemKeys: ['reservations', 'groups', 'frontDesk', 'arrivals', 'inHouse', 'lostFound', 'payments', 'contactRequests'] },
   { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rates', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
   { key: 'crmSales', label: 'CRM & Sales', itemKeys: ['guests', 'agents', 'corporates', 'inquiries'] },
   { key: 'reports', label: 'Reports', itemKeys: ['reports', 'taxInvoices', 'creditNotes', 'tds', 'nightAudit'] },
@@ -68,8 +72,8 @@ export function allowedAdminLinksForRole(role?: string | null): readonly AdminLi
   if (role === 'RESERVATION') return adminLinks.filter((item) => reservationLinks.has(item.href));
   if (role === 'ADMIN') return adminLinks.filter((item) => !propertyHiddenLinks.has(item.href));
   if (role === 'CORPORATE_ADMIN') return adminLinks.filter((item) => item.href !== '/admin/settings');
-  if (role === 'ACCOUNTS') return adminLinks.filter((item) => ['/admin/dashboard', '/admin/payments', '/admin/reports', '/admin/expenses', '/admin/corporates', '/admin/lost-found', '/admin/cashier', '/admin/tax-settings', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds'].includes(item.href));
-  if (role === 'VIEWER') return adminLinks.filter((item) => ['/admin/dashboard', '/admin/reports', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds'].includes(item.href));
+  if (role === 'ACCOUNTS') return adminLinks.filter((item) => ['/admin/dashboard', '/admin/payments', '/admin/reports', '/admin/expenses', '/admin/corporates', '/admin/lost-found', '/admin/cashier', '/admin/tax-settings', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds', '/admin/logbook', '/admin/groups', '/admin/banquets', '/admin/function-spaces'].includes(item.href));
+  if (role === 'VIEWER') return adminLinks.filter((item) => ['/admin/dashboard', '/admin/reports', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds', '/admin/logbook', '/admin/groups', '/admin/banquets', '/admin/function-spaces'].includes(item.href));
   return [];
 }
 

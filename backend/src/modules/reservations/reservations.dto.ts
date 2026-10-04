@@ -267,6 +267,13 @@ export class CheckOutDto {
   note?: string;
 }
 
+export class NoShowDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
 export class CheckoutPaymentDto {
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })

@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ReservationsService } from './reservations.service';
-import { CancellationDto, CheckInDto, CheckOutDto, CheckoutPaymentDto, CreateReservationDto, FolioChargeDto, ManualReservationDto, ModificationDto, PayDueMilestonesDto, RatePlanListQueryDto, ReconfirmationDto, ReservationListQueryDto, RoomChangeDto, VoidFolioChargeDto } from './reservations.dto';
+import { CancellationDto, CheckInDto, CheckOutDto, CheckoutPaymentDto, CreateReservationDto, FolioChargeDto, ManualReservationDto, ModificationDto, NoShowDto, PayDueMilestonesDto, RatePlanListQueryDto, ReconfirmationDto, ReservationListQueryDto, RoomChangeDto, VoidFolioChargeDto } from './reservations.dto';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -76,6 +76,11 @@ export class ReservationsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION')
   checkOut(@Param('reference') reference: string, @Body() body: CheckOutDto, @CurrentUser() user: any) { return this.s.checkOut(reference, body, user); }
+
+  @Post(':reference/no-show')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION')
+  noShow(@Param('reference') reference: string, @Body() body: NoShowDto, @CurrentUser() user: any) { return this.s.markNoShow(reference, body, user); }
 
   @Get(':reference/checkout-preview')
   @UseGuards(JwtAuthGuard, RolesGuard)

@@ -13,9 +13,9 @@ const rolePrefixes: Record<string, string[]> = {
   SUPER_ADMIN: ['/admin/'],
   CORPORATE_ADMIN: ['/admin/'],
   ADMIN: ['/admin/'],
-  RESERVATION: ['/admin/dashboard', '/admin/reservations', '/admin/arrivals', '/admin/in-house', '/admin/lost-found', '/admin/guests', '/admin/payments', '/admin/reports', '/admin/inquiries', '/admin/cashier', '/admin/tax-invoices'],
-  ACCOUNTS: ['/admin/dashboard', '/admin/payments', '/admin/reports', '/admin/expenses', '/admin/corporates', '/admin/lost-found', '/admin/cashier', '/admin/tax-settings', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds'],
-  VIEWER: ['/admin/dashboard', '/admin/reports', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds'],
+  RESERVATION: ['/admin/dashboard', '/admin/reservations', '/admin/front-desk', '/admin/room-rack', '/admin/logbook', '/admin/arrivals', '/admin/in-house', '/admin/lost-found', '/admin/guests', '/admin/payments', '/admin/reports', '/admin/inquiries', '/admin/cashier', '/admin/tax-invoices', '/admin/groups', '/admin/banquets', '/admin/banquets/calendar', '/admin/function-spaces'],
+  ACCOUNTS: ['/admin/dashboard', '/admin/payments', '/admin/reports', '/admin/expenses', '/admin/corporates', '/admin/lost-found', '/admin/cashier', '/admin/tax-settings', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds', '/admin/logbook', '/admin/groups', '/admin/banquets', '/admin/banquets/calendar', '/admin/function-spaces'],
+  VIEWER: ['/admin/dashboard', '/admin/reports', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds', '/admin/logbook', '/admin/groups', '/admin/banquets', '/admin/banquets/calendar', '/admin/function-spaces'],
   SERVICE_STAFF: ['/staff'],
   AGENT: ['/agent'],
 };

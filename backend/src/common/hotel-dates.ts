@@ -19,6 +19,16 @@ function localMidnightToUtc(dateText: string, timezoneName: string) {
   return new Date(candidate);
 }
 
+/** Parses a datetime-local value as a hotel-local wall-clock datetime. */
+export function hotelLocalDateTimeToUtc(value: string, timezoneName: string) {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(value)) throw new BadRequestException('Hotel-local datetime is invalid.');
+  const localAsUtc = Date.parse(`${value.length === 16 ? `${value}:00` : value}Z`);
+  if (!Number.isFinite(localAsUtc)) throw new BadRequestException('Hotel-local datetime is invalid.');
+  let candidate = localAsUtc;
+  for (let attempt = 0; attempt < 4; attempt += 1) candidate = localAsUtc - timezoneOffsetMs(timezoneName, new Date(candidate));
+  return new Date(candidate);
+}
+
 /** Returns the hotel's calendar date for an instant, independent of server/UTC timezone. */
 export function getHotelOperationalDate(timezoneName: string, now: Date = new Date()): Date {
   if (!(now instanceof Date) || Number.isNaN(now.getTime())) throw new BadRequestException('Current time is invalid.');

@@ -40,6 +40,7 @@ type ArrivalDetail = {
   source: string;
   sourceName?: string | null;
   businessType: string;
+  groupReservation?: { id: string; groupCode: string; groupName: string; status: string } | null;
   createdAt: string;
   createdBy: Person;
   checkIn: string;
@@ -180,7 +181,7 @@ export function ArrivalDetailsModal({ reference, onClose, onReconfirmed }: { ref
         {loading && <div className="arrivalDetailsLoading" role="status"><span className="arrivalDetailsSpinner" /> Loading reservation details…</div>}
         {!loading && error && <div className="arrivalDetailsError" role="alert"><p>Unable to load reservation details.</p><small>{error}</small><div><button className="smallBtn" type="button" onClick={() => setReloadKey((value) => value + 1)}>Retry</button><button className="smallBtn secondary" type="button" onClick={onClose}>Close</button></div></div>}
         {!loading && !error && detail && <>
-          <div className="arrivalDetailIdentity"><div><span>Reservation #</span><strong>{detail.reference}</strong><small>{detail.hotel.name}</small></div><div className="arrivalDetailBadges"><span className="status ok">{label(detail.status)}</span><span className="status">{label(detail.paymentStatus)}</span><span className={`status ${detail.reconfirmedAt ? 'ok' : 'warn'}`}>{detail.reconfirmedAt ? 'Reconfirmed' : 'Not Reconfirmed'}</span></div></div>
+          <div className="arrivalDetailIdentity"><div><span>Reservation #</span><strong>{detail.reference}</strong><small>{detail.hotel.name}</small>{detail.groupReservation && <small className="arrivalGroupContext">Group <Link href={`/rainwood/admin/groups?open=${encodeURIComponent(detail.groupReservation.id)}`}>{detail.groupReservation.groupCode} · {detail.groupReservation.groupName}</Link></small>}</div><div className="arrivalDetailBadges"><span className="status ok">{label(detail.status)}</span><span className="status">{label(detail.paymentStatus)}</span><span className={`status ${detail.reconfirmedAt ? 'ok' : 'warn'}`}>{detail.reconfirmedAt ? 'Reconfirmed' : 'Not Reconfirmed'}</span></div></div>
           <div className="arrivalDetailSummary"><DataItem name="Arrival" value={dateLabel(detail.checkIn)} /><DataItem name="Departure" value={dateLabel(detail.checkOut)} /><DataItem name="Nights" value={nightsBetween(detail.checkIn, detail.checkOut)} /><DataItem name="Rooms" value={detail.lines.reduce((sum, line) => sum + line.rooms, 0)} /><DataItem name="Pax" value={detail.lines.reduce((sum, line) => sum + line.adults + line.children, 0)} />{Number(detail.balanceAmount) > 0 && <DataItem name="Balance Due" value={<b className="arrivalDetailBalance">{money(detail.balanceAmount)}</b>} />}</div>
           {success && <p className="arrivalDetailsSuccess" role="status">{success}</p>}
           {actionError && <p className="arrivalDetailsActionError" role="alert">{actionError}</p>}

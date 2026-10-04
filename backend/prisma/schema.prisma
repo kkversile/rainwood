@@ -28,6 +28,123 @@ enum StaffDepartment {
   OTHER
 }
 
+enum FunctionSpaceType {
+  BALLROOM
+  BANQUET_HALL
+  MEETING_ROOM
+  BOARDROOM
+  CONFERENCE_HALL
+  LAWN
+  TERRACE
+  POOL_SIDE
+  RESTAURANT_PRIVATE_ROOM
+  OTHER
+}
+
+enum BanquetEventType {
+  WEDDING
+  RECEPTION
+  CONFERENCE
+  MEETING
+  TRAINING
+  SEMINAR
+  WORKSHOP
+  CORPORATE_EVENT
+  SOCIAL_EVENT
+  BIRTHDAY
+  ANNIVERSARY
+  EXHIBITION
+  OTHER
+}
+
+enum BanquetEventStatus {
+  INQUIRY
+  TENTATIVE
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum BanquetFunctionStatus {
+  TENTATIVE
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum BanquetSetupStyle {
+  THEATRE
+  CLASSROOM
+  BOARDROOM
+  U_SHAPE
+  BANQUET
+  RECEPTION
+  CABARET
+  COCKTAIL
+  CUSTOM
+}
+
+enum BanquetBEOStatus {
+  DRAFT
+  FINAL
+}
+
+enum BanquetRequirementCategory {
+  FOOD_BEVERAGE
+  AUDIO_VISUAL
+  FURNITURE
+  DECOR
+  HOUSEKEEPING
+  ENGINEERING
+  SECURITY
+  TRANSPORT
+  OTHER
+}
+
+enum BanquetRequirementStatus {
+  PENDING
+  ACKNOWLEDGED
+  COMPLETED
+}
+
+enum BanquetChargeCategory {
+  VENUE_RENTAL
+  AUDIO_VISUAL
+  FOOD_PACKAGE
+  DECORATION
+  EQUIPMENT
+  MISCELLANEOUS
+}
+
+enum OperationsLogCategory {
+  GUEST_REQUEST
+  VIP
+  COMPLAINT
+  PAYMENT_FOLLOWUP
+  ARRIVAL
+  DEPARTURE
+  ROOM
+  HOUSEKEEPING
+  MAINTENANCE
+  TRANSPORT
+  SECURITY
+  GENERAL
+}
+
+enum OperationsLogPriority {
+  NORMAL
+  IMPORTANT
+  URGENT
+}
+
+enum OperationsLogStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
 enum GuestNoteCategory {
   PREFERENCE
   SERVICE
@@ -52,6 +169,39 @@ enum BookingSource {
   AGENT
   COMPANY
   OTA
+}
+
+enum GroupType {
+  CORPORATE
+  CONFERENCE
+  WEDDING
+  TOUR
+  CREW
+  FAMILY
+  EVENT
+  OTHER
+}
+
+enum GroupReservationStatus {
+  INQUIRY
+  TENTATIVE
+  CONFIRMED
+  IN_HOUSE
+  COMPLETED
+  CANCELLED
+}
+
+enum GroupBillingInstruction {
+  INDIVIDUAL
+  ROOM_TO_MASTER
+  ALL_TO_MASTER
+}
+
+enum GroupRoomingListStatus {
+  DRAFT
+  READY
+  RESERVATION_CREATED
+  ERROR
 }
 
 enum PromotionDiscountType {
@@ -210,6 +360,8 @@ enum DocumentSequenceType {
   CASHIER_SHIFT
   TAX_INVOICE
   CREDIT_NOTE
+  BANQUET_EVENT
+  BANQUET_BEO
 }
 
 enum TaxInvoiceStatus {
@@ -428,83 +580,93 @@ enum FolioChargeStatus {
 }
 
 model User {
-  id                         String                      @id @default(cuid())
-  email                      String                      @unique
-  passwordHash               String
-  name                       String
-  companyName                String?
-  contactPerson              String?
-  mobile                     String?
-  gstin                      String?
-  place                      String?
-  addressLine1               String?
-  addressLine2               String?
-  state                      String?
-  pinCode                    String?
-  additionalInformation      String?
-  role                       UserRole                    @default(RESERVATION)
-  staffDepartment            StaffDepartment?
-  jobTitle                   String?
-  staffHotelId               String?
-  staffHotel                 Hotel?                      @relation("StaffHotel", fields: [staffHotelId], references: [id], onDelete: SetNull)
-  active                     Boolean                     @default(true)
-  agentPaymentPolicy         AgentPaymentPolicy?
-  bookingPaymentPercent      Decimal?                    @db.Decimal(5, 2)
-  tokenVersion               Int                         @default(0)
-  failedLoginCount           Int                         @default(0)
-  lockedUntil                DateTime?
-  refreshTokens              RefreshToken[]
-  auditLogs                  AuditLog[]                  @relation("AuditActor")
-  createdReservations        Reservation[]               @relation("ReservationCreator")
-  reconfirmedReservations    Reservation[]               @relation("ReservationReconfirmedBy")
-  checkedInReservations      Reservation[]               @relation("ReservationCheckedInBy")
-  checkedOutReservations     Reservation[]               @relation("ReservationCheckedOutBy")
-  reservationSettlements     ReservationSettlement[]     @relation("SettlementActor")
-  settlementOverrides        ReservationSettlement[]     @relation("SettlementOverrideAuthorizer")
-  closedBusinessDays         HotelBusinessDay[]          @relation("BusinessDayCloser")
-  uploadedFiles              StoredFile[]                @relation("FileUploader")
-  agentDocuments             AgentDocument[]
-  profileImageFileId         String?                     @unique
-  profileImageFile           StoredFile?                 @relation("ProfileImage", fields: [profileImageFileId], references: [id], onDelete: SetNull)
-  verifiedPayments           Payment[]                   @relation("PaymentVerifier")
-  requestedCancellations     CancellationRequest[]       @relation("CancellationRequester")
-  approvedCancellations      CancellationRequest[]       @relation("CancellationApprover")
-  createdModifications       ReservationModification[]   @relation("ModificationCreator")
-  postedFolioCharges         ReservationFolioCharge[]    @relation("FolioChargePostedBy")
-  voidedFolioCharges         ReservationFolioCharge[]    @relation("FolioChargeVoidedBy")
-  postedServiceOrders        GuestServiceOrder[]         @relation("ServiceOrderPostedBy")
-  voidedServiceOrders        GuestServiceOrder[]         @relation("ServiceOrderVoidedBy")
-  reportedLostFoundItems     LostFoundItem[]             @relation("LostFoundReportedBy")
-  assignedLostFoundItems     LostFoundItem[]             @relation("LostFoundAssignedTo")
-  returnedLostFoundItems     LostFoundItem[]             @relation("LostFoundReturnedBy")
-  disposedLostFoundItems     LostFoundItem[]             @relation("LostFoundDisposedBy")
-  openedCashierShifts        CashierShift[]              @relation("CashierShiftOpenedBy")
-  closedCashierShifts        CashierShift[]              @relation("CashierShiftClosedBy")
-  issuedTaxInvoices          TaxInvoice[]                @relation("TaxInvoiceIssuer")
-  cancelledTaxInvoices       TaxInvoice[]                @relation("TaxInvoiceCanceller")
-  issuedTaxCreditNotes       TaxCreditNote[]             @relation("TaxCreditNoteIssuer")
-  recordedTdsDeductions      TdsDeduction[]              @relation("TdsRecorder")
-  reversedTdsDeductions      TdsDeduction[]              @relation("TdsReverser")
-  assignedRatePlans          AgentRatePlan[]
-  guestNotes                 GuestNote[]
-  paymentMilestones          AgentPaymentMilestone[]
-  agentHolds                 InventoryHold[]             @relation("AgentHolds")
-  assignedRoomStays          ReservationRoomAssignment[] @relation("RoomAssignmentAssignedBy")
-  unassignedRoomStays        ReservationRoomAssignment[] @relation("RoomAssignmentUnassignedBy")
-  housekeepingTasksAssigned  HousekeepingTask[]          @relation("HousekeepingTaskAssignee")
-  housekeepingTasksCreated   HousekeepingTask[]          @relation("HousekeepingTaskCreator")
-  housekeepingTasksCompleted HousekeepingTask[]          @relation("HousekeepingTaskCompleter")
-  housekeepingIssuesReported HousekeepingTask[]          @relation("HousekeepingIssueReporter")
-  maintenanceTicketsReported MaintenanceTicket[]         @relation("MaintenanceTicketReporter")
-  maintenanceTicketsAssigned MaintenanceTicket[]         @relation("MaintenanceTicketAssignee")
-  maintenanceTicketsCreated  MaintenanceTicket[]         @relation("MaintenanceTicketCreator")
-  createdExpenses            Expense[]                   @relation("ExpenseCreator")
-  approvedExpenses           Expense[]                   @relation("ExpenseApprover")
-  assignedInquiries          BookingInquiry[]            @relation("InquiryAssignee")
-  createdInquiryFollowUps    InquiryFollowUp[]           @relation("InquiryFollowUpCreator")
-  wallet                     AgentWallet?
-  createdAt                  DateTime                    @default(now())
-  updatedAt                  DateTime                    @updatedAt
+  id                               String                      @id @default(cuid())
+  email                            String                      @unique
+  passwordHash                     String
+  name                             String
+  companyName                      String?
+  contactPerson                    String?
+  mobile                           String?
+  gstin                            String?
+  place                            String?
+  addressLine1                     String?
+  addressLine2                     String?
+  state                            String?
+  pinCode                          String?
+  additionalInformation            String?
+  role                             UserRole                    @default(RESERVATION)
+  staffDepartment                  StaffDepartment?
+  jobTitle                         String?
+  staffHotelId                     String?
+  staffHotel                       Hotel?                      @relation("StaffHotel", fields: [staffHotelId], references: [id], onDelete: SetNull)
+  active                           Boolean                     @default(true)
+  agentPaymentPolicy               AgentPaymentPolicy?
+  bookingPaymentPercent            Decimal?                    @db.Decimal(5, 2)
+  tokenVersion                     Int                         @default(0)
+  failedLoginCount                 Int                         @default(0)
+  lockedUntil                      DateTime?
+  refreshTokens                    RefreshToken[]
+  auditLogs                        AuditLog[]                  @relation("AuditActor")
+  createdReservations              Reservation[]               @relation("ReservationCreator")
+  reconfirmedReservations          Reservation[]               @relation("ReservationReconfirmedBy")
+  checkedInReservations            Reservation[]               @relation("ReservationCheckedInBy")
+  checkedOutReservations           Reservation[]               @relation("ReservationCheckedOutBy")
+  reservationSettlements           ReservationSettlement[]     @relation("SettlementActor")
+  settlementOverrides              ReservationSettlement[]     @relation("SettlementOverrideAuthorizer")
+  closedBusinessDays               HotelBusinessDay[]          @relation("BusinessDayCloser")
+  uploadedFiles                    StoredFile[]                @relation("FileUploader")
+  agentDocuments                   AgentDocument[]
+  profileImageFileId               String?                     @unique
+  profileImageFile                 StoredFile?                 @relation("ProfileImage", fields: [profileImageFileId], references: [id], onDelete: SetNull)
+  verifiedPayments                 Payment[]                   @relation("PaymentVerifier")
+  requestedCancellations           CancellationRequest[]       @relation("CancellationRequester")
+  approvedCancellations            CancellationRequest[]       @relation("CancellationApprover")
+  createdModifications             ReservationModification[]   @relation("ModificationCreator")
+  postedFolioCharges               ReservationFolioCharge[]    @relation("FolioChargePostedBy")
+  voidedFolioCharges               ReservationFolioCharge[]    @relation("FolioChargeVoidedBy")
+  postedServiceOrders              GuestServiceOrder[]         @relation("ServiceOrderPostedBy")
+  voidedServiceOrders              GuestServiceOrder[]         @relation("ServiceOrderVoidedBy")
+  reportedLostFoundItems           LostFoundItem[]             @relation("LostFoundReportedBy")
+  assignedLostFoundItems           LostFoundItem[]             @relation("LostFoundAssignedTo")
+  returnedLostFoundItems           LostFoundItem[]             @relation("LostFoundReturnedBy")
+  disposedLostFoundItems           LostFoundItem[]             @relation("LostFoundDisposedBy")
+  openedCashierShifts              CashierShift[]              @relation("CashierShiftOpenedBy")
+  closedCashierShifts              CashierShift[]              @relation("CashierShiftClosedBy")
+  issuedTaxInvoices                TaxInvoice[]                @relation("TaxInvoiceIssuer")
+  cancelledTaxInvoices             TaxInvoice[]                @relation("TaxInvoiceCanceller")
+  issuedTaxCreditNotes             TaxCreditNote[]             @relation("TaxCreditNoteIssuer")
+  recordedTdsDeductions            TdsDeduction[]              @relation("TdsRecorder")
+  reversedTdsDeductions            TdsDeduction[]              @relation("TdsReverser")
+  assignedRatePlans                AgentRatePlan[]
+  guestNotes                       GuestNote[]
+  paymentMilestones                AgentPaymentMilestone[]
+  createdGroups                    GroupReservation[]          @relation("GroupCreator")
+  groupAssignments                 GroupReservation[]          @relation("GroupAgent")
+  agentHolds                       InventoryHold[]             @relation("AgentHolds")
+  assignedRoomStays                ReservationRoomAssignment[] @relation("RoomAssignmentAssignedBy")
+  unassignedRoomStays              ReservationRoomAssignment[] @relation("RoomAssignmentUnassignedBy")
+  housekeepingTasksAssigned        HousekeepingTask[]          @relation("HousekeepingTaskAssignee")
+  housekeepingTasksCreated         HousekeepingTask[]          @relation("HousekeepingTaskCreator")
+  housekeepingTasksCompleted       HousekeepingTask[]          @relation("HousekeepingTaskCompleter")
+  housekeepingIssuesReported       HousekeepingTask[]          @relation("HousekeepingIssueReporter")
+  maintenanceTicketsReported       MaintenanceTicket[]         @relation("MaintenanceTicketReporter")
+  maintenanceTicketsAssigned       MaintenanceTicket[]         @relation("MaintenanceTicketAssignee")
+  maintenanceTicketsCreated        MaintenanceTicket[]         @relation("MaintenanceTicketCreator")
+  operationsLogEntriesCreated      OperationsLogEntry[]        @relation("OperationsLogCreator")
+  operationsLogEntriesAssigned     OperationsLogEntry[]        @relation("OperationsLogAssignee")
+  operationsLogEntriesAcknowledged OperationsLogEntry[]        @relation("OperationsLogAcknowledger")
+  operationsLogEntriesResolved     OperationsLogEntry[]        @relation("OperationsLogResolver")
+  createdBanquetEvents             BanquetEvent[]              @relation("BanquetEventCreator")
+  finalizedBanquetBeos             BanquetEventOrder[]         @relation("BanquetBEOFinalizer")
+  banquetEventsAsAgent             BanquetEvent[]              @relation("BanquetEventAgent")
+  operationsLogUpdates             OperationsLogUpdate[]       @relation("OperationsLogUpdateAuthor")
+  createdExpenses                  Expense[]                   @relation("ExpenseCreator")
+  approvedExpenses                 Expense[]                   @relation("ExpenseApprover")
+  assignedInquiries                BookingInquiry[]            @relation("InquiryAssignee")
+  createdInquiryFollowUps          InquiryFollowUp[]           @relation("InquiryFollowUpCreator")
+  wallet                           AgentWallet?
+  createdAt                        DateTime                    @default(now())
+  updatedAt                        DateTime                    @updatedAt
 
   @@index([staffHotelId, role])
 }
@@ -589,6 +751,7 @@ model Hotel {
   locationAttractions     HotelLocationAttraction[]
   locationTransports      HotelLocationTransport[]
   reservations            Reservation[]
+  groups                  GroupReservation[]
   guestProfiles           GuestProfile[]             @relation("GuestPreferredHotel")
   guestNotes              GuestNote[]                @relation("GuestNoteHotel")
   staffUsers              User[]                     @relation("StaffHotel")
@@ -617,10 +780,172 @@ model Hotel {
   corporateLinks          CorporateAccountHotel[]
   corporateRateAgreements CorporateRateAgreement[]
   inquiries               BookingInquiry[]
+  operationsLogEntries    OperationsLogEntry[]
+  functionSpaces          FunctionSpace[]
+  banquetEvents           BanquetEvent[]
   createdAt               DateTime                   @default(now())
   updatedAt               DateTime                   @updatedAt
 
   @@index([active, slug])
+}
+
+model FunctionSpace {
+  id                  String            @id @default(cuid())
+  hotelId             String
+  hotel               Hotel             @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  name                String
+  code                String
+  spaceType           FunctionSpaceType @default(OTHER)
+  floor               String?
+  locationDescription String?
+  areaSqFt            Decimal?          @db.Decimal(10, 2)
+  capacityTheatre     Int?
+  capacityClassroom   Int?
+  capacityBoardroom   Int?
+  capacityUShape      Int?
+  capacityBanquet     Int?
+  capacityReception   Int?
+  active              Boolean           @default(true)
+  outOfService        Boolean           @default(false)
+  notes               String?
+  functions           BanquetFunction[]
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@unique([hotelId, code])
+  @@index([hotelId, active, outOfService])
+}
+
+model BanquetEvent {
+  id                   String              @id @default(cuid())
+  hotelId              String
+  hotel                Hotel               @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  eventCode            String              @unique
+  eventName            String
+  eventType            BanquetEventType    @default(OTHER)
+  status               BanquetEventStatus  @default(INQUIRY)
+  groupReservationId   String?
+  groupReservation     GroupReservation?   @relation(fields: [groupReservationId], references: [id], onDelete: SetNull)
+  inquiryId            String?
+  inquiry              BookingInquiry?     @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  corporateId          String?
+  corporate            CorporateAccount?   @relation(fields: [corporateId], references: [id], onDelete: SetNull)
+  agentId              String?
+  agent                User?               @relation("BanquetEventAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  primaryContactName   String
+  primaryContactMobile String
+  primaryContactEmail  String?
+  startDate            DateTime            @db.Date
+  endDate              DateTime            @db.Date
+  expectedPax          Int?
+  guaranteedPax        Int?
+  notes                String?
+  cancellationReason   String?
+  createdByUserId      String
+  createdBy            User                @relation("BanquetEventCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  functions            BanquetFunction[]
+  chargeLines          BanquetChargeLine[]
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([hotelId, status, startDate])
+  @@index([hotelId, eventType, startDate])
+  @@index([groupReservationId, startDate])
+  @@index([corporateId, startDate])
+  @@index([inquiryId])
+}
+
+model BanquetFunction {
+  id              String                @id @default(cuid())
+  banquetEventId  String
+  banquetEvent    BanquetEvent          @relation(fields: [banquetEventId], references: [id], onDelete: Cascade)
+  functionSpaceId String
+  functionSpace   FunctionSpace         @relation(fields: [functionSpaceId], references: [id], onDelete: Restrict)
+  functionName    String
+  functionDate    DateTime              @db.Date
+  startTime       String
+  endTime         String
+  startAt         DateTime
+  endAt           DateTime
+  setupStyle      BanquetSetupStyle
+  expectedPax     Int?
+  guaranteedPax   Int?
+  status          BanquetFunctionStatus @default(TENTATIVE)
+  notes           String?
+  beo             BanquetEventOrder?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([functionSpaceId, startAt, endAt, status])
+  @@index([banquetEventId, functionDate])
+}
+
+model BanquetEventOrder {
+  id                String                @id @default(cuid())
+  banquetFunctionId String                @unique
+  banquetFunction   BanquetFunction       @relation(fields: [banquetFunctionId], references: [id], onDelete: Cascade)
+  beoNumber         String                @unique
+  status            BanquetBEOStatus      @default(DRAFT)
+  finalizedAt       DateTime?
+  finalizedById     String?
+  finalizedBy       User?                 @relation("BanquetBEOFinalizer", fields: [finalizedById], references: [id], onDelete: SetNull)
+  scheduleItems     BanquetScheduleItem[]
+  requirements      BanquetRequirement[]
+  chargeLines       BanquetChargeLine[]
+  operationalNotes  String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@index([status, finalizedAt])
+}
+
+model BanquetScheduleItem {
+  id          String            @id @default(cuid())
+  beoId       String
+  beo         BanquetEventOrder @relation(fields: [beoId], references: [id], onDelete: Cascade)
+  itemTime    String
+  description String
+  sortOrder   Int               @default(0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([beoId, sortOrder])
+}
+
+model BanquetRequirement {
+  id          String                     @id @default(cuid())
+  beoId       String
+  beo         BanquetEventOrder          @relation(fields: [beoId], references: [id], onDelete: Cascade)
+  category    BanquetRequirementCategory
+  description String
+  quantity    Decimal?                   @db.Decimal(10, 2)
+  requiredAt  String?
+  department  String
+  notes       String?
+  status      BanquetRequirementStatus   @default(PENDING)
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+
+  @@index([beoId, status, department])
+}
+
+model BanquetChargeLine {
+  id          String                @id @default(cuid())
+  eventId     String?
+  event       BanquetEvent?         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  beoId       String?
+  beo         BanquetEventOrder?    @relation(fields: [beoId], references: [id], onDelete: Cascade)
+  category    BanquetChargeCategory
+  description String
+  quantity    Decimal               @default(1) @db.Decimal(10, 2)
+  unitAmount  Decimal               @db.Decimal(14, 2)
+  totalAmount Decimal               @db.Decimal(14, 2)
+  notes       String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([eventId, createdAt])
+  @@index([beoId, createdAt])
 }
 
 model HotelBusinessDay {
@@ -869,6 +1194,8 @@ model RoomType {
   revenueForecasts        RevenueForecastSnapshot[]
   corporateRateAgreements CorporateRateAgreement[]
   inquiries               BookingInquiry[]
+  groupBlocks             GroupRoomBlock[]
+  groupRoomingEntries     GroupRoomingListEntry[]
 
   @@unique([hotelId, code])
   @@unique([hotelId, axisRoomId])
@@ -907,6 +1234,7 @@ model RatePlan {
   promotionRates          PromotionRatePlan[]
   seasonRates             RateSeasonRatePlan[]
   corporateRateAgreements CorporateRateAgreement[]
+  groupBlocks             GroupRoomBlock[]
 
   @@unique([roomTypeId, code])
   @@unique([roomTypeId, masterId])
@@ -1058,6 +1386,7 @@ model InventoryDay {
   available         Int
   held              Int       @default(0)
   sold              Int       @default(0)
+  groupBlocked      Int       @default(0)
   stopSell          Boolean   @default(false)
   version           Int       @default(0)
   updatedFromAxisAt DateTime?
@@ -1284,6 +1613,9 @@ model Reservation {
   corporateAccountId   String?
   corporateAccount     CorporateAccount?           @relation(fields: [corporateAccountId], references: [id], onDelete: SetNull)
   corporateSnapshot    Json?
+  groupReservationId   String?
+  groupReservation     GroupReservation?           @relation(fields: [groupReservationId], references: [id], onDelete: SetNull)
+  roomingListEntry     GroupRoomingListEntry?
   convertedInquiry     BookingInquiry?
   email                String
   mobile               String
@@ -1326,6 +1658,7 @@ model Reservation {
   modifications        ReservationModification[]
   serviceOrders        GuestServiceOrder[]
   lostFoundItems       LostFoundItem[]
+  operationsLogEntries OperationsLogEntry[]
   createdAt            DateTime                    @default(now())
   updatedAt            DateTime                    @updatedAt
 
@@ -1335,6 +1668,102 @@ model Reservation {
   @@index([email, createdAt])
   @@index([guestProfileId, createdAt])
   @@index([corporateAccountId, createdAt])
+  @@index([groupReservationId, checkIn])
+}
+
+model GroupReservation {
+  id                   String                  @id @default(cuid())
+  hotelId              String
+  hotel                Hotel                   @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  groupCode            String                  @unique
+  groupName            String
+  groupType            GroupType               @default(OTHER)
+  status               GroupReservationStatus  @default(INQUIRY)
+  arrivalDate          DateTime                @db.Date
+  departureDate        DateTime                @db.Date
+  primaryContactName   String
+  primaryContactMobile String
+  primaryContactEmail  String?
+  corporateId          String?
+  corporate            CorporateAccount?       @relation(fields: [corporateId], references: [id], onDelete: SetNull)
+  agentId              String?
+  agent                User?                   @relation("GroupAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  source               BookingSource           @default(DIRECT)
+  billingInstruction   GroupBillingInstruction @default(INDIVIDUAL)
+  notes                String?
+  cutoffDate           DateTime?               @db.Date
+  roomingListDueDate   DateTime?               @db.Date
+  createdByUserId      String
+  createdBy            User                    @relation("GroupCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  roomBlocks           GroupRoomBlock[]
+  roomingList          GroupRoomingListEntry[]
+  reservations         Reservation[]
+  banquetEvents        BanquetEvent[]
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  @@index([hotelId, status, arrivalDate])
+  @@index([corporateId, arrivalDate])
+  @@index([agentId, arrivalDate])
+}
+
+model GroupRoomBlock {
+  id                 String                @id @default(cuid())
+  groupReservationId String
+  groupReservation   GroupReservation      @relation(fields: [groupReservationId], references: [id], onDelete: Cascade)
+  roomTypeId         String
+  roomType           RoomType              @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
+  ratePlanId         String?
+  ratePlan           RatePlan?             @relation(fields: [ratePlanId], references: [id], onDelete: SetNull)
+  agreedRate         Decimal?              @db.Decimal(12, 2)
+  currency           String                @default("INR")
+  inventoryCommitted Boolean               @default(false)
+  notes              String?
+  nights             GroupRoomBlockNight[]
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@index([groupReservationId, roomTypeId])
+}
+
+model GroupRoomBlockNight {
+  id               String         @id @default(cuid())
+  groupRoomBlockId String
+  groupRoomBlock   GroupRoomBlock @relation(fields: [groupRoomBlockId], references: [id], onDelete: Cascade)
+  date             DateTime       @db.Date
+  roomsBlocked     Int
+  roomsPickedUp    Int            @default(0)
+  roomsReleased    Int            @default(0)
+
+  @@unique([groupRoomBlockId, date])
+  @@index([date, groupRoomBlockId])
+}
+
+model GroupRoomingListEntry {
+  id                 String                 @id @default(cuid())
+  groupReservationId String
+  groupReservation   GroupReservation       @relation(fields: [groupReservationId], references: [id], onDelete: Cascade)
+  roomTypeId         String
+  roomType           RoomType               @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
+  guestName          String
+  mobile             String?
+  email              String?
+  checkIn            DateTime               @db.Date
+  checkOut           DateTime               @db.Date
+  adults             Int                    @default(1)
+  children           Int                    @default(0)
+  specialRequest     String?
+  externalReference  String?
+  status             GroupRoomingListStatus @default(DRAFT)
+  errorMessage       String?
+  reservationId      String?                @unique
+  reservation        Reservation?           @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  @@unique([groupReservationId, externalReference])
+  @@index([groupReservationId, status])
+  @@index([roomTypeId, checkIn, checkOut])
 }
 
 model ExpenseCategory {
@@ -1794,6 +2223,8 @@ model CorporateAccount {
   holds          InventoryHold[]
   rateAgreements CorporateRateAgreement[]
   tdsDeductions  TdsDeduction[]
+  groups         GroupReservation[]
+  banquetEvents  BanquetEvent[]
   createdAt      DateTime                 @default(now())
   updatedAt      DateTime                 @updatedAt
 
@@ -1864,6 +2295,7 @@ model BookingInquiry {
   convertedReservation   Reservation?      @relation(fields: [convertedReservationId], references: [id], onDelete: SetNull)
   lostReason             String?
   followUps              InquiryFollowUp[]
+  banquetEvents          BanquetEvent[]
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
@@ -1887,26 +2319,27 @@ model InquiryFollowUp {
 }
 
 model GuestProfile {
-  id                  String          @id @default(cuid())
-  displayName         String
-  mobile              String?
-  email               String?
-  normalizedMobile    String?
-  normalizedEmail     String?
-  gstin               String?
-  preferredLanguage   String?
-  preferredRoomTypeId String?
-  preferredRoomType   RoomType?       @relation("GuestPreferredRoomType", fields: [preferredRoomTypeId], references: [id], onDelete: SetNull)
-  preferredHotelId    String?
-  preferredHotel      Hotel?          @relation("GuestPreferredHotel", fields: [preferredHotelId], references: [id], onDelete: SetNull)
-  preferences         Json?
-  vipLevel            String?
-  blacklisted         Boolean         @default(false)
-  reservations        Reservation[]
-  lostFoundItems      LostFoundItem[]
-  notes               GuestNote[]
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
+  id                   String               @id @default(cuid())
+  displayName          String
+  mobile               String?
+  email                String?
+  normalizedMobile     String?
+  normalizedEmail      String?
+  gstin                String?
+  preferredLanguage    String?
+  preferredRoomTypeId  String?
+  preferredRoomType    RoomType?            @relation("GuestPreferredRoomType", fields: [preferredRoomTypeId], references: [id], onDelete: SetNull)
+  preferredHotelId     String?
+  preferredHotel       Hotel?               @relation("GuestPreferredHotel", fields: [preferredHotelId], references: [id], onDelete: SetNull)
+  preferences          Json?
+  vipLevel             String?
+  blacklisted          Boolean              @default(false)
+  reservations         Reservation[]
+  lostFoundItems       LostFoundItem[]
+  operationsLogEntries OperationsLogEntry[]
+  notes                GuestNote[]
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
 
   @@index([normalizedMobile])
   @@index([normalizedEmail])
@@ -1962,22 +2395,23 @@ model ReservationSettlement {
 }
 
 model Room {
-  id                 String                      @id @default(cuid())
-  hotelId            String
-  hotel              Hotel                       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  roomTypeId         String
-  roomType           RoomType                    @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
-  roomNumber         String
-  floor              String?
-  wing               String?
-  status             RoomOperationalStatus       @default(AVAILABLE)
-  active             Boolean                     @default(true)
-  assignments        ReservationRoomAssignment[]
-  housekeepingTasks  HousekeepingTask[]
-  maintenanceTickets MaintenanceTicket[]
-  lostFoundItems     LostFoundItem[]
-  createdAt          DateTime                    @default(now())
-  updatedAt          DateTime                    @updatedAt
+  id                   String                      @id @default(cuid())
+  hotelId              String
+  hotel                Hotel                       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomTypeId           String
+  roomType             RoomType                    @relation(fields: [roomTypeId], references: [id], onDelete: Restrict)
+  roomNumber           String
+  floor                String?
+  wing                 String?
+  status               RoomOperationalStatus       @default(AVAILABLE)
+  active               Boolean                     @default(true)
+  assignments          ReservationRoomAssignment[]
+  housekeepingTasks    HousekeepingTask[]
+  maintenanceTickets   MaintenanceTicket[]
+  lostFoundItems       LostFoundItem[]
+  operationsLogEntries OperationsLogEntry[]
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
 
   @@unique([hotelId, roomNumber])
   @@index([hotelId, roomTypeId, active])
@@ -1988,29 +2422,30 @@ model HousekeepingTask {
   // PostgreSQL migration 20260927170000_enforce_single_active_housekeeping_task
   // owns a partial unique index so each room has at most one PENDING, ACCEPTED,
   // or CLEANING task while retaining all completed/cancelled history.
-  id                String                 @id @default(cuid())
-  hotelId           String
-  hotel             Hotel                  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  roomId            String
-  room              Room                   @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  assignedToId      String?
-  assignedTo        User?                  @relation("HousekeepingTaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
-  status            HousekeepingTaskStatus @default(PENDING)
-  createdAt         DateTime               @default(now())
-  acceptedAt        DateTime?
-  cleaningStartedAt DateTime?
-  completedAt       DateTime?
-  createdById       String?
-  createdBy         User?                  @relation("HousekeepingTaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  completedById     String?
-  completedBy       User?                  @relation("HousekeepingTaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
-  note              String?
-  issueNote         String?
-  issueReportedAt   DateTime?
-  issueReportedById String?
-  issueReportedBy   User?                  @relation("HousekeepingIssueReporter", fields: [issueReportedById], references: [id], onDelete: SetNull)
-  updatedAt         DateTime               @updatedAt
-  maintenanceTicket MaintenanceTicket?
+  id                   String                 @id @default(cuid())
+  hotelId              String
+  hotel                Hotel                  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomId               String
+  room                 Room                   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  assignedToId         String?
+  assignedTo           User?                  @relation("HousekeepingTaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  status               HousekeepingTaskStatus @default(PENDING)
+  createdAt            DateTime               @default(now())
+  acceptedAt           DateTime?
+  cleaningStartedAt    DateTime?
+  completedAt          DateTime?
+  createdById          String?
+  createdBy            User?                  @relation("HousekeepingTaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  completedById        String?
+  completedBy          User?                  @relation("HousekeepingTaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+  note                 String?
+  issueNote            String?
+  issueReportedAt      DateTime?
+  issueReportedById    String?
+  issueReportedBy      User?                  @relation("HousekeepingIssueReporter", fields: [issueReportedById], references: [id], onDelete: SetNull)
+  updatedAt            DateTime               @updatedAt
+  maintenanceTicket    MaintenanceTicket?
+  operationsLogEntries OperationsLogEntry[]
 
   @@index([hotelId, status])
   @@index([roomId, status])
@@ -2018,35 +2453,36 @@ model HousekeepingTask {
 }
 
 model MaintenanceTicket {
-  id                  String                  @id @default(cuid())
-  hotelId             String
-  hotel               Hotel                   @relation(fields: [hotelId], references: [id], onDelete: Cascade)
-  roomId              String?
-  room                Room?                   @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  housekeepingTaskId  String?                 @unique
-  housekeepingTask    HousekeepingTask?       @relation(fields: [housekeepingTaskId], references: [id], onDelete: SetNull)
-  source              MaintenanceTicketSource
-  category            MaintenanceCategory
-  priority            MaintenancePriority     @default(NORMAL)
-  status              MaintenanceTicketStatus @default(OPEN)
-  title               String
-  description         String
-  reportedById        String?
-  reportedBy          User?                   @relation("MaintenanceTicketReporter", fields: [reportedById], references: [id], onDelete: SetNull)
-  reportedAt          DateTime                @default(now())
-  assignedToId        String?
-  assignedTo          User?                   @relation("MaintenanceTicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
-  assignedAt          DateTime?
-  startedAt           DateTime?
-  completedAt         DateTime?
-  resolutionNote      String?
-  requiresOutOfOrder  Boolean                 @default(false)
-  outOfOrderAppliedAt DateTime?
-  outOfOrderClearedAt DateTime?
-  createdById         String?
-  createdBy           User?                   @relation("MaintenanceTicketCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
+  id                   String                  @id @default(cuid())
+  hotelId              String
+  hotel                Hotel                   @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  roomId               String?
+  room                 Room?                   @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  housekeepingTaskId   String?                 @unique
+  housekeepingTask     HousekeepingTask?       @relation(fields: [housekeepingTaskId], references: [id], onDelete: SetNull)
+  source               MaintenanceTicketSource
+  category             MaintenanceCategory
+  priority             MaintenancePriority     @default(NORMAL)
+  status               MaintenanceTicketStatus @default(OPEN)
+  title                String
+  description          String
+  reportedById         String?
+  reportedBy           User?                   @relation("MaintenanceTicketReporter", fields: [reportedById], references: [id], onDelete: SetNull)
+  reportedAt           DateTime                @default(now())
+  assignedToId         String?
+  assignedTo           User?                   @relation("MaintenanceTicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedAt           DateTime?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  resolutionNote       String?
+  requiresOutOfOrder   Boolean                 @default(false)
+  outOfOrderAppliedAt  DateTime?
+  outOfOrderClearedAt  DateTime?
+  createdById          String?
+  createdBy            User?                   @relation("MaintenanceTicketCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  operationsLogEntries OperationsLogEntry[]
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
 
   @@index([hotelId, status])
   @@index([roomId, status])
@@ -2295,6 +2731,62 @@ model Voucher {
   createdAt     DateTime    @default(now())
 
   @@unique([reservationId, version])
+}
+
+model OperationsLogEntry {
+  id                   String                @id @default(cuid())
+  hotelId              String
+  hotel                Hotel                 @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  businessDate         DateTime              @db.Date
+  category             OperationsLogCategory
+  priority             OperationsLogPriority @default(NORMAL)
+  title                String
+  details              String
+  status               OperationsLogStatus   @default(OPEN)
+  createdByUserId      String
+  createdBy            User                  @relation("OperationsLogCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assignedDepartment   StaffDepartment?
+  assignedUserId       String?
+  assignedUser         User?                 @relation("OperationsLogAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  reservationId        String?
+  reservation          Reservation?          @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  guestProfileId       String?
+  guestProfile         GuestProfile?         @relation(fields: [guestProfileId], references: [id], onDelete: SetNull)
+  roomId               String?
+  room                 Room?                 @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  maintenanceTicketId  String?
+  maintenanceTicket    MaintenanceTicket?    @relation(fields: [maintenanceTicketId], references: [id], onDelete: SetNull)
+  housekeepingTaskId   String?
+  housekeepingTask     HousekeepingTask?     @relation(fields: [housekeepingTaskId], references: [id], onDelete: SetNull)
+  dueAt                DateTime?
+  acknowledgedAt       DateTime?
+  acknowledgedByUserId String?
+  acknowledgedBy       User?                 @relation("OperationsLogAcknowledger", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
+  resolvedAt           DateTime?
+  resolvedByUserId     String?
+  resolvedBy           User?                 @relation("OperationsLogResolver", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  resolutionNote       String?
+  updates              OperationsLogUpdate[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@index([hotelId, status, businessDate])
+  @@index([hotelId, assignedDepartment, status])
+  @@index([hotelId, dueAt])
+  @@index([reservationId])
+  @@index([roomId])
+}
+
+model OperationsLogUpdate {
+  id           String             @id @default(cuid())
+  logEntryId   String
+  logEntry     OperationsLogEntry @relation(fields: [logEntryId], references: [id], onDelete: Cascade)
+  authorUserId String
+  author       User               @relation("OperationsLogUpdateAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+  note         String
+  createdAt    DateTime           @default(now())
+
+  @@index([logEntryId, createdAt])
 }
 
 model AuditLog {

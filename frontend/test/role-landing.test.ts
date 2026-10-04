@@ -22,6 +22,11 @@ test('each supported role receives an existing authorized landing route', () => 
 test('post-login deep links fail closed to the role landing route', () => {
   assert.equal(getSafePostLoginRoute('RESERVATION', '/admin/settings'), '/admin/arrivals');
   assert.equal(getSafePostLoginRoute('VIEWER', '/admin/credit-notes'), '/admin/credit-notes');
+  assert.equal(getSafePostLoginRoute('ACCOUNTS', '/admin/logbook'), '/admin/logbook');
+  assert.equal(getSafePostLoginRoute('VIEWER', '/admin/logbook'), '/admin/logbook');
+  assert.equal(getSafePostLoginRoute('RESERVATION', '/admin/front-desk'), '/admin/front-desk');
+  assert.equal(getSafePostLoginRoute('RESERVATION', '/admin/room-rack'), '/admin/room-rack');
+  assert.equal(getSafePostLoginRoute('RESERVATION', '/admin/logbook'), '/admin/logbook');
   assert.equal(getSafePostLoginRoute('SERVICE_STAFF', '/admin/dashboard'), '/staff');
   assert.equal(isRoleRouteAllowed('ACCOUNTS', '/admin/cashier'), true);
   assert.equal(isRoleRouteAllowed('ACCOUNTS', '/admin/users'), false);

@@ -8,7 +8,8 @@ export async function serializable<T>(prisma: PrismaService, operation: (tx: Pri
       return await prisma.$transaction(operation, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error: any) {
       lastError = error;
-      const serializationFailure = error?.code === 'P2034' || (error?.code === 'P2010' && error?.meta?.code === '40001');
+      const adapterCode = error?.meta?.code ?? error?.meta?.driverAdapterError?.cause?.originalCode ?? error?.meta?.driverAdapterError?.originalCode;
+      const serializationFailure = error?.code === 'P2034' || (error?.code === 'P2010' && String(adapterCode) === '40001');
       if (!serializationFailure || attempt === attempts - 1) throw error;
       await new Promise((resolve) => setTimeout(resolve, 35 * (attempt + 1) + Math.floor(Math.random() * 25)));
     }
