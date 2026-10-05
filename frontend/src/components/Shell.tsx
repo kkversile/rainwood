@@ -5,10 +5,13 @@ import { usePathname, useRouter } from 'next/navigation';
 import { BedDouble } from 'lucide-react';
 import { AdminAuthGate, invalidateStaffSession, useAdminProfile } from './AdminData';
 import { apiAssetUrl, apiRequest, clearAccessToken } from '../lib/api';
+import { FeatureGate } from './FeatureGate';
+import { FEATURE_KEYS, useAdminFeatureAccess, type FeatureAccessStatus } from '../lib/admin-features';
+import { ADMIN_GROUPS, ADMIN_NAVIGATION, type AdminNavigationItem } from '../config/admin-navigation';
 
 const links = [['/', 'Home'], ['/hotels', 'Hotels'], ['/booking', 'Book'], ['/contact', 'Contact'], ['/agent/login', 'Agent Login']];
-type AdminLink = { readonly key: string; readonly href: string; readonly label: string };
-export const adminLinks = [
+type AdminLink = AdminNavigationItem;
+export const legacyAdminLinks = [
   { key: 'dashboard', href: '/admin/dashboard', label: 'Dashboard' },
   { key: 'revenueForecast', href: '/admin/revenue-forecast', label: 'Revenue Forecast' },
   { key: 'manageHotels', href: '/admin/hotels', label: 'Manage Hotels' },
@@ -53,18 +56,21 @@ export const adminLinks = [
   { key: 'jobs', href: '/admin/jobs', label: 'Jobs' },
   { key: 'users', href: '/admin/users', label: 'Users' },
   { key: 'siteSettings', href: '/admin/settings', label: 'Site Settings' },
+  { key: 'features', href: '/admin/features', label: 'Features', superAdminOnly: true },
   { key: 'auditLogs', href: '/admin/audit-logs', label: 'Audit Logs' },
 ] as const satisfies readonly AdminLink[];
+export const adminLinks = ADMIN_NAVIGATION as readonly AdminLink[];
 const reservationLinks = new Set(['/admin/dashboard', '/admin/reservations', '/admin/front-desk', '/admin/room-rack', '/admin/arrivals', '/admin/in-house', '/admin/lost-found', '/admin/guests', '/admin/payments', '/admin/reports', '/admin/inquiries', '/admin/cashier', '/admin/tax-invoices', '/admin/logbook', '/admin/groups', '/admin/banquets', '/admin/function-spaces']);
 const propertyHiddenLinks = new Set(['/admin/hotels', '/admin/settings', '/admin/axisrooms', '/admin/jobs', '/admin/audit-logs']);
-const adminGroupDefinitions = [
+export const legacyAdminGroupDefinitions = [
   { key: 'operations', label: 'Operations', itemKeys: ['roomsInventory', 'physicalRooms', 'roomRack', 'housekeeping', 'maintenance', 'logbook', 'banquets', 'functionSpaces', 'supplementaryCharges', 'expenses', 'serviceItems', 'cashier'] },
   { key: 'reservations', label: 'Reservations', itemKeys: ['reservations', 'groups', 'frontDesk', 'arrivals', 'inHouse', 'lostFound', 'payments', 'contactRequests'] },
   { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rates', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
   { key: 'crmSales', label: 'CRM & Sales', itemKeys: ['guests', 'agents', 'corporates', 'inquiries'] },
   { key: 'reports', label: 'Reports', itemKeys: ['reports', 'taxInvoices', 'creditNotes', 'tds', 'nightAudit'] },
-  { key: 'system', label: 'System', itemKeys: ['manageHotels', 'taxSettings', 'axisRooms', 'jobs', 'users', 'siteSettings', 'auditLogs'] },
+  { key: 'system', label: 'System', itemKeys: ['manageHotels', 'taxSettings', 'axisRooms', 'jobs', 'users', 'siteSettings', 'features', 'auditLogs'] },
 ] as const;
+const adminGroupDefinitions = ADMIN_GROUPS;
 
 export function allowedAdminLinksForRole(role?: string | null): readonly AdminLink[] {
   if (!role) return [];
@@ -77,8 +83,17 @@ export function allowedAdminLinksForRole(role?: string | null): readonly AdminLi
   return [];
 }
 
+export function filterAdminLinksByFeatures(allowedLinks: readonly AdminLink[], role: string | null | undefined, features: Record<string, boolean>, status: FeatureAccessStatus = 'ready') {
+  return allowedLinks.filter((item) => {
+    if (role === 'SUPER_ADMIN') return true;
+    if (item.superAdminOnly) return false;
+    if (!FEATURE_KEYS.includes(item.key as any)) return true;
+    return status === 'ready' && features[item.key] === true;
+  });
+}
+
 export function canAccessAdminRoute(role: string | null | undefined, href: string) {
-  return allowedAdminLinksForRole(role).some((item) => item.href === href);
+  return allowedAdminLinksForRole(role).some((item) => item.href === href && (!item.superAdminOnly || role === 'SUPER_ADMIN'));
 }
 
 export function linksForRole(role?: string | null) {
@@ -158,8 +173,10 @@ export function AdminNav() {
   const pathname = usePathname();
   const { profile } = useAdminProfile();
   const role = profile?.role;
+  const featureAccess = useAdminFeatureAccess();
   async function signOut() { try { await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({ allDevices: false }) }); } catch { /* The local session is still cleared below. */ } finally { invalidateStaffSession(); clearAccessToken(); window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login`; } }
-  return <aside className="adminNav" aria-label="Operations navigation">{linksForRole(role).map(([href, label]) => { const active = pathname === href || (href !== '/admin/dashboard' && pathname.startsWith(`${href}/`)); return <Link key={href} href={href} className={active ? 'active' : undefined} aria-current={active ? 'page' : undefined}>{label === 'Rooms & Inventory' ? <BedDouble size={15} aria-hidden="true" /> : <UiIcon name="grid" size={15} />}<span>{label}</span></Link>; })}<button className="adminSignOut" type="button" onClick={() => void signOut()}>Sign out</button></aside>;
+  const visible = filterAdminLinksByFeatures(allowedAdminLinksForRole(role), role, featureAccess.features, featureAccess.status);
+  return <aside className="adminNav" aria-label="Operations navigation">{visible.map(({ href, label }) => { const active = pathname === href || (href !== '/admin/dashboard' && pathname.startsWith(`${href}/`)); return <Link key={href} href={href} className={active ? 'active' : undefined} aria-current={active ? 'page' : undefined}>{label === 'Rooms & Inventory' ? <BedDouble size={15} aria-hidden="true" /> : <UiIcon name="grid" size={15} />}<span>{label}</span></Link>; })}<button className="adminSignOut" type="button" onClick={() => void signOut()}>Sign out</button></aside>;
 }
 
 function LegacyAgentShell({ title, user, onLogout, children }: { title: string; user: { name: string; email: string }; onLogout: () => void; children: React.ReactNode }) {
@@ -182,14 +199,16 @@ function AdminTopShell({ title, editClass, children }: { title: string; editClas
   const pathname = usePathname();
   const { profile } = useAdminProfile();
   const role = profile?.role;
-  const visibleAdminLinks = allowedAdminLinksForRole(role);
+  const featureAccess = useAdminFeatureAccess();
+  const visibleAdminLinks = filterAdminLinksByFeatures(allowedAdminLinksForRole(role), role, featureAccess.features, featureAccess.status);
   async function signOut() { try { await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({ allDevices: false }) }); } catch { /* Local session is cleared below. */ } finally { invalidateStaffSession(); clearAccessToken(); window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login`; } }
   const greeting = profile?.name ?? 'Staff';
   const organization = profile?.role === 'CORPORATE_ADMIN' ? 'Corporate Administration' : profile?.staffHotel?.name ?? (profile?.role === 'RESERVATION' ? 'Front Office' : 'RainWood Hotels');
-  return <main className={`legacyAgentShell adminTopShell${editClass}`}><header className="legacyAgentHeader"><div className="legacyAgentBrand"><span className="legacyAgentLogo">RW</span><b>RAINWOOD</b><small>HOTELS</small></div><div className="legacyAgentGreeting">Hi, {greeting}<span>{organization}</span></div><div className="legacyAgentHeaderLinks">{canAccessAdminRoute(role, '/admin/contact-requests') && <Link href="/admin/contact-requests">Contact Requests</Link>}{canAccessAdminRoute(role, '/admin/reservations') && <Link href="/agent/login">Agent Login</Link>}<button type="button" onClick={() => void signOut()}>Sign out</button></div></header><OperationsCommandBar role={role} /><GroupedAdminNavigation links={visibleAdminLinks} pathname={pathname} /><div className="legacyAgentSectionTitle">{title}</div><section className="adminContent legacyAgentContent legacyAgentPortalContent adminTopContent">{children}</section></main>;
+  const contactRequestsVisible = featureAccess.status === 'ready' && featureAccess.isEnabled('contactRequests');
+  return <main className={`legacyAgentShell adminTopShell${editClass}`}><header className="legacyAgentHeader"><div className="legacyAgentBrand"><span className="legacyAgentLogo">RW</span><b>RAINWOOD</b><small>HOTELS</small></div><div className="legacyAgentGreeting">Hi, {greeting}<span>{organization}</span></div><div className="legacyAgentHeaderLinks">{canAccessAdminRoute(role, '/admin/contact-requests') && contactRequestsVisible && <Link href="/admin/contact-requests">Contact Requests</Link>}{canAccessAdminRoute(role, '/admin/reservations') && <Link href="/agent/login">Agent Login</Link>}<button type="button" onClick={() => void signOut()}>Sign out</button></div></header><OperationsCommandBar role={role} featureAccess={featureAccess} /><GroupedAdminNavigation links={visibleAdminLinks} pathname={pathname} /><div className="legacyAgentSectionTitle">{title}</div><section className="adminContent legacyAgentContent legacyAgentPortalContent adminTopContent"><FeatureGate>{children}</FeatureGate></section></main>;
 }
 
-function OperationsCommandBar({ role }: { role?: string }) {
+function OperationsCommandBar({ role, featureAccess }: { role?: string; featureAccess: ReturnType<typeof useAdminFeatureAccess> }) {
   const router = useRouter();
   const barRef = useRef<HTMLDivElement>(null);
   const [value, setValue] = useState('');
@@ -200,7 +219,7 @@ function OperationsCommandBar({ role }: { role?: string }) {
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState(false);
   const [activeResultIndex, setActiveResultIndex] = useState(-1);
-  const reservationAccess = canAccessAdminRoute(role, '/admin/reservations');
+  const reservationAccess = canAccessAdminRoute(role, '/admin/reservations') && featureAccess.status === 'ready' && featureAccess.isEnabled('reservations');
   useEffect(() => { if (!reservationAccess) return; apiRequest<{ id: string; name: string }[]>('/hotels').then(setHotels).catch(() => setHotels([])); }, [reservationAccess]);
   useEffect(() => {
     const query = value.trim();

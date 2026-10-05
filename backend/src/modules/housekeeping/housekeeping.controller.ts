@@ -3,11 +3,14 @@ import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 import { HousekeepingAssignDto, HousekeepingBoardQueryDto, HousekeepingCancelDto, HousekeepingRoomStatusDto } from './housekeeping.dto';
 import { HousekeepingService } from './housekeeping.service';
 
 @Controller('housekeeping')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('housekeeping')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
 export class HousekeepingController {
   constructor(private service: HousekeepingService) {}

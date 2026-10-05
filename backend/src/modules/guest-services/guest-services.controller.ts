@@ -5,9 +5,12 @@ import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
 import { GuestServicesService } from './guest-services.service';
 import { LostFoundCreateDto, LostFoundDisposeDto, LostFoundMatchDto, LostFoundQueryDto, LostFoundReturnDto, ServiceItemCreateDto, ServiceItemQueryDto, ServiceItemUpdateDto, ServiceOrderQueryDto } from './guest-services.dto';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 
 @Controller('service-items')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('serviceItems')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
 export class ServiceItemsController {
   constructor(private readonly service: GuestServicesService) {}
@@ -17,7 +20,8 @@ export class ServiceItemsController {
 }
 
 @Controller('service-orders')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('serviceItems')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS')
 export class ServiceOrdersController {
   constructor(private readonly service: GuestServicesService) {}
@@ -28,7 +32,8 @@ export class ServiceOrdersController {
 }
 
 @Controller('lost-found')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('lostFound')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION')
 export class LostFoundController {
   constructor(private readonly service: GuestServicesService) {}

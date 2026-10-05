@@ -607,6 +607,8 @@ model User {
   lockedUntil                      DateTime?
   refreshTokens                    RefreshToken[]
   auditLogs                        AuditLog[]                  @relation("AuditActor")
+  featureSettingsUpdated           FeatureSetting[]            @relation("FeatureSettingUpdatedBy")
+  featureOverridesUpdated          HotelFeatureOverride[]       @relation("HotelFeatureOverrideUpdatedBy")
   createdReservations              Reservation[]               @relation("ReservationCreator")
   reconfirmedReservations          Reservation[]               @relation("ReservationReconfirmedBy")
   checkedInReservations            Reservation[]               @relation("ReservationCheckedInBy")
@@ -669,6 +671,30 @@ model User {
   updatedAt                        DateTime                    @updatedAt
 
   @@index([staffHotelId, role])
+}
+
+model FeatureSetting {
+  id          String   @id @default(cuid())
+  featureKey  String   @unique
+  enabled     Boolean  @default(true)
+  updatedById String?
+  updatedBy   User?    @relation("FeatureSettingUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt
+}
+
+model HotelFeatureOverride {
+  id          String   @id @default(cuid())
+  hotelId     String
+  featureKey  String
+  enabled     Boolean
+  updatedById String?
+  hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  updatedBy   User?    @relation("HotelFeatureOverrideUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([hotelId, featureKey])
+  @@index([hotelId])
 }
 
 model Permission {
@@ -783,6 +809,7 @@ model Hotel {
   operationsLogEntries    OperationsLogEntry[]
   functionSpaces          FunctionSpace[]
   banquetEvents           BanquetEvent[]
+  featureOverrides        HotelFeatureOverride[]
   createdAt               DateTime                   @default(now())
   updatedAt               DateTime                   @updatedAt
 

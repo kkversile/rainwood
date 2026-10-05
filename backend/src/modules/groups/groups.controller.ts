@@ -6,9 +6,12 @@ import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
 import { BulkPickupDto, GroupBlockCreateDto, GroupBlockUpdateDto, GroupCreateDto, GroupListQueryDto, GroupUpdateDto, PickupDto, RoomingListBulkDto, RoomingListEntryDto, RoomingListImportDto } from './groups.dto';
 import { GroupsService } from './groups.service';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 
 @Controller('groups')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('groups')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER')
 export class GroupsController {
   constructor(private readonly service: GroupsService) {}

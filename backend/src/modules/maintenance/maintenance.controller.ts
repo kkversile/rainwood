@@ -3,11 +3,14 @@ import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 import { MaintenanceAssignDto, MaintenanceBoardQueryDto, MaintenanceCreateDto, MaintenanceImpactDto, MaintenanceResolveDto, MaintenanceUpdateDto } from './maintenance.dto';
 import { MaintenanceService } from './maintenance.service';
 
 @Controller('maintenance')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('maintenance')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
 export class MaintenanceController {
   constructor(private service: MaintenanceService) {}

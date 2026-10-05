@@ -7,6 +7,8 @@ import { Roles } from '../../common/roles.decorator';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { OptionalJwtAuthGuard } from '../../common/optional-jwt-auth.guard';
 import { ActiveAgentGuard } from '../../common/active-agent.guard';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 
 @Controller('payments')
 export class PaymentsController {
@@ -17,12 +19,14 @@ export class PaymentsController {
   order(@Param('reference') reference: string, @Headers('idempotency-key') key: string) { return this.s.createOrder(reference, key); }
 
   @Post(':reference/manual')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+  @RequireFeature('payments')
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION')
   manual(@Param('reference') reference: string, @Body() body: ManualPaymentDto, @CurrentUser() user: any) { return this.s.manual(reference, body, user.id); }
 
   @Post(':reference/manual/:paymentId/verify')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+  @RequireFeature('payments')
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'ACCOUNTS')
   verify(@Param('paymentId') paymentId: string, @Body() _body: VerifyPaymentDto, @CurrentUser() user: any) { return this.s.verify(paymentId, user.id); }
 

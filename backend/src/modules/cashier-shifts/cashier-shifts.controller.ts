@@ -5,9 +5,12 @@ import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
 import { CashierShiftQueryDto, CloseCashierShiftDto, OpenCashierShiftDto } from './cashier-shifts.dto';
 import { CashierShiftsService } from './cashier-shifts.service';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 
 @Controller('cashier-shifts')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('cashier')
 export class CashierShiftsController {
   constructor(private readonly service: CashierShiftsService) {}
 

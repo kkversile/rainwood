@@ -3,11 +3,14 @@ import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 import { InquiryConvertDto, InquiryCreateDto, InquiryFollowUpDto, InquiryListQueryDto, InquiryLostDto, InquiryQuoteDto, InquiryUpdateDto } from './inquiries.dto';
 import { InquiriesService } from './inquiries.service';
 
 @Controller('inquiries')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('inquiries')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION')
 export class InquiriesController {
   constructor(private readonly service: InquiriesService) {}

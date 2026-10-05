@@ -16,7 +16,7 @@ export class HotelScopeGuard implements CanActivate {
   async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<any>();
     let userId = request.user?.id;
-    const route = String(request.route?.path ?? request.path ?? '');
+    const route = this.normalizedRoute(request);
     // The public hotel catalogue and detail routes must remain available to
     // anonymous guests. Nest exposes controller-level route paths as `/` and
     // `/:slug` here, while some adapters report the full `/hotels` paths.
@@ -95,6 +95,15 @@ export class HotelScopeGuard implements CanActivate {
       return plan.roomType.hotelId;
     }
     return null;
+  }
+
+  private normalizedRoute(request: any) {
+    const routePath = String(request.route?.path ?? request.path ?? '');
+    const fullPath = `${request.baseUrl ?? ''}${routePath}`.replace(/\/+$/, '') || '/';
+    const hotelIndex = fullPath.indexOf('/hotels');
+    if (hotelIndex >= 0) return fullPath.slice(hotelIndex);
+    if (routePath.startsWith('/hotels')) return routePath;
+    return `/hotels${routePath.startsWith('/') ? routePath : `/${routePath}`}`;
   }
 
   private selectFor(delegate: string) {

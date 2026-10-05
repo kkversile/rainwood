@@ -3,11 +3,14 @@ import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 import { ExpenseCategoryDto, ExpenseCreateDto, ExpenseListQueryDto, ExpenseUpdateDto, VendorDto } from './expenses.dto';
 import { ExpensesService } from './expenses.service';
 
 @Controller('expenses')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('expenses')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'ACCOUNTS')
 export class ExpensesController {
   constructor(private readonly service: ExpensesService) {}

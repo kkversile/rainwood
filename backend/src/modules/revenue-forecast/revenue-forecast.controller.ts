@@ -3,11 +3,14 @@ import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 import { RevenueForecastCaptureDto, RevenueForecastQueryDto } from './revenue-forecast.dto';
 import { RevenueForecastService } from './revenue-forecast.service';
 
 @Controller('revenue-forecast')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('revenueForecast')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
 export class RevenueForecastController {
   constructor(private readonly service: RevenueForecastService) {}

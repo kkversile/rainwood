@@ -83,9 +83,11 @@ export class TaxDocumentsService {
   async updateRule(userId: string, id: string, body: TaxRuleUpdateDto) {
     const existing = await this.p.taxRule.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Tax rule not found.');
-    const { hotelId } = await this.hotelIdFor(userId, body.hotelId ?? existing.hotelId ?? undefined, true);
+    // The persisted rule owns its hotel scope; a body hotelId must not move
+    // the authorization decision to a different property.
+    const { hotelId } = await this.hotelIdFor(userId, existing.hotelId ?? undefined, true);
     if (existing.hotelId !== hotelId) throw new ForbiddenException('You cannot update a tax rule outside the selected hotel.');
-    const merged: TaxRuleDto = { hotelId: hotelId ?? undefined, name: body.name ?? existing.name, taxCategory: body.taxCategory ?? existing.taxCategory, serviceCode: body.serviceCode === undefined ? existing.serviceCode ?? undefined : body.serviceCode, description: body.description === undefined ? existing.description ?? undefined : body.description, ratePercent: body.ratePercent ?? Number(existing.ratePercent), effectiveFrom: body.effectiveFrom ?? new Date(existing.effectiveFrom).toISOString().slice(0, 10), effectiveTo: body.effectiveTo === undefined ? (existing.effectiveTo ? new Date(existing.effectiveTo).toISOString().slice(0, 10) : undefined) : body.effectiveTo, active: body.active ?? existing.active };
+    const merged: TaxRuleDto = { hotelId: existing.hotelId ?? undefined, name: body.name ?? existing.name, taxCategory: body.taxCategory ?? existing.taxCategory, serviceCode: body.serviceCode === undefined ? existing.serviceCode ?? undefined : body.serviceCode, description: body.description === undefined ? existing.description ?? undefined : body.description, ratePercent: body.ratePercent ?? Number(existing.ratePercent), effectiveFrom: body.effectiveFrom ?? new Date(existing.effectiveFrom).toISOString().slice(0, 10), effectiveTo: body.effectiveTo === undefined ? (existing.effectiveTo ? new Date(existing.effectiveTo).toISOString().slice(0, 10) : undefined) : body.effectiveTo, active: body.active ?? existing.active };
     const window = await this.assertRuleWindow(this.p, merged, hotelId, id);
     return this.p.taxRule.update({ where: { id }, data: { name: merged.name.trim(), taxCategory: merged.taxCategory, serviceCode: merged.serviceCode?.trim(), description: merged.description, ratePercent: merged.ratePercent, effectiveFrom: window.from, effectiveTo: window.to, active: merged.active } });
   }

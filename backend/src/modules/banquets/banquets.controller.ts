@@ -5,12 +5,15 @@ import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
 import { BanquetCalendarQueryDto, BanquetEventCreateDto, BanquetEventListQueryDto, BanquetEventUpdateDto, BanquetFunctionCreateDto, BanquetFunctionUpdateDto, BanquetLinkOptionsQueryDto, BeoUpdateDto, FunctionAvailabilityQueryDto, RequirementStatusDto } from './banquets.dto';
 import { BanquetsService } from './banquets.service';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 
 const READ = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER'] as any;
 const WRITE = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'] as any;
 
 @Controller('banquets')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('banquets')
 @Roles(...READ)
 export class BanquetsController {
   constructor(private readonly s: BanquetsService) {}

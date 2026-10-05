@@ -5,9 +5,12 @@ import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
 import { FunctionSpaceCreateDto, FunctionSpaceListQueryDto, FunctionSpaceUpdateDto } from './banquets.dto';
 import { BanquetsService } from './banquets.service';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 
 @Controller('function-spaces')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('functionSpaces')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER')
 export class FunctionSpacesController {
   constructor(private readonly s: BanquetsService) {}

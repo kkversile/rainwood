@@ -5,9 +5,12 @@ import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
 import { OperationsLogbookService } from './operations-logbook.service';
 import { OperationsLogCreateDto, OperationsLogListQueryDto, OperationsLogResolveDto, OperationsLogUpdateDto, OperationsLogUpdateNoteDto } from './operations-logbook.dto';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 
 @Controller('operations-logbook')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('logbook')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS', 'VIEWER', 'SERVICE_STAFF')
 export class OperationsLogbookController {
   constructor(private readonly service: OperationsLogbookService) {}

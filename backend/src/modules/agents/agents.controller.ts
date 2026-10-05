@@ -3,10 +3,12 @@ import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 import { AgentsService } from './agents.service';
 
 @Controller('agents')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
 export class AgentsController {
   constructor(private s: AgentsService) {}
 
@@ -38,6 +40,7 @@ export class AgentsController {
   addDocument(@CurrentUser() user: any, @Body() body: { documentType?: string; description?: string; fileId?: string }) { return this.s.addDocument(user.id, body); }
 
   @Patch(':agentId/documents/:id')
+  @RequireFeature('agents')
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
   review(@Param('agentId') agentId: string, @Param('id') id: string, @Body() body: { status?: string; reviewRemark?: string }) {
     if (!body.status) throw new BadRequestException('Document status is required');

@@ -2,6 +2,7 @@ import { PrismaClient, UserRole } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
+import { FEATURE_KEYS } from '../src/modules/features/features.catalog';
 
 const connectionString = process.env.DATABASE_URL ?? '';
 const requiresTls = /(?:\?|&)sslmode=require(?:&|$)/i.test(connectionString);
@@ -212,6 +213,7 @@ async function main() {
   await prisma.banquetRequirement.createMany({ data: [{ id: 'seed-banquet-requirement-001', beoId: banquetBeo.id, category: 'AUDIO_VISUAL', description: 'Projector and HDMI presentation kit', quantity: 1, requiredAt: '08:00', department: 'ENGINEERING', status: 'COMPLETED' }, { id: 'seed-banquet-requirement-002', beoId: banquetBeo.id, category: 'AUDIO_VISUAL', description: 'Wireless microphones', quantity: 2, requiredAt: '08:00', department: 'SERVICE', status: 'ACKNOWLEDGED' }, { id: 'seed-banquet-requirement-003', beoId: banquetBeo.id, category: 'FOOD_BEVERAGE', description: 'Tea break and lunch for guaranteed PAX', quantity: 150, requiredAt: '13:00', department: 'FOOD_BEVERAGE', status: 'PENDING' }] });
   await prisma.banquetChargeLine.deleteMany({ where: { beoId: banquetBeo.id } });
   await prisma.banquetChargeLine.createMany({ data: [{ id: 'seed-banquet-charge-001', beoId: banquetBeo.id, category: 'VENUE_RENTAL', description: 'Grand Ballroom day rental', quantity: 1, unitAmount: 45000, totalAmount: 45000 }, { id: 'seed-banquet-charge-002', beoId: banquetBeo.id, category: 'FOOD_PACKAGE', description: 'Conference lunch package', quantity: 150, unitAmount: 850, totalAmount: 127500 }] });
+  for (const featureKey of FEATURE_KEYS) await prisma.featureSetting.upsert({ where: { featureKey }, update: {}, create: { featureKey, enabled: true } });
   console.log(`Seeded development data for ${admin.email}`);
 }
 

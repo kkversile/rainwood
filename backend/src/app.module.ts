@@ -39,6 +39,7 @@ import { TaxDocumentsModule } from './modules/tax-documents/tax-documents.module
 import { OperationsLogbookModule } from './modules/operations-logbook/operations-logbook.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { BanquetsModule } from './modules/banquets/banquets.module';
+import { FeaturesModule } from './modules/features/features.module';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { BanquetsModule } from './modules/banquets/banquets.module';
     OperationsLogbookModule,
     GroupsModule,
     BanquetsModule,
+    FeaturesModule,
   ],
 })
 export class AppModule {}

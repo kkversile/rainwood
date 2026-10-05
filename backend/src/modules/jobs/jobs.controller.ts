@@ -3,9 +3,12 @@ import { PrismaService } from '../../common/prisma.service';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 
 @Controller('jobs')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('jobs')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
 export class JobsController {
   constructor(private p: PrismaService) {}

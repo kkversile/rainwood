@@ -3,11 +3,14 @@ import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 import { CorporateCreateDto, CorporateLinkHotelDto, CorporateListQueryDto, CorporateRateDto, CorporateRateUpdateDto, CorporateReceivableQueryDto, CorporateUpdateDto } from './corporates.dto';
 import { CorporatesService } from './corporates.service';
 
 @Controller('corporates')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('corporates')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION', 'ACCOUNTS')
 export class CorporatesController {
   constructor(private readonly service: CorporatesService) {}

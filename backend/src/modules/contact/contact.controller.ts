@@ -4,6 +4,8 @@ import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
 import { ContactService } from './contact.service';
 import { CreateContactRequestDto } from './contact.dto';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 
 @Controller('contact-requests')
 export class ContactController {
@@ -13,7 +15,8 @@ export class ContactController {
   create(@Body() body: CreateContactRequestDto) { return this.service.create(body); }
 
   @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+  @RequireFeature('contactRequests')
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION')
   list() { return this.service.list(); }
 }

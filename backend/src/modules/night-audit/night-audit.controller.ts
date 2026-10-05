@@ -3,11 +3,14 @@ import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 import { NightAuditCloseDto, NightAuditPreviewQueryDto } from './night-audit.dto';
 import { NightAuditService } from './night-audit.service';
 
 @Controller('night-audit')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+@RequireFeature('nightAudit')
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
 export class NightAuditController {
   constructor(private readonly service: NightAuditService) {}

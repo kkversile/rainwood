@@ -12,6 +12,8 @@ import { AgentsService } from '../agents/agents.service';
 import { AgentDocumentStatus, AgentPaymentPolicy, StaffDepartment, UserRole } from '@prisma/client';
 import { legacyPaymentMilestones, paymentMilestonesForAgent, validateAgentPaymentTerms, validatePaymentMilestones } from '../../common/agent-payment-terms';
 import { assertActorCanManageHotel, getActorScope, validateUserRoleScope } from '../../common/role-scope';
+import { FeatureGuard } from '../features/feature.guard';
+import { RequireFeature } from '../features/require-feature.decorator';
 
 class CreateUserDto {
   @IsEmail() email!: string;
@@ -57,7 +59,7 @@ class AgentApprovalDto {
 }
 
 @Controller('users')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
 @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
 export class UsersController {
   constructor(private p: PrismaService, @Optional() private agentsService?: AgentsService) {}
@@ -66,9 +68,10 @@ export class UsersController {
     return this.p.user.findMany({ where: scope.isGlobal ? { role: { not: 'AGENT' } } : { staffHotelId: scope.hotelId, role: { not: 'AGENT' } }, select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } }, createdAt: true } });
   }
   @Get('agents')
+  @RequireFeature('agents')
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
   agents() { return this.p.user.findMany({ where: { role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, agentDocuments: { select: { status: true } }, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } }, orderBy: { createdAt: 'asc' } }); }
-  @Get('agents/:agentId') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
+  @Get('agents/:agentId') @RequireFeature('agents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
   agent(@Param('agentId') agentId: string) { return this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, email: true, name: true, companyName: true, contactPerson: true, mobile: true, gstin: true, place: true, addressLine1: true, addressLine2: true, state: true, pinCode: true, additionalInformation: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true, createdAt: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } }, agentDocuments: { include: { file: { select: { originalName: true, mimeType: true, size: true } } }, orderBy: { createdAt: 'desc' } }, assignedRatePlans: { include: { ratePlan: { include: { master: true, roomType: { include: { hotel: { select: { id: true, name: true, city: true } } } } } } } } } }); }
   @Post('') async create(@Body() d: CreateUserDto, @CurrentUser() actor: any) {
     const scope = await getActorScope(this.p, actor.id);
@@ -80,7 +83,7 @@ export class UsersController {
     if (staffHotelId) await assertActorCanManageHotel(this.p, actor.id, staffHotelId);
     return this.p.user.create({ data: { email: d.email.toLowerCase(), name: d.name, mobile: d.mobile, role, passwordHash: await bcrypt.hash(d.password, 12), active: true, staffDepartment: role === UserRole.SERVICE_STAFF ? d.staffDepartment : null, jobTitle: role === UserRole.SERVICE_STAFF ? d.jobTitle : null, staffHotelId }, select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } } } });
   }
-  @Post('agents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async createAgent(@Body() d: CreateUserDto) {
+  @Post('agents') @RequireFeature('agents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async createAgent(@Body() d: CreateUserDto) {
     const milestones = d.paymentMilestones?.length ? validatePaymentMilestones(d.paymentMilestones) : paymentMilestonesForAgent({ agentPaymentPolicy: d.agentPaymentPolicy, bookingPaymentPercent: d.bookingPaymentPercent });
     const legacy = d.paymentMilestones?.length ? { policy: null, percentage: null } : validateAgentPaymentTerms({ agentPaymentPolicy: d.agentPaymentPolicy, bookingPaymentPercent: d.bookingPaymentPercent }, true);
     return this.p.$transaction(async (tx) => {
@@ -107,12 +110,12 @@ export class UsersController {
     const hotelChanged = effectiveStaffHotelId !== current.staffHotelId;
     return this.p.user.update({ where: { id }, data: { name: d.name, mobile: d.mobile, role, active: d.active, staffDepartment: role === UserRole.SERVICE_STAFF ? effectiveStaffDepartment : null, jobTitle: role === UserRole.SERVICE_STAFF ? effectiveJobTitle : null, staffHotelId: effectiveStaffHotelId, tokenVersion: d.revokeSessions || roleChanged || hotelChanged || d.active === false ? { increment: 1 } : undefined }, select: { id: true, email: true, name: true, mobile: true, role: true, active: true, staffDepartment: true, jobTitle: true, staffHotel: { select: { id: true, name: true } } } });
   }
-  @Patch('agents/:id') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async updateAgent(@Param('id') id: string, @Body() d: UpdateUserDto) {
+  @Patch('agents/:id') @RequireFeature('agents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async updateAgent(@Param('id') id: string, @Body() d: UpdateUserDto) {
     const current = await this.p.user.findFirstOrThrow({ where: { id, role: 'AGENT' }, include: { paymentMilestones: { orderBy: { sortOrder: 'asc' } } } });
     if (d.active === true && !current.paymentMilestones?.length && !current.agentPaymentPolicy) throw new BadRequestException('Assign payment milestones before activating this agent');
     return this.p.user.update({ where: { id, role: 'AGENT' }, data: { name: d.name, active: d.active, tokenVersion: d.revokeSessions ? { increment: 1 } : undefined }, select: { id: true, email: true, name: true, role: true, active: true, agentPaymentPolicy: true, bookingPaymentPercent: true } });
   }
-  @Patch('agents/:agentId/approval') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async approveAgent(@Param('agentId') agentId: string, @Body() body: AgentApprovalDto, @CurrentUser() actor: any) {
+  @Patch('agents/:agentId/approval') @RequireFeature('agents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async approveAgent(@Param('agentId') agentId: string, @Body() body: AgentApprovalDto, @CurrentUser() actor: any) {
     const current = await this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, include: { paymentMilestones: { orderBy: { sortOrder: 'asc' } } } });
     const existingMilestones = current.paymentMilestones ?? [];
     const hasNewMilestones = body.paymentMilestones !== undefined;
@@ -144,14 +147,14 @@ export class UsersController {
     });
     return updated;
   }
-  @Get('agents/:agentId/payment-terms') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
+  @Get('agents/:agentId/payment-terms') @RequireFeature('agents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
   async paymentTerms(@Param('agentId') agentId: string) {
     const agent = await this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { paymentMilestones: { orderBy: { sortOrder: 'asc' } }, agentPaymentPolicy: true, bookingPaymentPercent: true } });
     const milestones = agent.paymentMilestones.length ? agent.paymentMilestones : agent.agentPaymentPolicy ? paymentMilestonesForAgent(agent) : [];
     return { milestones };
   }
 
-  @Put('agents/:agentId/payment-terms') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
+  @Put('agents/:agentId/payment-terms') @RequireFeature('agents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN')
   async updatePaymentTerms(@Param('agentId') agentId: string, @Body() body: AgentPaymentMilestonesDto, @CurrentUser() actor: any) {
     const agent = await this.p.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT' }, select: { id: true, agentPaymentPolicy: true, bookingPaymentPercent: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } } } });
     const milestones = validatePaymentMilestones(body.milestones);
@@ -164,17 +167,17 @@ export class UsersController {
     });
   }
 
-  @Get('agents/:agentId/documents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') agentDocuments(@Param('agentId') agentId: string) { return this.agentsService!.listDocuments(agentId); }
-  @Patch('agents/:agentId/documents/:id') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') reviewAgentDocument(@Param('agentId') agentId: string, @Param('id') id: string, @Body() body: { status?: string; reviewRemark?: string }) { return this.agentsService!.reviewDocument(agentId, id, body.status ?? '', body.reviewRemark); }
-  @Put('agents/:id/hotel-rate-plan') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async assignHotelRatePlan(@Param('id') id: string, @Body() body: AgentHotelRatePlanDto, @CurrentUser() actor: any) {
+  @Get('agents/:agentId/documents') @RequireFeature('agents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') agentDocuments(@Param('agentId') agentId: string) { return this.agentsService!.listDocuments(agentId); }
+  @Patch('agents/:agentId/documents/:id') @RequireFeature('agents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') reviewAgentDocument(@Param('agentId') agentId: string, @Param('id') id: string, @Body() body: { status?: string; reviewRemark?: string }) { return this.agentsService!.reviewDocument(agentId, id, body.status ?? '', body.reviewRemark); }
+  @Put('agents/:id/hotel-rate-plan') @RequireFeature('agents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async assignHotelRatePlan(@Param('id') id: string, @Body() body: AgentHotelRatePlanDto, @CurrentUser() actor: any) {
     if (!this.agentsService) throw new BadRequestException('Agent rate-plan service is unavailable.');
     return this.agentsService.assignAgentHotelRatePlan(id, body.hotelId, body.masterId, actor.id);
   }
-  @Delete('agents/:agentId/rate-plan-masters/:masterId') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async removeHotelRatePlan(@Param('agentId') agentId: string, @Param('masterId') masterId: string, @CurrentUser() actor: any) {
+  @Delete('agents/:agentId/rate-plan-masters/:masterId') @RequireFeature('agents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async removeHotelRatePlan(@Param('agentId') agentId: string, @Param('masterId') masterId: string, @CurrentUser() actor: any) {
     if (!this.agentsService) throw new BadRequestException('Agent rate-plan service is unavailable.');
     return this.agentsService.removeAgentHotelRatePlan(agentId, masterId, actor.id);
   }
-  @Put('agents/:id/rate-plans') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async mapRatePlans(@Param('id') id: string, @Body() d: AgentRatePlanMappingDto, @CurrentUser() actor: any) {
+  @Put('agents/:id/rate-plans') @RequireFeature('agents') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') async mapRatePlans(@Param('id') id: string, @Body() d: AgentRatePlanMappingDto, @CurrentUser() actor: any) {
     const agent = await this.p.user.findFirstOrThrow({ where: { id, role: 'AGENT' }, select: { id: true } });
     const ratePlanIds = [...new Set(d.ratePlanIds ?? [])];
     const validPlans = await this.p.ratePlan.findMany({ where: { id: { in: ratePlanIds }, active: true, master: { active: true } }, select: { id: true, masterId: true, roomType: { select: { hotelId: true } } } });

@@ -92,6 +92,7 @@ test("grouped admin navigation keeps the requested information architecture", ()
       "Jobs",
       "Users",
       "Site Settings",
+      "Features",
       "Audit Logs",
     ],
   );
