@@ -71,6 +71,7 @@ export class HotelScopeGuard implements CanActivate {
       '/hotels/promotions/:id': { delegate: 'promotion' },
       '/hotels/rate-seasons/:id': { delegate: 'rateSeason' },
       '/hotels/yield-rules/:id': { delegate: 'yieldRule' },
+      '/hotels/bank-accounts/:id': { delegate: 'hotelBankAccount' },
     };
     const target = id ? direct[route] : undefined;
     if (target) {
@@ -109,7 +110,7 @@ export class HotelScopeGuard implements CanActivate {
   private selectFor(delegate: string) {
     if (delegate === 'room' || delegate === 'ratePlanMaster' || delegate === 'hotelReview' || delegate === 'hotelContact' || delegate === 'hotelDocument' || delegate === 'hotelLocationAttraction' || delegate === 'hotelLocationTransport' || delegate === 'roomType') return { hotelId: true };
     if (delegate === 'agentRatePlan') return { ratePlan: { select: { roomType: { select: { hotelId: true } } } } };
-    if (delegate === 'promotion' || delegate === 'rateSeason' || delegate === 'yieldRule') return { hotelId: true };
+    if (delegate === 'promotion' || delegate === 'rateSeason' || delegate === 'yieldRule' || delegate === 'hotelBankAccount') return { hotelId: true };
     if (delegate === 'ratePlan') return { roomType: { select: { hotelId: true } } };
     return { id: true };
   }

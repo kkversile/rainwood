@@ -77,7 +77,7 @@ test("grouped admin navigation keeps the requested information architecture", ()
   );
   assert.deepEqual(
     groups[3].items.map((item) => item.label),
-    ["Guests", "Agents", "Corporates", "Inquiries"],
+    ["Guests", "Agents", "Agent Rate Slabs", "Corporates", "Inquiries"],
   );
   assert.deepEqual(
     groups[4].items.map((item) => item.label),

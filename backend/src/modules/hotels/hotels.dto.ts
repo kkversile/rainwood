@@ -128,8 +128,8 @@ export class RatePlanDto {
 }
 
 export class RatePlanMasterDto {
-  @IsString() @MinLength(2) code!: string;
-  @IsString() @MinLength(2) name!: string;
+  @IsOptional() @IsString() @MinLength(2) code?: string;
+  @IsOptional() @IsString() @MinLength(2) name?: string;
   @IsString() @IsIn(['EP', 'CP', 'MAP', 'AP']) mealPlan!: string;
   @IsOptional() @IsString() @MaxLength(10_000) description?: string;
   @IsOptional() @IsBoolean() active?: boolean;
@@ -171,6 +171,17 @@ export class RateDayDto {
   @IsOptional() @IsInt() @Min(1) maxLos?: number | null;
   @IsOptional() @IsNumber() @Min(0) baseAmount?: number;
   @IsOptional() @IsNumber() @Min(0) overrideAmount?: number | null;
+}
+
+export class HotelBankAccountDto {
+  @IsString() @MinLength(2) accountName!: string;
+  @IsString() @MinLength(2) bankName!: string;
+  @IsOptional() @IsString() branch?: string;
+  @IsString() @MinLength(4) accountNumber!: string;
+  @IsOptional() @IsString() ifsc?: string;
+  @IsOptional() @IsString() accountType?: string;
+  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsBoolean() displayOnAgentRateSheet?: boolean;
 }
 
 export class InventoryBatchDto { @IsArray() @ValidateNested({ each: true }) @Type(() => InventoryDayDto) days!: InventoryDayDto[]; }

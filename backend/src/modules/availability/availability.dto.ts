@@ -5,6 +5,8 @@ import { IsArray, IsDateString, IsEnum, IsInt, IsOptional, IsString, Max, Min, V
 export class RoomOccupancyDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(100) adults!: number;
   @Type(() => Number) @IsInt() @Min(0) @Max(100) children = 0;
+  @Type(() => Number) @IsOptional() @IsInt() @Min(0) @Max(100) childrenWithBed?: number;
+  @Type(() => Number) @IsOptional() @IsInt() @Min(0) @Max(100) childrenWithoutBed?: number;
 }
 
 export class AvailabilityQueryDto {
@@ -38,6 +40,8 @@ export class AvailabilityQueryDto {
   @Min(0)
   @Max(100)
   children = 0;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(100) childrenWithBed?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(100) childrenWithoutBed?: number;
 
   @IsOptional()
   @IsArray()

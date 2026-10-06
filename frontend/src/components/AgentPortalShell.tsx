@@ -40,7 +40,7 @@ export function AgentPortalShell({ title, user, onLogout, children }: AgentPorta
         <LockedLink label="Bookings" />
         <LockedLink label="Wallet" />
       </> : <>
-        <Link className={active('/agent/rate-plans') ? 'active' : undefined} href="/agent/rate-plans">My Rate Plans</Link>
+        <Link className={active('/agent/rate-plans') ? 'active' : undefined} href="/agent/rate-plans">My Rates</Link>
         <details className={`legacyAgentDropdown${bookingMenuActive ? ' active' : ''}`}>
           <summary>My Bookings <span aria-hidden="true">⌄</span></summary>
           <div className="legacyAgentDropdownMenu"><Link href="/agent/payment-advances">Payment Advances</Link><Link href="/agent/bookings">Booking Tracker</Link><Link href="/agent/billing-report">Billing Report</Link><Link href="/agent/special-offers">Special Offers</Link><Link href="/agent/transaction-report">Transaction Report</Link></div>

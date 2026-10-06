@@ -25,11 +25,14 @@ export type RatePlanViewMaster = {
   code: string;
   name: string;
   mealPlan: string;
+  kind?: 'CANONICAL_MEAL' | 'SPECIAL_PRODUCT' | 'LEGACY' | string;
   description?: string | null;
   active: boolean;
   hotel?: { id: string; name: string; city: string };
   assignments: RatePlanViewAssignment[];
 };
+
+export function isCanonicalMealPlan(master: RatePlanViewMaster) { return master.kind === 'CANONICAL_MEAL'; }
 
 export type RatePlanTableRow = {
   id: string;

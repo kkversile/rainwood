@@ -4,10 +4,11 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Building2, Check, ChevronDown, Circle, MoreVertical, Pencil, Plus, Power, Search, Tag, Trash2, X } from 'lucide-react';
 import { AdminLayout } from '../../../components/Shell';
+import { useAdminProfile } from '../../../components/AdminData';
 import { useDialog } from '../../../components/ReactDialog';
 import { RatePlanRateImportForm } from '../../../components/RatePlanRateImportForm';
 import { apiRequest } from '../../../lib/api';
-import { filterRatePlanRows, flattenRatePlanRows, formatConfiguredDays, formatStartingRate, RatePlanSortKey, RatePlanTableRow, RatePlanViewMaster, sortRatePlanRows } from '../../../lib/rate-plan-view';
+import { filterRatePlanRows, flattenRatePlanRows, formatConfiguredDays, formatStartingRate, isCanonicalMealPlan, RatePlanSortKey, RatePlanTableRow, RatePlanViewMaster, sortRatePlanRows } from '../../../lib/rate-plan-view';
 
 type Room = { id: string; name: string; code: string };
 type Hotel = { id: string; name: string; city: string; rooms?: Room[] };
@@ -21,6 +22,11 @@ type SortDirection = 'asc' | 'desc';
 const blankMaster: MasterForm = { code: '', name: '', mealPlan: 'EP', description: '', active: true };
 
 export default function RatePlansPage() {
+  return <AdminLayout title="Meal Plans & Rates"><RatePlansContent /></AdminLayout>;
+}
+
+function RatePlansContent() {
+  const { profile } = useAdminProfile();
   const dialog = useDialog();
   const router = useRouter();
   const pathname = usePathname();
@@ -48,6 +54,9 @@ export default function RatePlansPage() {
   const [assignmentForm, setAssignmentForm] = useState<AssignmentForm>({ roomTypeId: '', axisRatePlanId: '', active: true });
   const [rateImportModal, setRateImportModal] = useState<{ hotelId: string; masterId: string; masterName: string } | null>(null);
   const [rateImportBusy, setRateImportBusy] = useState(false);
+  // Legacy plans remain available for an explicit SUPER_ADMIN migration/debug review only.
+  const canSeeLegacy = profile?.role?.trim().toUpperCase() === 'SUPER_ADMIN';
+  const [showLegacy, setShowLegacy] = useState(false);
   const rateImportDialogRef = useRef<HTMLElement | null>(null);
   const rateImportTriggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -100,9 +109,10 @@ export default function RatePlansPage() {
   }, [rateImportModal, rateImportBusy]);
 
   const selectedHotel = hotels.find((hotel) => hotel.id === hotelId);
+  const displayMasters = useMemo(() => showLegacy && canSeeLegacy ? masters : masters.filter(isCanonicalMealPlan), [canSeeLegacy, masters, showLegacy]);
   const rooms = selectedHotel?.rooms ?? [];
-  const scopedRows = useMemo(() => filterRatePlanRows(flattenRatePlanRows(masters, hotelId), { roomTypeId, search }), [masters, hotelId, roomTypeId, search]);
-  const visibleRows = useMemo(() => sortRatePlanRows(filterRatePlanRows(flattenRatePlanRows(masters, hotelId), { roomTypeId, search, status: statusFilter }), sortKey, sortDirection), [masters, hotelId, roomTypeId, search, statusFilter, sortKey, sortDirection]);
+  const scopedRows = useMemo(() => filterRatePlanRows(flattenRatePlanRows(displayMasters, hotelId), { roomTypeId, search }), [displayMasters, hotelId, roomTypeId, search]);
+  const visibleRows = useMemo(() => sortRatePlanRows(filterRatePlanRows(flattenRatePlanRows(displayMasters, hotelId), { roomTypeId, search, status: statusFilter }), sortKey, sortDirection), [displayMasters, hotelId, roomTypeId, search, statusFilter, sortKey, sortDirection]);
   const filters: { key: StatusFilter; label: string; count: number }[] = [
     { key: 'ALL', label: 'All', count: scopedRows.length },
     { key: 'ACTIVE', label: 'Active', count: scopedRows.filter((row) => row.effectiveActive).length },
@@ -154,7 +164,8 @@ export default function RatePlansPage() {
     event.preventDefault();
     if (!hotelId) return;
     setBusy(true); setError('');
-    const body = { code: masterForm.code.trim(), name: masterForm.name.trim(), mealPlan: masterForm.mealPlan, description: masterForm.description.trim() || undefined, active: masterForm.active };
+    const canonicalNames: Record<string, string> = { EP: 'EP - Room Only', CP: 'CP - Breakfast', MAP: 'MAP - Breakfast + Dinner', AP: 'AP - All Meals' };
+    const body = { code: masterForm.mealPlan, name: canonicalNames[masterForm.mealPlan] ?? masterForm.name.trim(), mealPlan: masterForm.mealPlan, description: masterForm.description.trim() || undefined, active: masterForm.active };
     try {
       if (masterModal?.editing) await apiRequest(`/hotels/rate-plan-masters/${masterModal.editing.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       else await apiRequest(`/hotels/${hotelId}/rate-plan-masters`, { method: 'POST', body: JSON.stringify(body) });
@@ -249,8 +260,8 @@ export default function RatePlansPage() {
 
   const tableHeader = (label: string, key: RatePlanSortKey) => <button type="button" className="tableSortButton" onClick={() => setSorting(key)} aria-label={`Sort by ${label}`} aria-sort={sortKey === key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>{label}<span className="sortMark">{sortLabel(key)}</span></button>;
 
-  return <AdminLayout title="Rate Plans"><section className="ratePlansPage">
-    <header className="ratePlansHeader"><div><h1>Rate Plans</h1><p>Create hotel packages and assign them to room types.</p></div><div className="ratePlansHeaderActions"><label className="ratePlansSearch"><Search size={18} /><input aria-label="Search rate plans" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search rate plans, rooms or hotels..." /></label><button className="ratePlanAddButton" type="button" onClick={startCreate} disabled={!hotelId}><Plus size={18} /> Create Rate Plan</button></div></header>
+  return <section className="ratePlansPage">
+    <header className="ratePlansHeader"><div><h1>Meal Plans &amp; Rates</h1><p>Manage canonical EP, CP, MAP and AP meal plans, then assign them to room types.</p></div><div className="ratePlansHeaderActions"><label className="ratePlansSearch"><Search size={18} /><input aria-label="Search meal plans" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search meal plans, rooms or hotels..." /></label>{canSeeLegacy && <button className="smallBtn secondary" type="button" onClick={() => setShowLegacy((value) => !value)}>{showLegacy ? 'Hide legacy plans' : 'Legacy rate plans'}</button>}<button className="ratePlanAddButton" type="button" onClick={startCreate} disabled={!hotelId}><Plus size={18} /> Create Meal Plan</button></div></header>
     <div className="ratePlansFilters"><div className="ratePlanStatusFilters">{filters.map((filter) => <button key={filter.key} className={statusFilter === filter.key ? 'active' : ''} type="button" onClick={() => setStatusFilter(filter.key)}><span className="ratePlanFilterRadio">{statusFilter === filter.key && <Check size={11} />}</span>{filter.label} ({filter.count})</button>)}</div><div className="ratePlanSelectFilters"><label><Building2 size={15} /><select aria-label="Filter by hotel" value={hotelId} disabled={loadingHotels} onChange={(event) => changeHotel(event.target.value)}><option value="">Select Hotel</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select><ChevronDown size={15} /></label><label><Tag size={15} /><select aria-label="Filter by room type" value={roomTypeId} disabled={!hotelId} onChange={(event) => changeRoomType(event.target.value)}><option value="">All Room Types</option>{rooms.map((room) => <option key={room.id} value={room.id}>{room.name} ({room.code})</option>)}</select><ChevronDown size={15} /></label></div></div>
     {error && <p className="error" role="alert">{error}</p>}{message && <p className="notice" role="status">{message}</p>}
     <section className="ratePlansTableCard"><div className="ratePlansTableWrap"><table className="ratePlansTable"><thead><tr><th className="selectColumn"><span className="tableCheckbox" /></th><th>{tableHeader('Plan', 'plan')}</th><th>{tableHeader('Room / Hotel', 'room')}</th><th>{tableHeader('Meal Plan', 'meal')}</th><th>{tableHeader('Status', 'status')}</th><th>{tableHeader('Rates (INR)', 'rate')}</th><th>{tableHeader('Bookings', 'bookings')}</th><th>Actions</th></tr></thead><tbody>
@@ -271,9 +282,9 @@ export default function RatePlansPage() {
       {!loading && !visibleRows.length && <tr><td colSpan={8} className="ratePlansEmpty">No rate plans match these filters.</td></tr>}
     </tbody></table></div></section>
 
-    {masterModal && <div className="ratePlanModalBackdrop"><form className="ratePlanCopyModal ratePlanMasterModal" role="dialog" aria-modal="true" aria-labelledby="master-modal-title" onSubmit={saveMaster}><header><div><h2 id="master-modal-title">{masterModal.editing ? 'Edit rate plan' : 'Create rate plan'}</h2><p>Create the plan once and use it for one or more room types in this hotel.</p></div><button type="button" aria-label="Close" onClick={() => setMasterModal(null)}><X size={18} /></button></header><div className="two"><label>Plan code<input value={masterForm.code} onChange={(event) => setMasterForm({ ...masterForm, code: event.target.value })} placeholder="CP" required minLength={2} /></label><label>Plan name<input value={masterForm.name} onChange={(event) => setMasterForm({ ...masterForm, name: event.target.value })} placeholder="CP - Breakfast" required minLength={2} /></label></div><label>Meal plan<select value={masterForm.mealPlan} onChange={(event) => setMasterForm({ ...masterForm, mealPlan: event.target.value })}><option value="EP">EP · Room only</option><option value="CP">CP · Breakfast</option><option value="MAP">MAP · Breakfast + major meal</option><option value="AP">AP · All meals</option></select></label><label>Description<textarea rows={3} value={masterForm.description} onChange={(event) => setMasterForm({ ...masterForm, description: event.target.value })} placeholder="Describe inclusions and commercial terms" /></label><label className="checkLabel"><input type="checkbox" checked={masterForm.active} onChange={(event) => setMasterForm({ ...masterForm, active: event.target.checked })} /> Active and available for booking</label><footer><button className="smallBtn" type="button" onClick={() => setMasterModal(null)} disabled={busy}>Cancel</button><button className="btn" disabled={busy}>{busy ? 'Saving...' : masterModal.editing ? 'Save changes' : 'Create rate plan'}</button></footer></form></div>}
+    {masterModal && <div className="ratePlanModalBackdrop"><form className="ratePlanCopyModal ratePlanMasterModal" role="dialog" aria-modal="true" aria-labelledby="master-modal-title" onSubmit={saveMaster}><header><div><h2 id="master-modal-title">{masterModal.editing ? 'Edit meal plan' : 'Create meal plan'}</h2><p>Canonical meal plans are named and coded by RainWood for consistent agent contracts.</p></div><button type="button" aria-label="Close" onClick={() => setMasterModal(null)}><X size={18} /></button></header><label>Meal plan<select value={masterForm.mealPlan} onChange={(event) => setMasterForm({ ...masterForm, mealPlan: event.target.value })}><option value="EP">EP · Room only</option><option value="CP">CP · Breakfast</option><option value="MAP">MAP · Breakfast + Dinner</option><option value="AP">AP · All meals</option></select></label><p className="mutedText">Code and name: {masterForm.mealPlan} · {({ EP: 'EP - Room Only', CP: 'CP - Breakfast', MAP: 'MAP - Breakfast + Dinner', AP: 'AP - All Meals' } as Record<string, string>)[masterForm.mealPlan]}</p><label>Description<textarea rows={3} value={masterForm.description} onChange={(event) => setMasterForm({ ...masterForm, description: event.target.value })} placeholder="Describe inclusions and commercial terms" /></label><label className="checkLabel"><input type="checkbox" checked={masterForm.active} onChange={(event) => setMasterForm({ ...masterForm, active: event.target.checked })} /> Active and available for booking</label><footer><button className="smallBtn" type="button" onClick={() => setMasterModal(null)} disabled={busy}>Cancel</button><button className="btn" disabled={busy}>{busy ? 'Saving...' : masterModal.editing ? 'Save changes' : 'Create meal plan'}</button></footer></form></div>}
 
     {assignmentModal && <div className="ratePlanModalBackdrop"><form className="ratePlanCopyModal ratePlanAssignmentModal" role="dialog" aria-modal="true" aria-labelledby="assignment-modal-title" onSubmit={saveAssignment}><header><div><h2 id="assignment-modal-title">{assignmentModal.assignment ? 'Edit room assignment' : 'Assign existing rate plan'}</h2><p>{assignmentModal.master.name} ({assignmentModal.master.code})</p></div><button type="button" aria-label="Close" onClick={() => setAssignmentModal(null)}><X size={18} /></button></header><label>Room type<select value={assignmentForm.roomTypeId} onChange={(event) => setAssignmentForm({ ...assignmentForm, roomTypeId: event.target.value })} disabled={Boolean(assignmentModal.assignment)} required><option value="">Select room type</option>{rooms.filter((room) => room.id === assignmentModal.assignment?.roomTypeId || !assignmentModal.master.assignments.some((assignment) => assignment.roomTypeId === room.id)).map((room) => <option key={room.id} value={room.id}>{room.name} ({room.code})</option>)}</select></label><details><summary>Advanced / Channel Manager Mapping</summary><label>AxisRooms Rate Plan ID<input value={assignmentForm.axisRatePlanId} onChange={(event) => setAssignmentForm({ ...assignmentForm, axisRatePlanId: event.target.value })} placeholder="Optional assignment mapping ID" /></label><p className="ratePlanCopyNote">Optional. Used only when this room/rate plan is connected to AxisRooms.</p></details><label className="checkLabel"><input type="checkbox" checked={assignmentForm.active} onChange={(event) => setAssignmentForm({ ...assignmentForm, active: event.target.checked })} /> Active for this room</label><footer><button className="smallBtn" type="button" onClick={() => setAssignmentModal(null)} disabled={busy}>Cancel</button><button className="btn" disabled={busy || !assignmentForm.roomTypeId}>{busy ? 'Saving...' : assignmentModal.assignment ? 'Save assignment' : 'Assign rate plan'}</button></footer></form></div>}
     {rateImportModal && <div className="rateImportModalBackdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeRateImportModal(); }}><section ref={rateImportDialogRef} className="rateImportModal" role="dialog" aria-modal="true" aria-labelledby="rate-import-modal-title" tabIndex={-1}><header className="rateImportModalHeader"><div><span>Rate management</span><h2 id="rate-import-modal-title">Import rates — {rateImportModal.masterName}</h2><p>Import daily room rates for this hotel rate plan.</p></div><button type="button" aria-label="Close rate import" onClick={closeRateImportModal} disabled={rateImportBusy}><X size={18} /></button></header><RatePlanRateImportForm key={`${rateImportModal.hotelId}:${rateImportModal.masterId}`} mode="modal" initialHotelId={rateImportModal.hotelId} initialMasterId={rateImportModal.masterId} lockContext onImportSuccess={handleRateImportSuccess} onCancel={closeRateImportModal} onBusyChange={setRateImportBusy} /></section></div>}
-  </section></AdminLayout>;
+  </section>;
 }

@@ -35,6 +35,7 @@ export const ADMIN_NAVIGATION = [
   { key: 'creditNotes', href: '/admin/credit-notes', label: 'Credit Notes', featureKey: 'creditNotes' },
   { key: 'tds', href: '/admin/tds', label: 'TDS Register', featureKey: 'tds' },
   { key: 'agents', href: '/admin/agents', label: 'Agents', featureKey: 'agents' },
+  { key: 'agentRateSlabs', href: '/admin/agent-rate-slabs', label: 'Agent Rate Slabs', featureKey: 'agents' },
   { key: 'corporates', href: '/admin/corporates', label: 'Corporates', featureKey: 'corporates' },
   { key: 'inquiries', href: '/admin/inquiries', label: 'Inquiries', featureKey: 'inquiries' },
   { key: 'reservations', href: '/admin/reservations', label: 'Reservations', featureKey: 'reservations' },
@@ -60,7 +61,7 @@ export const ADMIN_GROUPS = [
   { key: 'operations', label: 'Operations', itemKeys: ['roomsInventory', 'physicalRooms', 'roomRack', 'housekeeping', 'maintenance', 'logbook', 'banquets', 'functionSpaces', 'supplementaryCharges', 'expenses', 'serviceItems', 'cashier'] },
   { key: 'reservations', label: 'Reservations', itemKeys: ['reservations', 'groups', 'frontDesk', 'arrivals', 'inHouse', 'lostFound', 'payments', 'contactRequests'] },
   { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rates', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
-  { key: 'crmSales', label: 'CRM & Sales', itemKeys: ['guests', 'agents', 'corporates', 'inquiries'] },
+  { key: 'crmSales', label: 'CRM & Sales', itemKeys: ['guests', 'agents', 'agentRateSlabs', 'corporates', 'inquiries'] },
   { key: 'reports', label: 'Reports', itemKeys: ['reports', 'taxInvoices', 'creditNotes', 'tds', 'nightAudit'] },
   { key: 'system', label: 'System', itemKeys: ['manageHotels', 'taxSettings', 'axisRooms', 'jobs', 'users', 'siteSettings', 'features', 'auditLogs'] },
 ] as const;

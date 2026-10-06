@@ -57,6 +57,8 @@ export class HoldsService {
                 rooms: line.rooms,
                 adults: line.adults,
                 children: line.children,
+                childrenWithBed: line.childrenWithBed ?? (line.childrenWithoutBed === undefined ? line.children : 0),
+                childrenWithoutBed: line.childrenWithoutBed ?? 0,
                 quotedTotal: quote.total,
                 quotedTax: quote.taxTotal,
                 quotedBreakdown: quote.priceBreakdown,

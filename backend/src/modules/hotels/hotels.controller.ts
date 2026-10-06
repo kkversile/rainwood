@@ -1,7 +1,7 @@
 import { Body, ConflictException, Controller, Delete, Get, Header, Param, Patch, Post, Put, Query, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { HotelsService } from './hotels.service';
-import { AmenityDto, CopyRatePlanDto, HotelContactDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelUpdateDto, HotelVideoDto, InventoryBatchDto, PhysicalRoomDto, PromotionDto, RateBatchDto, RateBulkUpdateDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto, RateSeasonDto, YieldRuleDto } from './hotels.dto';
+import { AmenityDto, CopyRatePlanDto, HotelBankAccountDto, HotelContactDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelUpdateDto, HotelVideoDto, InventoryBatchDto, PhysicalRoomDto, PromotionDto, RateBatchDto, RateBulkUpdateDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto, RateSeasonDto, YieldRuleDto } from './hotels.dto';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -50,6 +50,21 @@ export class HotelsController {
   @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
   ratePlanMasters(@Param('hotelId') hotelId: string) { return this.service.ratePlanMasters(hotelId); }
+
+  @Get(':hotelId/bank-accounts')
+  @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
+  bankAccounts(@Param('hotelId') hotelId: string) { return this.service.bankAccounts(hotelId); }
+
+  @Post(':hotelId/bank-accounts')
+  @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
+  addBankAccount(@Param('hotelId') hotelId: string, @Body() body: HotelBankAccountDto) { return this.service.addBankAccount(hotelId, body); }
+
+  @Patch('bank-accounts/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
+  updateBankAccount(@Param('id') id: string, @Body() body: Partial<HotelBankAccountDto>, @CurrentUser() user: any) { return this.service.updateBankAccount(id, body, user.id); }
 
   @Post(':hotelId/rate-plan-masters')
   @RequireFeature('ratePlans')

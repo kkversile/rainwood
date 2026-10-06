@@ -4,7 +4,7 @@ import { HotelsService } from './hotels.service';
 import { canonicalMealPlan, canonicalRatePlanCode } from './rate-plan.utils';
 
 describe('hotel-level rate plans', () => {
-  const master = { id: 'master-1', hotelId: 'hotel-1', code: 'CP', name: 'Breakfast', mealPlan: 'CP', description: null, active: true };
+  const master = { id: 'master-1', hotelId: 'hotel-1', code: 'CP', name: 'CP - Breakfast', mealPlan: 'CP', kind: 'CANONICAL_MEAL', description: null, active: true };
   const room = { id: 'room-1', hotelId: 'hotel-1' };
   let prisma: any;
   let service: HotelsService;
@@ -41,7 +41,7 @@ describe('hotel-level rate plans', () => {
 
   it('creates one master and selected room assignments', async () => {
     await service.createRatePlanMaster('hotel-1', { code: ' cp ', name: ' Breakfast ', mealPlan: 'cp', roomTypeIds: ['room-1'] });
-    expect(prisma.ratePlanMaster.create).toHaveBeenCalledWith({ data: expect.objectContaining({ hotelId: 'hotel-1', code: 'CP', name: 'Breakfast', mealPlan: 'CP' }) });
+    expect(prisma.ratePlanMaster.create).toHaveBeenCalledWith({ data: expect.objectContaining({ hotelId: 'hotel-1', code: 'CP', name: 'CP - Breakfast', mealPlan: 'CP', kind: 'CANONICAL_MEAL' }) });
     expect(prisma.ratePlan.createMany).toHaveBeenCalledWith({ data: [expect.objectContaining({ masterId: master.id, roomTypeId: 'room-1', code: 'CP' })] });
   });
 
@@ -87,8 +87,8 @@ describe('hotel-level rate plans', () => {
 
   it('updates master metadata and synchronizes compatibility columns', async () => {
     await service.updateRatePlanMaster(master.id, { code: ' cp ', name: 'New breakfast', mealPlan: 'map', active: false });
-    expect(prisma.ratePlanMaster.update).toHaveBeenCalledWith({ where: { id: master.id }, data: expect.objectContaining({ code: 'CP', mealPlan: 'MAP', active: false }) });
-    expect(prisma.ratePlan.updateMany).toHaveBeenCalledWith({ where: { masterId: master.id }, data: expect.objectContaining({ code: 'CP', mealPlan: 'MAP' }) });
+    expect(prisma.ratePlanMaster.update).toHaveBeenCalledWith({ where: { id: master.id }, data: expect.objectContaining({ code: 'MAP', name: 'MAP - Breakfast + Dinner', mealPlan: 'MAP', active: false }) });
+    expect(prisma.ratePlan.updateMany).toHaveBeenCalledWith({ where: { masterId: master.id }, data: expect.objectContaining({ code: 'MAP', name: 'MAP - Breakfast + Dinner', mealPlan: 'MAP' }) });
   });
 
   it('deactivates an assignment without deleting booking references', async () => {

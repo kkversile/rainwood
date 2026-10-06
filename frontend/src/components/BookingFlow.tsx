@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { apiRequest } from '../lib/api';
 import type { AvailabilityOption, Hotel, ReservationSummary } from '../lib/types';
@@ -111,12 +111,16 @@ function AgentBookingRail({
   nights,
   adults,
   children,
+  childrenWithBed,
+  childrenWithoutBed,
   rooms,
   onCheckIn,
   onCheckOut,
   onNights,
   onAdults,
   onChildren,
+  onChildrenWithBed,
+  onChildrenWithoutBed,
   onRooms,
   onBook,
   onShowTariff,
@@ -131,12 +135,16 @@ function AgentBookingRail({
   nights: number;
   adults: number;
   children: number;
+  childrenWithBed?: number;
+  childrenWithoutBed?: number;
   rooms: number;
   onCheckIn: (value: string) => void;
   onCheckOut: (value: string) => void;
   onNights: (value: number) => void;
   onAdults: (value: number) => void;
   onChildren: (value: number) => void;
+  onChildrenWithBed?: (value: number) => void;
+  onChildrenWithoutBed?: (value: number) => void;
   onRooms: (value: number) => void;
   onBook: () => void;
   onShowTariff: () => void;
@@ -155,11 +163,11 @@ function AgentBookingRail({
     </div>
     {publicMode ? <div className="publicBookingOccupancy"><label>Adults<input type="number" min="1" max="100" value={adults} onChange={(event) => onAdults(Math.max(1, Number(event.target.value) || 1))} required /></label><label>Children<input type="number" min="0" max="100" value={children} onChange={(event) => onChildren(Math.max(0, Number(event.target.value) || 0))} /></label><label>Total rooms<input type="number" min="1" max="20" value={rooms} onChange={(event) => onRooms(Math.max(1, Number(event.target.value) || 1))} required /></label></div> : <>
       <div className="agentRailCounter"><span>Total Rooms</span><div><button type="button" onClick={() => onRooms(Math.max(1, rooms - 1))}>−</button><b>{rooms}</b><button type="button" onClick={() => onRooms(Math.min(20, rooms + 1))}>+</button></div></div>
-      <div className="agentRailOccupancy"><span>Adults <b>{adults}</b></span><span>Child <b>{children}</b></span><span>FreeChild <b>0</b></span></div>
-      <label>Room 1<input type="text" value={`${adults} Adults`} readOnly /></label>
+      <div className="agentRailOccupancy"><span>Adults <b>{adults}</b></span><span>Child with bed <b>{childrenWithBed ?? 0}</b></span><span>Child without bed <b>{childrenWithoutBed ?? 0}</b></span></div>
+      <label>Room 1<input type="text" value={`${adults} Adults · ${children} Children`} readOnly /></label>
     </>}
     <div className="agentRailActions">{publicMode ? <button type="button" className="btn" onClick={onBook}>Show available rooms</button> : <><button type="button" className="btn" onClick={onBook}>Book</button><button type="button" className="btn secondary" onClick={onShowTariff}>Show Tariff</button></>}</div>
-    {!publicMode && <div className="agentRailAdjust"><label>Adults<input type="number" min="1" value={adults} onChange={(event) => onAdults(Math.max(1, Number(event.target.value)))} /></label><label>Child<input type="number" min="0" value={children} onChange={(event) => onChildren(Math.max(0, Number(event.target.value)))} /></label></div>}
+    {!publicMode && <div className="agentRailAdjust"><label>Adults<input type="number" min="1" value={adults} onChange={(event) => onAdults(Math.max(1, Number(event.target.value)))} /></label><label>Children with bed<input aria-label="Children with bed" type="number" min="0" value={childrenWithBed ?? 0} onChange={(event) => onChildrenWithBed?.(Math.max(0, Number(event.target.value) || 0))} /></label><label>Children without bed<input aria-label="Children without bed" type="number" min="0" value={childrenWithoutBed ?? 0} onChange={(event) => onChildrenWithoutBed?.(Math.max(0, Number(event.target.value) || 0))} /></label></div>}
   </aside>;
 }
 
@@ -237,7 +245,7 @@ function AgentRoomResults({
   </section>;
 }
 
-function AgentCheckoutSummary({ selected, checkIn, checkOut, nights, rooms, adults, children, holdTotal, requiredPayment = holdTotal, terms = null, walletBalance, onBack }: { selected: AvailabilityOption; checkIn: string; checkOut: string; nights: number; rooms: number; adults: number; children: number; holdTotal: number; requiredPayment?: number; terms?: AgentTerms | null; walletBalance: number; onBack: () => void }) {
+function AgentCheckoutSummary({ selected, checkIn, checkOut, nights, rooms, adults, children, childrenWithBed, childrenWithoutBed, holdTotal, requiredPayment = holdTotal, terms = null, walletBalance, onBack }: { selected: AvailabilityOption; checkIn: string; checkOut: string; nights: number; rooms: number; adults: number; children: number; childrenWithBed: number; childrenWithoutBed: number; holdTotal: number; requiredPayment?: number; terms?: AgentTerms | null; walletBalance: number; onBack: () => void }) {
   const price = aggregatePriceBreakdown(selected);
   return <div className="agentCheckoutSummary">
     <button type="button" className="agentBackButton" onClick={onBack}>← Back</button>
@@ -246,7 +254,7 @@ function AgentCheckoutSummary({ selected, checkIn, checkOut, nights, rooms, adul
     <div className="agentPolicySection"><h3>Age Policy</h3><p>Adult: According to hotel policy <span>Child: According to hotel policy</span> <span>Free child: According to hotel policy</span></p></div>
     <div className="agentPolicySection"><h3>Cancellation Policy</h3><p>Free cancellation up to 48 hours before check-in. Later cancellation may attract the first-night charge.</p></div>
     <div className="agentPolicySection"><h3>Payment Milestones</h3><div className="agentMilestoneBadges">{terms?.paymentTerms?.milestones.map((item, index) => <span key={`${item.dueType}-${item.daysBeforeCheckIn}-${index}`} className="status">{paymentMilestoneLabel(item)}</span>)}</div><p>Booking Total: <b>{money(holdTotal)}</b></p><p>Pay Now: <b>{money(requiredPayment)}</b></p><p>Balance: <b>{money(Math.max(0, holdTotal - requiredPayment))}</b></p><p>Future installments are due according to the milestone schedule.</p><p>Wallet Balance: <b>{money(walletBalance)}</b></p><p>Wallet After: <b>{money(Math.max(0, walletBalance - requiredPayment))}</b></p></div>
-    <p className="agentStaySummary">Stay: {displayDate(checkIn)} - {displayDate(checkOut)} · {nights} night{nights === 1 ? '' : 's'} · {rooms} room{rooms === 1 ? '' : 's'} · {adults} adults · {children} children</p>
+    <p className="agentStaySummary">Stay: {displayDate(checkIn)} - {displayDate(checkOut)} · {nights} night{nights === 1 ? '' : 's'} · {rooms} room{rooms === 1 ? '' : 's'} · {adults} adults · {childrenWithBed} child with bed · {childrenWithoutBed} child without bed</p>
   </div>;
 }
 
@@ -281,6 +289,8 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
   const [checkOut, setCheckOut] = useState(dateInDays(2));
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
+  const [childrenWithBed, setChildrenWithBed] = useState(0);
+  const [childrenWithoutBed, setChildrenWithoutBed] = useState(0);
   const [rooms, setRooms] = useState(1);
   const [options, setOptions] = useState<AvailabilityOption[]>([]);
   const [hotelSelections, setHotelSelections] = useState<Record<string, { roomTypeId: string; ratePlanId: string }>>({});
@@ -295,9 +305,14 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
   const [agentTerms, setAgentTerms] = useState<AgentTerms | null>(null);
   const [guest, setGuest] = useState<GuestForm>(initialGuest);
   const [step, setStep] = useState<Step>(agentMode ? 'hotels' : 'search');
+  const stepRef = useRef<Step>(agentMode ? 'hotels' : 'search');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [hotelPickerOpen, setHotelPickerOpen] = useState(false);
+
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
 
   useEffect(() => {
     apiRequest<Hotel[]>('/hotels').then(async (items) => {
@@ -313,8 +328,10 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
       setCheckOut(requestedSearch.checkOut);
       setAdults(requestedSearch.adults);
       setChildren(requestedSearch.children);
+      setChildrenWithBed(requestedSearch.childrenWithBed ?? 0);
+      setChildrenWithoutBed(requestedSearch.childrenWithoutBed ?? 0);
       setRooms(requestedSearch.rooms);
-      if (agentMode && requestedHotel) setStep('search');
+      if (agentMode && requestedHotel && stepRef.current === 'hotels') setStep('search');
     }).catch((reason: Error) => setError(reason.message));
   }, [params]);
 
@@ -362,11 +379,15 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
   async function searchBooking() {
     setError(''); setBusy(true);
     try {
-      const validationError = validateSearchInput({ checkIn, checkOut, adults, children, rooms });
+      const validationError = validateSearchInput({ checkIn, checkOut, adults, children, childrenWithBed: agentMode ? childrenWithBed : undefined, childrenWithoutBed: agentMode ? childrenWithoutBed : undefined, rooms });
       if (validationError) throw new Error(validationError);
       const query = new URLSearchParams({ checkIn, checkOut, adults: String(adults), children: String(children), rooms: String(rooms) });
+      if (agentMode) {
+        query.set('childrenWithBed', String(childrenWithBed));
+        query.set('childrenWithoutBed', String(childrenWithoutBed));
+      }
       if (hotelId) query.set('hotelId', hotelId);
-      const canonicalSearch = serializeBookingSearch({ hotel: selectedHotel?.slug, checkIn, checkOut, adults, children, rooms });
+      const canonicalSearch = serializeBookingSearch({ hotel: selectedHotel?.slug, checkIn, checkOut, adults, children, childrenWithBed: agentMode ? childrenWithBed : undefined, childrenWithoutBed: agentMode ? childrenWithoutBed : undefined, rooms });
       router.replace(`${pathname}?${canonicalSearch.toString()}`, { scroll: false });
       const nextOptions = await apiRequest<AvailabilityOption[]>(`/availability/search?${query}`);
       setOptions(nextOptions);
@@ -393,7 +414,7 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
     }
     setBusy(true);
     try {
-      const created = await apiRequest<Hold>('/holds', { method: 'POST', body: JSON.stringify({ hotelId: option.hotelId, roomTypeId: option.roomTypeId, ratePlanId: option.ratePlanId, checkIn, checkOut, adults, children, rooms }) });
+      const created = await apiRequest<Hold>('/holds', { method: 'POST', body: JSON.stringify({ hotelId: option.hotelId, roomTypeId: option.roomTypeId, ratePlanId: option.ratePlanId, checkIn, checkOut, adults, children, ...(agentMode ? { childrenWithBed, childrenWithoutBed } : {}), rooms }) });
       setSelected(option); setHold(created); setHoldExpired(false); setStep('guest');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not hold inventory'); }
     finally { setBusy(false); }
@@ -470,15 +491,15 @@ export function BookingFlow({ agentMode = false }: { agentMode?: boolean } = {})
     {agentMode && <div className="agentBookingWallet"><div><span>Available wallet balance</span><strong>{wallet ? money(walletBalance) : 'Loading...'}</strong></div><a className="smallBtn" href="/agent/wallet">Recharge wallet</a></div>}
     {step !== 'hotels' && <ol className="steps horizontal" aria-label="Booking progress">{steps.map(([value, label]) => <li className={step === value ? 'active' : ''} key={value}>{label}</li>)}</ol>}
     {error && <p className="error" role="alert">{error}</p>}
-    {agentMode && step !== 'confirmation' && step !== 'search' && step !== 'hotels' && <AgentBookingRail checkIn={checkIn} checkOut={checkOut} nights={nights} adults={adults} children={children} rooms={rooms} onCheckIn={(value) => { setCheckIn(value); if (checkOut <= value) setCheckOut(nextDate(value)); }} onCheckOut={(value) => setCheckOut(value < nextDate(checkIn) ? nextDate(checkIn) : value)} onNights={(value) => setCheckOut(dateAfterNights(checkIn, value))} onAdults={setAdults} onChildren={setChildren} onRooms={setRooms} onBook={() => { if (step === 'room') { if (cartOption) void createHold(cartOption); else setError('Select a room tariff before booking.'); } else void searchBooking(); }} onShowTariff={() => { if (options.length) setStep('room'); else void searchBooking(); }} onChangeHotel={step === 'room' ? openHotelPicker : undefined} />}
+    {agentMode && step !== 'confirmation' && step !== 'search' && step !== 'hotels' && <AgentBookingRail checkIn={checkIn} checkOut={checkOut} nights={nights} adults={adults} children={children} childrenWithBed={childrenWithBed} childrenWithoutBed={childrenWithoutBed} rooms={rooms} onCheckIn={(value) => { setCheckIn(value); if (checkOut <= value) setCheckOut(nextDate(value)); }} onCheckOut={(value) => setCheckOut(value < nextDate(checkIn) ? nextDate(checkIn) : value)} onNights={(value) => setCheckOut(dateAfterNights(checkIn, value))} onAdults={setAdults} onChildren={setChildren} onChildrenWithBed={(value) => { setChildrenWithBed(value); setChildren(childrenWithoutBed + value); }} onChildrenWithoutBed={(value) => { setChildrenWithoutBed(value); setChildren(childrenWithBed + value); }} onRooms={setRooms} onBook={() => { if (step === 'room') { if (cartOption) void createHold(cartOption); else setError('Select a room tariff before booking.'); } else void searchBooking(); }} onShowTariff={() => { if (options.length) setStep('room'); else void searchBooking(); }} onChangeHotel={step === 'room' ? openHotelPicker : undefined} />}
     {step === 'hotels' && agentMode && <AgentHotelSelection hotels={hotels} onSelect={selectHotel} />}
     {agentMode && hotelPickerOpen && <div className="agentHotelModalBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setHotelPickerOpen(false); }}><section className="agentHotelModal" role="dialog" aria-modal="true" aria-labelledby="agent-change-hotel-title"><div className="agentHotelModalHeader"><h2 id="agent-change-hotel-title">Change hotel</h2><button type="button" aria-label="Close change hotel" onClick={() => setHotelPickerOpen(false)}>×</button></div><AgentHotelSelection hotels={hotels} onSelect={selectHotel} /></section></div>}
-    {step === 'search' && agentMode && <div className="agentSearchLayout"><AgentBookingRail checkIn={checkIn} checkOut={checkOut} nights={nights} adults={adults} children={children} rooms={rooms} onCheckIn={(value) => { setCheckIn(value); if (checkOut <= value) setCheckOut(nextDate(value)); }} onCheckOut={(value) => setCheckOut(value < nextDate(checkIn) ? nextDate(checkIn) : value)} onNights={(value) => setCheckOut(dateAfterNights(checkIn, value))} onAdults={setAdults} onChildren={setChildren} onRooms={setRooms} onBook={() => void searchBooking()} onShowTariff={() => void searchBooking()} onChangeHotel={openHotelPicker} /><section className="agentHotelIntro"><span>Selected property</span><h2>{selectedHotel?.name ?? 'Choose your hotel'}</h2><p>{selectedHotel?.city ?? 'Select a property and stay dates from the booking rail.'}</p><p className="agentHotelIntroHint">Select dates and occupancy, then use Book or Show Tariff to check assigned availability.</p></section></div>}
+    {step === 'search' && agentMode && <div className="agentSearchLayout"><AgentBookingRail checkIn={checkIn} checkOut={checkOut} nights={nights} adults={adults} children={children} childrenWithBed={childrenWithBed} childrenWithoutBed={childrenWithoutBed} rooms={rooms} onCheckIn={(value) => { setCheckIn(value); if (checkOut <= value) setCheckOut(nextDate(value)); }} onCheckOut={(value) => setCheckOut(value < nextDate(checkIn) ? nextDate(checkIn) : value)} onNights={(value) => setCheckOut(dateAfterNights(checkIn, value))} onAdults={setAdults} onChildren={setChildren} onChildrenWithBed={(value) => { setChildrenWithBed(value); setChildren(childrenWithoutBed + value); }} onChildrenWithoutBed={(value) => { setChildrenWithoutBed(value); setChildren(childrenWithBed + value); }} onRooms={setRooms} onBook={() => void searchBooking()} onShowTariff={() => void searchBooking()} onChangeHotel={openHotelPicker} /><section className="agentHotelIntro"><span>Selected property</span><h2>{selectedHotel?.name ?? 'Choose your hotel'}</h2><p>{selectedHotel?.city ?? 'Select a property and stay dates from the booking rail.'}</p><p className="agentHotelIntroHint">Select dates and occupancy, then use Book or Show Tariff to check assigned availability.</p></section></div>}
     {step === 'search' && !agentMode && <div className="publicBookingSearchLayout"><AgentBookingRail publicMode hotelId={hotelId} hotels={hotels} onHotelChange={setHotelId} checkIn={checkIn} checkOut={checkOut} nights={nights} adults={adults} children={children} rooms={rooms} onCheckIn={(value) => { const nextValue = value < dateInDays(0) ? dateInDays(0) : value; setCheckIn(nextValue); if (checkOut <= nextValue) setCheckOut(nextDate(nextValue)); }} onCheckOut={(value) => setCheckOut(value < nextDate(checkIn) ? nextDate(checkIn) : value)} onNights={(value) => setCheckOut(dateAfterNights(checkIn, value))} onAdults={setAdults} onChildren={setChildren} onRooms={setRooms} onBook={() => void searchBooking()} onShowTariff={() => void searchBooking()} /><section className="agentHotelIntro publicBookingIntro"><span>Direct booking</span><h2>{selectedHotel?.name ?? 'Choose your hotel'}</h2><p>{selectedHotel?.city ?? 'Select a hotel and stay dates to continue.'}</p><p className="agentHotelIntroHint">Your room options, live availability and final price will appear here after you search.</p></section></div>}
     {step === 'room' && agentMode && (options.length === 0 ? <section className="agentRoomResultsEmpty"><p className="empty">No room plan is available for those dates. Try different dates or occupancy.</p></section> : <><AgentRoomResults hotels={hotels} options={options} checkIn={checkIn} checkOut={checkOut} nights={nights} busy={busy} cartOption={cartOption} expandedRoomTypes={expandedRoomTypes} onToggleRoom={toggleRoom} onAddToCart={toggleCartOption} />{cartOption && <div className="agentBookingCartBar"><div><span>Selected room</span><strong>{cartOption.roomType} · {cartOption.ratePlan}</strong></div><div><span>Total</span><strong>{money(cartOption.total)}</strong></div><button type="button" className="btn" onClick={() => void createHold(cartOption)} disabled={busy}>{busy ? 'Holding...' : 'Add to Cart'}</button></div>}</>)}
     {step === 'room' && <section className="bookingResults"><div className="sectionHead left"><span>{checkIn} to {checkOut} · {nights} night{nights === 1 ? '' : 's'}</span><h2>Choose a room and rate</h2><p>{agentMode ? 'Rates shown are limited to your active agent assignments.' : 'Select a room type and meal plan to continue your booking.'}</p></div>{options.length === 0 ? <p className="empty">No room plan is available for those dates. Try different dates or occupancy.</p> : <div className="bookingRoomGrid">{resultHotelIds.map((resultHotelId) => { const hotel = hotels.find((item) => item.id === resultHotelId); const hotelOptions = options.filter((option) => option.hotelId === resultHotelId); const roomChoices = Array.from(new Map(hotelOptions.map((option) => [option.roomTypeId, option])).values()); const selection = hotelSelections[resultHotelId] ?? { roomTypeId: roomChoices[0]?.roomTypeId ?? '', ratePlanId: roomChoices[0]?.ratePlanId ?? '' }; const rateChoices = Array.from(new Map(hotelOptions.filter((option) => option.roomTypeId === selection.roomTypeId).map((option) => [option.ratePlanId, option])).values()); const selectedOption = hotelOptions.find((option) => option.roomTypeId === selection.roomTypeId && option.ratePlanId === selection.ratePlanId) ?? rateChoices[0] ?? hotelOptions[0]; const setSelection = (next: { roomTypeId: string; ratePlanId: string }) => setHotelSelections((current) => ({ ...current, [resultHotelId]: next })); return <article className="bookingRoomCard" key={resultHotelId}><div className="bookingRoomImage"><AgentHotelImage hotel={hotel} alt={hotel?.images?.[0]?.altText ?? hotel?.name ?? 'RainWood Hotels'} /></div><div className="bookingRoomBody"><span className="bookingRoomCity">{hotel?.city}</span><h3>{hotel?.name}</h3><p className="bookingRoomHotel">{selectedOption.roomType}</p><div className="bookingRoomSelectors"><label>Room type<select value={selection.roomTypeId} onChange={(event) => { const nextRoomTypeId = event.target.value; const nextRate = hotelOptions.find((option) => option.roomTypeId === nextRoomTypeId); setSelection({ roomTypeId: nextRoomTypeId, ratePlanId: nextRate?.ratePlanId ?? '' }); }}>{roomChoices.map((option) => <option key={option.roomTypeId} value={option.roomTypeId}>{option.roomType}</option>)}</select></label><label>Rate / meal plan<select value={selection.ratePlanId} onChange={(event) => setSelection({ ...selection, ratePlanId: event.target.value })}>{rateChoices.map((option) => <option key={option.ratePlanId} value={option.ratePlanId}>{option.ratePlan} · {option.mealPlan}</option>)}</select></label></div><div className="bookingRoomMeta"><span>Available {selectedOption.availableRooms ?? ' - '}</span><strong>{selectedOption.mealPlan}</strong><span>{selectedOption.rooms} room{selectedOption.rooms === 1 ? '' : 's'}</span><span>{selectedOption.adults} adult{selectedOption.adults === 1 ? '' : 's'}</span></div><div className="bookingRoomRate"><div><small>Grand total</small><strong>{money(selectedOption.total)}</strong><span>Taxes: {money(selectedOption.taxTotal)}</span></div><button type="button" className="btn" onClick={() => void createHold(selectedOption)} disabled={busy}>{busy ? 'Holding...' : agentMode ? 'Add to cart' : 'Book this room'}</button></div></div></article>; })}</div>}</section>}
     {step === 'guest' && hold && !agentMode && <section className="bookingCheckoutGrid"><aside className="formCard bookingCart"><div className="rangeSectionHeader"><div><span className="eyebrow">Cart details</span><h2>{selected?.roomType}</h2></div><span className={`status ${holdExpired ? 'error' : 'ok'}`}>{holdExpired ? 'Expired' : 'Held'}</span></div><p className="mutedText">{selected?.ratePlan} · {selected?.mealPlan}</p><div className="bookingSummary"><div><span>Stay</span><b>{checkIn} to {checkOut} ({nights} night{nights === 1 ? '' : 's'})</b></div><div><span>Rooms / guests</span><b>{rooms} room{rooms === 1 ? '' : 's'} · {adults} adults · {children} children</b></div>{selected && <PublicPriceSummary selected={selected} total={holdTotal} />}</div>{holdExpired ? <div className="holdExpiredNotice" role="alert"><strong>Your room hold has expired.</strong><p>Availability may have changed while you were entering guest details.</p><button type="button" className="btn" onClick={() => void recheckAvailability()}>Recheck availability</button></div> : <p className={`notice ${holdRemainingMs < 120000 ? 'warning' : ''}`}>Your room is held for {holdClock}.</p>}</aside><form className="formCard bookingGuestForm" onSubmit={submitGuest}><div className="rangeSectionHeader"><div><span className="eyebrow">Guest details</span><h2>Complete reservation</h2></div><span>Pay at confirmation</span></div><div className="three"><label>Salutation<select value={guest.salutation} onChange={(event) => updateGuest('salutation', event.target.value)}><option>Mr</option><option>Mrs</option><option>Ms</option><option>Dr</option></select></label><label>First name<input value={guest.firstName} onChange={(event) => updateGuest('firstName', event.target.value)} autoComplete="given-name" required /></label><label>Last name<input value={guest.lastName} onChange={(event) => updateGuest('lastName', event.target.value)} autoComplete="family-name" required /></label></div><div className="two"><label>Mobile number<div className="phoneInput"><input className="phoneCode" value={guest.countryCode} onChange={(event) => updateGuest('countryCode', event.target.value)} aria-label="Country code" required /><input value={guest.mobile} onChange={(event) => updateGuest('mobile', event.target.value)} autoComplete="tel" required /></div></label><label>Email address<input type="email" value={guest.email} onChange={(event) => updateGuest('email', event.target.value)} autoComplete="email" required /></label></div><label>Guest address<textarea rows={2} value={guest.address} onChange={(event) => updateGuest('address', event.target.value)} /></label><div className="two"><label>GST / tax number<input value={guest.gstin} onChange={(event) => updateGuest('gstin', event.target.value)} /></label><label>Bill to company<input value={guest.companyName} onChange={(event) => updateGuest('companyName', event.target.value)} /></label></div><label>Billing address<textarea rows={2} value={guest.billingAddress} onChange={(event) => updateGuest('billingAddress', event.target.value)} /></label><label className="checkLabel"><input type="checkbox" checked={guest.agree} onChange={(event) => updateGuest('agree', event.target.checked)} required /> I agree to the hotel booking and cancellation policies</label><button className="btn full" disabled={busy || holdExpired}>{holdExpired ? 'Hold expired' : busy ? 'Confirming...' : 'Review and continue to payment'}</button></form></section>}
-    {step === 'guest' && hold && selected && agentMode && <section className="agentAbadCheckout"><AgentCheckoutSummary selected={selected} checkIn={checkIn} checkOut={checkOut} nights={nights} rooms={rooms} adults={adults} children={children} holdTotal={holdTotal} requiredPayment={requiredPayment} terms={agentTerms} walletBalance={walletBalance} onBack={() => setStep('room')} /><AgentGuestForm guest={guest} updateGuest={updateGuest} submitGuest={submitGuest} busy={busy} holdExpired={holdExpired} holdTotal={holdTotal} requiredPayment={requiredPayment} credit={requiredPayment === 0} /></section>}
+    {step === 'guest' && hold && selected && agentMode && <section className="agentAbadCheckout"><AgentCheckoutSummary selected={selected} checkIn={checkIn} checkOut={checkOut} nights={nights} rooms={rooms} adults={adults} children={children} childrenWithBed={childrenWithBed} childrenWithoutBed={childrenWithoutBed} holdTotal={holdTotal} requiredPayment={requiredPayment} terms={agentTerms} walletBalance={walletBalance} onBack={() => setStep('room')} /><AgentGuestForm guest={guest} updateGuest={updateGuest} submitGuest={submitGuest} busy={busy} holdExpired={holdExpired} holdTotal={holdTotal} requiredPayment={requiredPayment} credit={requiredPayment === 0} /></section>}
     {step === 'payment' && reservation && <section className="formCard"><h2>Payment</h2><p className="notice">Demo environment — no real payment will be charged.</p><p>Reservation <b>{reservation.reference}</b> is ready for secure payment.</p><div className="summary"><p>Total <strong>{money(Number(reservation.totalAmount))}</strong></p><p>Balance due <strong>{money(Number(reservation.balanceAmount))}</strong></p></div><button className="btn full" onClick={completeMockPayment} disabled={busy}>{busy ? 'Processing payment...' : 'Complete payment'}</button><p className="hint">This demo records a successful test payment so you can review the confirmation flow.</p></section>}
     {step === 'confirmation' && reservation && <section className="formCard confirmation"><span className="status ok">Confirmed</span><h2>Booking confirmed</h2><p>Thank you, {reservation.guestName}. Your reference is <b>{reservation.reference}</b>.</p><p>{reservation.hotel.name} - {reservation.checkIn} to {reservation.checkOut}</p><p>Payment status: <b>{reservation.paymentStatus}</b></p>{agentMode && <p className="notice">{agentPaymentConfirmation(reservation)}</p>}<div className="actions"><a className="btn" href={`${basePath}/booking/confirmation?reference=${encodeURIComponent(reservation.reference)}`}>View confirmation</a><button className="btn secondary" type="button" onClick={() => window.print()}>Print confirmation</button><a className="btn secondary" href={`${basePath}/booking`}>Book another stay</a><a className="btn secondary" href={`${basePath}/contact`}>Contact RainWood</a><a className="btn secondary" target="_blank" rel="noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(reservation.hotel.name)}`}>Get directions</a>{agentMode && <a className="btn secondary" href={`${basePath}/agent/bookings`}>View my bookings</a>}</div></section>}
   </div>;

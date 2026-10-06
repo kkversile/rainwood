@@ -5,6 +5,8 @@ import { IsArray, IsDateString, IsEmail, IsEnum, IsInt, IsOptional, IsString, Ma
 export class HoldOccupancyDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(100) adults!: number;
   @Type(() => Number) @IsInt() @Min(0) @Max(100) children = 0;
+  @Type(() => Number) @IsOptional() @IsInt() @Min(0) @Max(100) childrenWithBed?: number;
+  @Type(() => Number) @IsOptional() @IsInt() @Min(0) @Max(100) childrenWithoutBed?: number;
 }
 
 export class HoldLineDto {
@@ -40,6 +42,8 @@ export class HoldLineDto {
   @Min(0)
   @Max(100)
   children = 0;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(100) childrenWithBed?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(100) childrenWithoutBed?: number;
 
   @IsOptional()
   @IsArray()

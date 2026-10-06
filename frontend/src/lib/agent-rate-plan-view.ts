@@ -1,10 +1,21 @@
 export type AssignedRatePlanView = {
+  source?: 'AGENT_SLAB' | 'LEGACY_AGENT_RATE_PLAN';
   id: string;
   code: string;
   name: string;
   mealPlan: string;
   hotel: { name: string; city: string };
   room: { name: string; code: string };
+  contract?: {
+    source: 'AGENT_SLAB';
+    code: string;
+    name: string;
+    version: number;
+    validFrom: string;
+    validTo: string;
+    assignmentValidFrom: string;
+    assignmentValidTo: string;
+  };
 };
 
 export type AgentRatePlanFilters = {

@@ -1,10 +1,10 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, RoomOperationalStatus } from '@prisma/client';
+import { Prisma, RatePlanMasterKind, RoomOperationalStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { normalizeOccupancyPrices, SUPPORTED_OCCUPANCY_KEYS } from '../../common/rate-pricing';
 import { parseDateOnly, parseExcelDateOnly, toDateOnly } from '../../common/dates';
 import { getHotelOperationalDate } from '../../common/hotel-dates';
-import { AmenityDto, CopyRatePlanDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, PhysicalRoomDto, PromotionDto, RateBatchDto, RateBulkUpdateDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto, RateSeasonDto, YieldRuleDto } from './hotels.dto';
+import { AmenityDto, CopyRatePlanDto, HotelBankAccountDto, HotelContentDto, HotelDocumentDto, HotelDocumentUpdateDto, HotelImageDto, HotelImageOrderDto, HotelImageUpdateDto, HotelLocationAttractionDto, HotelLocationProfileDto, HotelLocationTransportDto, HotelPolicyDto, HotelReviewDto, HotelVideoDto, InventoryBatchDto, PhysicalRoomDto, PromotionDto, RateBatchDto, RateBulkUpdateDto, RatePlanAssignmentDto, RatePlanAssignmentUpdateDto, RatePlanDto, RatePlanMasterDto, RoomTypeDto, RateSeasonDto, YieldRuleDto } from './hotels.dto';
 import { FilesService } from '../files/files.service';
 import ExcelJS from 'exceljs';
 import { canonicalMealPlan, canonicalRatePlanCode } from './rate-plan.utils';
@@ -54,6 +54,18 @@ function validateSeasonState(startDate: Date, endDate: Date, daysOfWeek: number[
 function validateYieldState(from: number, to: number, adjustmentType: string, adjustmentValue: number) {
   if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from >= to || to > 100) throw new BadRequestException('Yield occupancy range must satisfy 0 <= from < to <= 100.');
   validateAdjustment(adjustmentType, adjustmentValue);
+}
+
+const CANONICAL_MEAL_NAMES: Record<string, string> = {
+  EP: 'EP - Room Only',
+  CP: 'CP - Breakfast',
+  MAP: 'MAP - Breakfast + Dinner',
+  AP: 'AP - All Meals',
+};
+
+function canonicalMaster(mealPlan: string) {
+  const normalized = canonicalMealPlan(mealPlan);
+  return { code: normalized, name: CANONICAL_MEAL_NAMES[normalized], kind: RatePlanMasterKind.CANONICAL_MEAL };
 }
 
 @Injectable()
@@ -164,6 +176,14 @@ export class HotelsService {
     return this.prisma.hotelPolicy.upsert({ where: { hotelId }, create: { hotelId, ...data }, update: data });
   }
   async contacts(hotelId: string) { await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } }); return this.prisma.hotelContact.findMany({ where: { hotelId }, orderBy: [{ primary: 'desc' }, { name: 'asc' }] }); }
+  async bankAccounts(hotelId: string) { await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } }); return this.prisma.hotelBankAccount.findMany({ where: { hotelId }, orderBy: [{ active: 'desc' }, { createdAt: 'asc' }] }); }
+  async addBankAccount(hotelId: string, body: HotelBankAccountDto) { await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } }); return this.prisma.hotelBankAccount.create({ data: { hotelId, accountName: body.accountName.trim(), bankName: body.bankName.trim(), branch: body.branch?.trim() || null, accountNumber: body.accountNumber.trim(), ifsc: body.ifsc?.trim().toUpperCase() || null, accountType: body.accountType?.trim() || null, active: body.active ?? true, displayOnAgentRateSheet: body.displayOnAgentRateSheet ?? false } }); }
+  async updateBankAccount(id: string, body: Partial<HotelBankAccountDto>, actorUserId: string) {
+    const current = await this.prisma.hotelBankAccount.findUnique({ where: { id }, select: { hotelId: true } });
+    if (!current) throw new NotFoundException('Bank account not found.');
+    await assertActorCanManageHotel(this.prisma, actorUserId, current.hotelId);
+    return this.prisma.hotelBankAccount.update({ where: { id }, data: { accountName: body.accountName?.trim(), bankName: body.bankName?.trim(), branch: body.branch === undefined ? undefined : body.branch.trim() || null, accountNumber: body.accountNumber?.trim(), ifsc: body.ifsc === undefined ? undefined : body.ifsc.trim().toUpperCase() || null, accountType: body.accountType === undefined ? undefined : body.accountType.trim() || null, active: body.active, displayOnAgentRateSheet: body.displayOnAgentRateSheet } });
+  }
   async addContact(hotelId: string, body: any) { await this.prisma.hotel.findUniqueOrThrow({ where: { id: hotelId } }); if (body.primary) await this.prisma.hotelContact.updateMany({ where: { hotelId }, data: { primary: false } }); return this.prisma.hotelContact.create({ data: { hotelId, ...body } }); }
   async updateContact(id: string, body: any) { const contact = await this.prisma.hotelContact.findUniqueOrThrow({ where: { id } }); if (body.primary) await this.prisma.hotelContact.updateMany({ where: { hotelId: contact.hotelId, id: { not: id } }, data: { primary: false } }); return this.prisma.hotelContact.update({ where: { id }, data: body }); }
   deleteContact(id: string) { return this.prisma.hotelContact.delete({ where: { id } }); }
@@ -554,15 +574,18 @@ export class HotelsService {
   }
 
   async createRatePlanMaster(hotelId: string, body: RatePlanMasterDto) {
-    const code = canonicalRatePlanCode(body.code);
     const mealPlan = canonicalMealPlan(body.mealPlan);
+    const canonical = canonicalMaster(mealPlan);
+    const isCanonical = ['EP', 'CP', 'MAP', 'AP'].includes(mealPlan);
+    const code = isCanonical ? canonical.code : canonicalRatePlanCode(body.code ?? mealPlan);
+    const name = isCanonical ? canonical.name : body.name?.trim() || code;
     const roomTypeIds = [...new Set(body.roomTypeIds ?? [])];
     const rooms = roomTypeIds.length ? await this.prisma.roomType.findMany({ where: { id: { in: roomTypeIds } }, select: { id: true, hotelId: true } }) : [];
     if (rooms.length !== roomTypeIds.length) throw new NotFoundException('One or more selected room types do not exist.');
     if (rooms.some((room) => room.hotelId !== hotelId)) throw new BadRequestException('A rate plan can only be assigned to room types in the same hotel.');
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const master = await tx.ratePlanMaster.create({ data: { hotelId, code, name: body.name.trim(), mealPlan, description: body.description?.trim() || undefined, active: body.active ?? true } });
+        const master = await tx.ratePlanMaster.create({ data: { hotelId, code, name, mealPlan, kind: isCanonical ? RatePlanMasterKind.CANONICAL_MEAL : RatePlanMasterKind.LEGACY, description: body.description?.trim() || undefined, active: body.active ?? true } });
         if (roomTypeIds.length) await tx.ratePlan.createMany({ data: roomTypeIds.map((roomTypeId) => this.assignmentData(master, roomTypeId)) });
         return tx.ratePlanMaster.findUniqueOrThrow({ where: { id: master.id }, include: { assignments: { include: { roomType: true } } } });
       });
@@ -575,13 +598,15 @@ export class HotelsService {
   async updateRatePlanMaster(id: string, body: Partial<RatePlanMasterDto>) {
     const existing = await this.prisma.ratePlanMaster.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Rate plan not found');
-    const code = body.code === undefined ? existing.code : canonicalRatePlanCode(body.code);
-    const name = body.name === undefined ? existing.name : body.name.trim();
     const mealPlan = body.mealPlan === undefined ? existing.mealPlan : canonicalMealPlan(body.mealPlan);
+    const isCanonical = existing.kind === RatePlanMasterKind.CANONICAL_MEAL || ['EP', 'CP', 'MAP', 'AP'].includes(mealPlan) && existing.code === existing.mealPlan;
+    const canonical = canonicalMaster(mealPlan);
+    const code = isCanonical ? canonical.code : body.code === undefined ? existing.code : canonicalRatePlanCode(body.code);
+    const name = isCanonical ? canonical.name : body.name === undefined ? existing.name : body.name.trim();
     const description = body.description === undefined ? existing.description : body.description.trim() || null;
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const master = await tx.ratePlanMaster.update({ where: { id }, data: { code, name, mealPlan, description, active: body.active } });
+        const master = await tx.ratePlanMaster.update({ where: { id }, data: { code, name, mealPlan, kind: isCanonical ? RatePlanMasterKind.CANONICAL_MEAL : existing.kind, description, active: body.active } });
         await tx.ratePlan.updateMany({ where: { masterId: id }, data: { code, name, mealPlan, description } });
         return master;
       });

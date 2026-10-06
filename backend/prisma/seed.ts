@@ -77,8 +77,19 @@ async function main() {
     const seededRoom = await prisma.room.upsert({ where: { hotelId_roomNumber: { hotelId: hotel.id, roomNumber: physicalRoom.roomNumber } }, update: { roomTypeId: room.id, floor: physicalRoom.floor, wing: physicalRoom.wing, active: true }, create: { ...physicalRoom, hotelId: hotel.id, roomTypeId: room.id, status: 'AVAILABLE', active: true } });
     seededRooms.push({ id: seededRoom.id, roomNumber: seededRoom.roomNumber });
   }
-  const cpMaster = await prisma.ratePlanMaster.upsert({ where: { hotelId_code: { hotelId: hotel.id, code: 'CP' } }, update: { active: true, name: 'CP - Breakfast', mealPlan: 'CP', description: 'Room with breakfast included.' }, create: { hotelId: hotel.id, code: 'CP', name: 'CP - Breakfast', mealPlan: 'CP', description: 'Room with breakfast included.' } });
-  const plan = await prisma.ratePlan.upsert({ where: { roomTypeId_masterId: { roomTypeId: room.id, masterId: cpMaster.id } }, update: { active: true, code: cpMaster.code, name: cpMaster.name, mealPlan: cpMaster.mealPlan, description: cpMaster.description, axisRatePlanId: 'AXIS-RATE-CP' }, create: { roomTypeId: room.id, masterId: cpMaster.id, code: cpMaster.code, name: cpMaster.name, mealPlan: cpMaster.mealPlan, description: cpMaster.description, axisRatePlanId: 'AXIS-RATE-CP' } });
+  const canonicalDefinitions = [
+    { code: 'EP', name: 'EP - Room Only', mealPlan: 'EP', description: 'Room only.' },
+    { code: 'CP', name: 'CP - Breakfast', mealPlan: 'CP', description: 'Room with breakfast included.' },
+    { code: 'MAP', name: 'MAP - Breakfast + Dinner', mealPlan: 'MAP', description: 'Room with breakfast and dinner included.' },
+    { code: 'AP', name: 'AP - All Meals', mealPlan: 'AP', description: 'Room with all meals included.' },
+  ] as const;
+  const canonicalPlans = [] as { id: string; code: string; mealPlan: string }[];
+  for (const item of canonicalDefinitions) {
+    const master = await prisma.ratePlanMaster.upsert({ where: { hotelId_code: { hotelId: hotel.id, code: item.code } }, update: { active: true, name: item.name, mealPlan: item.mealPlan, kind: 'CANONICAL_MEAL', description: item.description }, create: { hotelId: hotel.id, code: item.code, name: item.name, mealPlan: item.mealPlan, kind: 'CANONICAL_MEAL', description: item.description } });
+    const assignment = await prisma.ratePlan.upsert({ where: { roomTypeId_masterId: { roomTypeId: room.id, masterId: master.id } }, update: { active: true, code: master.code, name: master.name, mealPlan: master.mealPlan, description: master.description, axisRatePlanId: `AXIS-RATE-${item.code}` }, create: { roomTypeId: room.id, masterId: master.id, code: master.code, name: master.name, mealPlan: master.mealPlan, description: master.description, axisRatePlanId: `AXIS-RATE-${item.code}` } });
+    canonicalPlans.push({ id: assignment.id, code: item.code, mealPlan: item.mealPlan });
+  }
+  const plan = canonicalPlans.find((item) => item.code === 'CP')!;
   const masterPlans = [
     { code: 'A', name: 'Preferred Partner Rate', mealPlan: 'EP', description: 'Plan A - Nett contract', amount: 4800, taxAmount: 576 },
     { code: 'B', name: 'Contracted Nett Rate', mealPlan: 'EP', description: 'Plan B - Nett contract', amount: 5000, taxAmount: 600 },
@@ -88,7 +99,7 @@ async function main() {
   ] as const;
   const seededMasterPlans = [] as { id: string; code: string; amount: number; taxAmount: number }[];
   for (const item of masterPlans) {
-    const definition = await prisma.ratePlanMaster.upsert({ where: { hotelId_code: { hotelId: hotel.id, code: item.code } }, update: { active: true, name: item.name, mealPlan: item.mealPlan, description: item.description }, create: { hotelId: hotel.id, code: item.code, name: item.name, mealPlan: item.mealPlan, description: item.description } });
+    const definition = await prisma.ratePlanMaster.upsert({ where: { hotelId_code: { hotelId: hotel.id, code: item.code } }, update: { active: true, name: item.name, mealPlan: item.mealPlan, kind: 'LEGACY', description: item.description }, create: { hotelId: hotel.id, code: item.code, name: item.name, mealPlan: item.mealPlan, kind: 'LEGACY', description: item.description } });
     const assignment = await prisma.ratePlan.upsert({ where: { roomTypeId_masterId: { roomTypeId: room.id, masterId: definition.id } }, update: { active: true, code: definition.code, name: definition.name, mealPlan: definition.mealPlan, description: definition.description, axisRatePlanId: `AXIS-RATE-${item.code}` }, create: { roomTypeId: room.id, masterId: definition.id, code: definition.code, name: definition.name, mealPlan: definition.mealPlan, description: definition.description, axisRatePlanId: `AXIS-RATE-${item.code}` } });
     seededMasterPlans.push({ id: assignment.id, code: item.code, amount: item.amount, taxAmount: item.taxAmount });
     await prisma.cancellationRule.upsert({ where: { hotelId_ratePlanId_type: { hotelId: hotel.id, ratePlanId: assignment.id, type: 'FREE_CANCELLATION' } }, update: { cutoffHours: 48, value: 0, active: true }, create: { hotelId: hotel.id, ratePlanId: assignment.id, type: 'FREE_CANCELLATION', cutoffHours: 48, value: 0 } });
@@ -101,7 +112,7 @@ async function main() {
   ];
   const agentUsers = [] as { id: string; email: string }[];
   for (const item of seededAgents) {
-    const agentUser = await prisma.user.upsert({ where: { email: item.email }, update: { name: item.name, passwordHash: agentPasswordHash, role: 'AGENT', active: true }, create: { email: item.email, name: item.name, passwordHash: agentPasswordHash, role: 'AGENT', active: true } });
+    const agentUser = await prisma.user.upsert({ where: { email: item.email }, update: { name: item.name, passwordHash: agentPasswordHash, role: 'AGENT', active: true, agentPaymentPolicy: 'PERCENTAGE', bookingPaymentPercent: 100 }, create: { email: item.email, name: item.name, passwordHash: agentPasswordHash, role: 'AGENT', active: true, agentPaymentPolicy: 'PERCENTAGE', bookingPaymentPercent: 100 } });
     agentUsers.push({ id: agentUser.id, email: agentUser.email });
     await prisma.agentWallet.upsert({ where: { agentId: agentUser.id }, update: {}, create: { agentId: agentUser.id, balance: 0 } });
   }
@@ -168,6 +179,11 @@ async function main() {
     await prisma.axisSyncLog.upsert({ where: { idempotencyKey: `seed-sync-${item.reference}` }, update: { status: item.syncStatus, response: { seeded: true } }, create: { reservationId: reservation.id, idempotencyKey: `seed-sync-${item.reference}`, direction: 'OUTBOUND', entityType: 'RESERVATION', externalReference: `AXIS-${item.reference}`, status: item.syncStatus, payload: { reference: item.reference, seeded: true }, response: item.syncStatus === 'SYNCED' ? { accepted: true } : undefined } });
     await prisma.outboxJob.upsert({ where: { idempotencyKey: `seed-job-${item.reference}` }, update: { status: item.syncStatus === 'SYNCED' ? 'SUCCEEDED' : 'PENDING' }, create: { type: 'AXIS_BOOKING_PUSH', aggregateType: 'Reservation', aggregateId: reservation.id, idempotencyKey: `seed-job-${item.reference}`, payload: { reservationId: reservation.id, reference: item.reference }, status: item.syncStatus === 'SYNCED' ? 'SUCCEEDED' : 'PENDING', completedAt: item.syncStatus === 'SYNCED' ? demoDate(-1) : undefined } });
     await prisma.auditLog.create({ data: { actorUserId: admin.id, action: 'SEED_RESERVATION', entityType: 'Reservation', entityId: reservation.id, after: { reference: item.reference, status: item.status, seeded: true } } });
+  }
+  for (const canonicalPlan of canonicalPlans.filter((item) => item.code !== 'CP')) for (let offset = 0; offset < 120; offset += 1) {
+    const date = new Date(start.getTime() + offset * 86_400_000);
+    const amount = canonicalPlan.code === 'EP' ? 5000 : canonicalPlan.code === 'MAP' ? 6500 : 7800;
+    await prisma.rateDay.upsert({ where: { ratePlanId_date: { ratePlanId: canonicalPlan.id, date } }, update: { amount, taxAmount: Math.round(amount * 0.12), childAmount: 1000, extraAdultAmount: 1500, minLos: 1, maxLos: 30 }, create: { ratePlanId: canonicalPlan.id, date, amount, taxAmount: Math.round(amount * 0.12), childAmount: 1000, extraAdultAmount: 1500, minLos: 1, maxLos: 30 } });
   }
   const corporate = await prisma.corporateAccount.upsert({
     where: { id: 'seed-corporate-account' },

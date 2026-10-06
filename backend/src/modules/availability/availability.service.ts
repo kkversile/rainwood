@@ -1,19 +1,20 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Optional } from '@nestjs/common';
 import { BookingSource, Prisma, SupplementaryChargeScope, UserRole } from '@prisma/client';
 import { PrismaService } from '../../common/prisma.service';
 import { addDays, eachNight, nightsBetween, parseDateOnly, todayUtc, toDateOnly } from '../../common/dates';
 import { getHotelOperationalDate } from '../../common/hotel-dates';
 import { assertActorCanManageHotel } from '../../common/role-scope';
 import { AvailabilityQueryDto } from './availability.dto';
-import { RateResolverService } from './rate-resolver';
+import { assertSlabCoverage, CONTRACT_RATE_ERROR, RateResolverService, slabRateMatches, AgentSlabContext } from './rate-resolver';
+import { AgentRateSlabsService } from '../agent-rate-slabs/agent-rate-slabs.service';
 import { selectBestPromotion } from './promotion.utils';
 import { resolvePrePromotionRate } from './pricing-context';
 
 type Database = PrismaService | Prisma.TransactionClient;
-export type RoomOccupancy = { adults: number; children: number };
+export type RoomOccupancy = { adults: number; children: number; childrenWithBed?: number; childrenWithoutBed?: number };
 type PricingActor = { id: string; role?: string };
 type CorporateContext = { account: { id: string; name: string }; agreements: any[] };
-type Selection = { hotelId: string; roomTypeId: string; ratePlanId: string; checkIn: string; checkOut: string; rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[]; source?: BookingSource; promotionCode?: string; corporateAccountId?: string };
+type Selection = { hotelId: string; roomTypeId: string; ratePlanId: string; checkIn: string; checkOut: string; rooms: number; adults: number; children: number; childrenWithBed?: number; childrenWithoutBed?: number; occupancies?: RoomOccupancy[]; source?: BookingSource; promotionCode?: string; corporateAccountId?: string };
 
 export function supplementaryScopeFilter(agentId?: string) {
   return agentId ? { in: [SupplementaryChargeScope.AGENTS, SupplementaryChargeScope.ALL] } : SupplementaryChargeScope.ALL;
@@ -21,7 +22,7 @@ export function supplementaryScopeFilter(agentId?: string) {
 
 @Injectable()
 export class AvailabilityService {
-  constructor(private prisma: PrismaService, private readonly rateResolver: RateResolverService) {}
+  constructor(private prisma: PrismaService, private readonly rateResolver: RateResolverService, @Optional() private readonly agentRateSlabs?: AgentRateSlabsService) {}
 
   async search(query: AvailabilityQueryDto, actor?: PricingActor) {
     const from = parseDateOnly(query.checkIn, 'checkIn');
@@ -30,6 +31,8 @@ export class AvailabilityService {
     this.validateStay(from, to, normalized.rooms, normalized.adults, normalized.children, normalized.occupancies);
     const nights = nightsBetween(from, to);
     const agentId = actor?.role === 'AGENT' ? actor.id : undefined;
+    const agentSlab = agentId && this.agentRateSlabs ? await this.agentRateSlabs.context(agentId, from, to) : null;
+    if (agentSlab && !agentSlab.fullAssignmentCoverage) throw new BadRequestException('Contract rate is not available for all selected nights.');
     const hotels = await this.prisma.hotel.findMany({
       where: query.hotelId ? { id: query.hotelId, active: true } : { active: true },
       include: {
@@ -41,7 +44,7 @@ export class AvailabilityService {
           where: { active: true },
           include: {
             inventory: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } },
-            ratePlans: { where: { active: true, master: { active: true }, ...(agentId ? { assignedAgents: { some: { agentId, active: true } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, ...(agentId ? { assignedAgents: { where: { agentId, active: true } } } : {}) } },
+            ratePlans: { where: { active: true, master: { active: true }, ...(agentSlab ? { slabRates: { some: { slabId: agentSlab.assignment.slabId, active: true, validFrom: { lte: to }, validTo: { gte: from } } } } : agentId ? { assignedAgents: { some: { agentId, active: true } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, ...(agentId && !agentSlab ? { assignedAgents: { where: { agentId, active: true } } } : {}) } },
           },
         },
       },
@@ -50,7 +53,7 @@ export class AvailabilityService {
     if (query.corporateAccountId && !query.hotelId) throw new BadRequestException('hotelId is required when corporate pricing is selected.');
     const options = (await Promise.all(hotels.map(async (hotel) => {
       const corporate = query.corporateAccountId ? await this.resolveCorporateContext(this.prisma, query.corporateAccountId, hotel.id, actor, query.source, from, to) : null;
-      return hotel.rooms.flatMap((room) => room.ratePlans.map((plan) => this.calculate(room, plan, normalized, from, to, nights, actor?.role === 'AGENT' ? actor.id : undefined, hotel.supplementaryCharges, hotel.promotions, query.source, query.promotionCode, hotel.timezoneName, hotel.rateSeasons, hotel.yieldRules, corporate)));
+      return hotel.rooms.flatMap((room) => room.ratePlans.map((plan) => this.calculate(room, plan, normalized, from, to, nights, actor?.role === 'AGENT' ? actor.id : undefined, hotel.supplementaryCharges, hotel.promotions, query.source, query.promotionCode, hotel.timezoneName, hotel.rateSeasons, hotel.yieldRules, corporate, agentSlab)));
     }))).flat();
     return options.filter((option) => option.available).map(({ available, ...option }) => option);
   }
@@ -60,18 +63,22 @@ export class AvailabilityService {
     const to = parseDateOnly(input.checkOut, 'checkOut');
     const normalized = this.normalizeOccupancy(input);
     this.validateStay(from, to, normalized.rooms, normalized.adults, normalized.children, normalized.occupancies);
+    const agentSlab = options.agentId && this.agentRateSlabs ? await this.agentRateSlabs.context(options.agentId, from, to, db) : null;
+    if (agentSlab && !agentSlab.fullAssignmentCoverage) throw new BadRequestException('Contract rate is not available for all selected nights.');
     const room = await db.roomType.findFirst({
       where: { id: input.roomTypeId, hotelId: input.hotelId, active: true, hotel: { active: true } },
       include: {
         hotel: { include: { supplementaryCharges: { where: { active: true, scope: supplementaryScopeFilter(options.agentId), startDate: { lte: to }, endDate: { gte: from } } }, promotions: { where: { active: true }, include: { roomTypes: true, ratePlans: true } }, rateSeasons: { where: { active: true, startDate: { lte: to }, endDate: { gte: from } }, include: { roomTypes: true, ratePlans: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] }, yieldRules: { where: { active: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] } } },
         inventory: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } },
-          ratePlans: { where: { id: input.ratePlanId, active: true, master: { active: true }, ...(options.agentId ? { assignedAgents: { some: { agentId: options.agentId, active: true } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, ...(options.agentId ? { assignedAgents: { where: { agentId: options.agentId, active: true } } } : {}) } },
+          ratePlans: { where: { id: input.ratePlanId, active: true, master: { active: true }, ...(agentSlab ? { slabRates: { some: { slabId: agentSlab.assignment.slabId, active: true, validFrom: { lte: to }, validTo: { gte: from } } } } : options.agentId ? { assignedAgents: { some: { agentId: options.agentId, active: true } } } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, ...(options.agentId && !agentSlab ? { assignedAgents: { where: { agentId: options.agentId, active: true } } } : {}) } },
       },
     });
     const plan = room?.ratePlans[0];
     if (!room || !plan) throw new BadRequestException('Room or rate plan is unavailable');
+    assertSlabCoverage(agentSlab, plan.id, eachNight(from, to));
     const corporate = options.corporateAccountId || input.corporateAccountId ? await this.resolveCorporateContext(db, options.corporateAccountId ?? input.corporateAccountId!, input.hotelId, options.actor, options.channel ?? input.source, from, to, input.roomTypeId, input.ratePlanId) : null;
-    const quote = this.calculate(room, plan, normalized, from, to, nightsBetween(from, to), options.agentId, room.hotel.supplementaryCharges, room.hotel.promotions, options.channel ?? input.source, options.promotionCode ?? input.promotionCode, room.hotel.timezoneName, room.hotel.rateSeasons, room.hotel.yieldRules, corporate);
+    const quote = this.calculate(room, plan, normalized, from, to, nightsBetween(from, to), options.agentId, room.hotel.supplementaryCharges, room.hotel.promotions, options.channel ?? input.source, options.promotionCode ?? input.promotionCode, room.hotel.timezoneName, room.hotel.rateSeasons, room.hotel.yieldRules, corporate, agentSlab);
+    if (quote.contractRateUnavailable) throw new BadRequestException(CONTRACT_RATE_ERROR);
     if (!quote.available && options.checkInventory !== false) throw new BadRequestException('Inventory or restrictions are no longer available');
     const { available: _available, ...result } = quote;
     return result;
@@ -107,17 +114,23 @@ export class AvailabilityService {
       occupancies.forEach((occupancy, index) => {
         if (!Number.isInteger(occupancy.adults) || occupancy.adults < 1) throw new BadRequestException(`occupancies[${index}].adults must be positive`);
         if (!Number.isInteger(occupancy.children) || occupancy.children < 0) throw new BadRequestException(`occupancies[${index}].children cannot be negative`);
+        for (const [field, value] of [['childrenWithBed', occupancy.childrenWithBed], ['childrenWithoutBed', occupancy.childrenWithoutBed]] as const) if (value !== undefined && (!Number.isInteger(value) || value < 0)) throw new BadRequestException(`occupancies[${index}].${field} cannot be negative`);
+        if (occupancy.childrenWithBed !== undefined || occupancy.childrenWithoutBed !== undefined) {
+          const explicitChildren = Number(occupancy.childrenWithBed ?? 0) + Number(occupancy.childrenWithoutBed ?? 0);
+          if (explicitChildren !== occupancy.children) throw new BadRequestException(`occupancies[${index}] child totals must match children`);
+        }
       });
     }
   }
 
-  private calculate(room: any, plan: any, input: { rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[] }, from: Date, to: Date, nights: number, agentId?: string, supplementaryCharges: any[] = [], promotions: any[] = [], channel?: string, promotionCode?: string, timezoneName = 'UTC', seasons: any[] = [], yieldRules: any[] = [], corporate?: CorporateContext | null) {
+  private calculate(room: any, plan: any, input: { rooms: number; adults: number; children: number; childrenWithBed?: number; childrenWithoutBed?: number; occupancies?: RoomOccupancy[] }, from: Date, to: Date, nights: number, agentId?: string, supplementaryCharges: any[] = [], promotions: any[] = [], channel?: string, promotionCode?: string, timezoneName = 'UTC', seasons: any[] = [], yieldRules: any[] = [], corporate?: CorporateContext | null, agentSlabContext?: AgentSlabContext | null) {
     const occupiedNights = eachNight(from, to);
     const inventoryByDate = new Map<string, any>(room.inventory.map((day: any) => [toDateOnly(day.date), day]));
     const rateByDate = new Map<string, any>(plan.rates.map((day: any) => [toDateOnly(day.date), day]));
+    const slabCoverage = agentSlabContext ? slabRateMatches(agentSlabContext, plan.id, occupiedNights) : true;
     const arrivalRate = rateByDate.get(toDateOnly(from));
     const departureRate = rateByDate.get(toDateOnly(to));
-    const resolved = this.rateResolver.byDate(plan, agentId);
+    const resolved = this.rateResolver.byDate(plan, agentId, agentSlabContext);
     const inventoryComplete = occupiedNights.every((night) => inventoryByDate.has(toDateOnly(night)));
     const ratesComplete = occupiedNights.every((night) => rateByDate.has(toDateOnly(night)));
     const inventoryAvailable = inventoryComplete && occupiedNights.every((night) => {
@@ -145,8 +158,10 @@ export class AvailabilityService {
         const corporateAdjustment = agreement ? Number((corporateEffectiveRate - publicPrePromoRate).toFixed(2)) : 0;
         const effectiveAmount = corporateEffectiveRate;
         const seasonAdjustment = pricing.seasonAdjustedRate - commercialBase;
-        const supplementAmount = hasOccupancyPrice || hasManualOverride ? 0 : Number(rate?.childAmount ?? 0) * occupancy.children + Number(rate?.extraAdultAmount ?? 0) * Math.max(0, occupancy.adults - 2);
-        return { roomIndex: index, adults: occupancy.adults, children: occupancy.children, occupancyKey, baseRate: Math.round(commercialBase * 100) / 100, baseAmount: Math.round(effectiveAmount * 100) / 100, publicPrePromoRate: Math.round(publicPrePromoRate * 100) / 100, corporateAdjustment, corporateEffectiveRate: agreement ? Math.round(corporateEffectiveRate * 100) / 100 : null, corporateRateAgreement: agreement ? { id: agreement.id, pricingType: agreement.pricingType, fixedRate: agreement.fixedRate == null ? null : Number(agreement.fixedRate), discountPercent: agreement.discountPercent == null ? null : Number(agreement.discountPercent) } : null, supplementAmount, manualOverride: hasManualOverride ? Number(rate.overrideAmount) : null, seasonApplied: season ? { id: season.id, name: season.name, adjustment: Math.round(seasonAdjustment * 100) / 100 } : null, yieldRuleApplied: yieldRule ? { id: yieldRule.id, name: yieldRule.name, occupancyPercent: Math.round(occupancyPercent * 100) / 100, adjustment: Math.round((publicPrePromoRate - pricing.seasonAdjustedRate) * 100) / 100 } : null };
+        const childrenWithBed = occupancy.childrenWithBed ?? (occupancy.childrenWithoutBed === undefined ? occupancy.children : 0);
+        const childrenWithoutBed = occupancy.childrenWithoutBed ?? 0;
+        const supplementAmount = hasOccupancyPrice || hasManualOverride ? 0 : agentSlabContext ? Number(rate?.extraChildWithBedAmount ?? rate?.childAmount ?? 0) * childrenWithBed + Number(rate?.childWithoutBedAmount ?? 0) * childrenWithoutBed + Number(rate?.extraAdultAmount ?? 0) * Math.max(0, occupancy.adults - 2) : Number(rate?.childAmount ?? 0) * occupancy.children + Number(rate?.extraAdultAmount ?? 0) * Math.max(0, occupancy.adults - 2);
+        return { roomIndex: index, adults: occupancy.adults, children: occupancy.children, childrenWithBed, childrenWithoutBed, occupancyKey, baseRate: Math.round(commercialBase * 100) / 100, baseAmount: Math.round(effectiveAmount * 100) / 100, publicPrePromoRate: Math.round(publicPrePromoRate * 100) / 100, corporateAdjustment, corporateEffectiveRate: agreement ? Math.round(corporateEffectiveRate * 100) / 100 : null, corporateRateAgreement: agreement ? { id: agreement.id, pricingType: agreement.pricingType, fixedRate: agreement.fixedRate == null ? null : Number(agreement.fixedRate), discountPercent: agreement.discountPercent } : null, supplementAmount, manualOverride: hasManualOverride ? Number(rate.overrideAmount) : null, contractRateUnavailable: Boolean(agentSlabContext && (rate?.contractRateUnavailable || !slabCoverage)), seasonApplied: season ? { id: season.id, name: season.name, adjustment: Math.round(seasonAdjustment * 100) / 100 } : null, yieldRuleApplied: yieldRule ? { id: yieldRule.id, name: yieldRule.name, occupancyPercent: Math.round(occupancyPercent * 100) / 100, adjustment: Math.round((publicPrePromoRate - pricing.seasonAdjustedRate) * 100) / 100 } : null };
       });
       const occupancyKeys = roomBreakdown.map((item) => item.occupancyKey);
       const base = roomBreakdown.reduce((sum, item) => sum + item.baseAmount, 0);
@@ -155,11 +170,11 @@ export class AvailabilityService {
       const applicableCharges = supplementaryCharges.filter((charge) => toDateOnly(charge.startDate) <= toDateOnly(night) && toDateOnly(charge.endDate) >= toDateOnly(night));
       const supplementaryChargeLines = applicableCharges.map((charge) => ({ id: charge.id, name: charge.name, amountPerRoomNight: Number(charge.amountPerRoomNight), rooms: input.rooms, amount: Math.round(Number(charge.amountPerRoomNight) * input.rooms * 100) / 100 }));
       const supplementaryAmount = supplementaryChargeLines.reduce((sum, charge) => sum + charge.amount, 0);
-      return { date: toDateOnly(night), rooms: roomBreakdown, occupancy: occupancyKeys, baseRate: roomBreakdown.reduce((sum, item) => sum + item.baseRate, 0), baseAmount: base, manualOverride: roomBreakdown.length === 1 ? roomBreakdown[0].manualOverride : null, seasonApplied: roomBreakdown.length === 1 ? roomBreakdown[0].seasonApplied : null, yieldRuleApplied: roomBreakdown.length === 1 ? roomBreakdown[0].yieldRuleApplied : null, taxAmount: tax, extrasAmount: extras, supplementaryCharges: supplementaryChargeLines, supplementaryAmount, prePromotionAmount: base + tax + extras + supplementaryAmount, totalAmount: base + tax + extras + supplementaryAmount, priceSource: rate?.priceSource ?? 'RATE_PLAN', agentRatePlanId: rate?.agentRatePlanId ?? null };
+      return { date: toDateOnly(night), rooms: roomBreakdown, occupancy: occupancyKeys, baseRate: roomBreakdown.reduce((sum, item) => sum + item.baseRate, 0), baseAmount: base, manualOverride: roomBreakdown.length === 1 ? roomBreakdown[0].manualOverride : null, seasonApplied: roomBreakdown.length === 1 ? roomBreakdown[0].seasonApplied : null, yieldRuleApplied: roomBreakdown.length === 1 ? roomBreakdown[0].yieldRuleApplied : null, taxAmount: tax, extrasAmount: extras, supplementaryCharges: supplementaryChargeLines, supplementaryAmount, prePromotionAmount: base + tax + extras + supplementaryAmount, totalAmount: base + tax + extras + supplementaryAmount, priceSource: rate?.priceSource ?? 'RATE_PLAN', agentRatePlanId: rate?.agentRatePlanId ?? null, agentPricing: rate?.priceSource === 'AGENT_SLAB' ? { agentId, slabId: rate.slabId, slabCode: rate.slabCode, slabVersion: rate.slabVersion, slabRateId: rate.slabRateId, ratePlanId: plan.id, mealPlan: plan.mealPlan, resolvedNightlyAmount: rate.amount, taxRatePercent: rate.taxRatePercent ?? null, taxPolicy: 'BEFORE_STATUTORY_TAX' } : null };
     });
     for (const item of breakdown) item.totalAmount = Math.round(Number(item.totalAmount) * 100) / 100;
     const subtotal = Math.round(breakdown.reduce((sum, item) => sum + item.totalAmount, 0) * 100) / 100;
-    const eligiblePromotions = corporate ? promotions.filter((promotion: any) => Array.isArray(promotion.channels) && promotion.channels.map((value: unknown) => String(value).trim().toUpperCase()).includes(BookingSource.COMPANY)) : promotions;
+    const eligiblePromotions = agentId ? promotions.filter((promotion: any) => Array.isArray(promotion.channels) && promotion.channels.map((value: unknown) => String(value).trim().toUpperCase()).includes(BookingSource.AGENT)) : corporate ? promotions.filter((promotion: any) => Array.isArray(promotion.channels) && promotion.channels.map((value: unknown) => String(value).trim().toUpperCase()).includes(BookingSource.COMPANY)) : promotions;
     const selectedPromotion = selectBestPromotion(eligiblePromotions, { bookingDate: toDateOnly(getHotelOperationalDate(timezoneName)), stayDate: from, nights, subtotal, channel: corporate ? BookingSource.COMPANY : channel, code: promotionCode, roomTypeId: room.id, ratePlanId: plan.id });
     const discountAmount = Math.round(Math.min(subtotal, selectedPromotion?.discount ?? 0) * 100) / 100;
     const total = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100);
@@ -198,20 +213,24 @@ export class AvailabilityService {
       rooms: input.rooms,
       adults: input.adults,
       children: input.children,
+      childrenWithBed: input.childrenWithBed,
+      childrenWithoutBed: input.childrenWithoutBed,
       total,
       taxTotal,
       supplementaryTotal,
       discountAmount,
       corporateAccount: corporate ? { id: corporate.account.id, name: corporate.account.name } : null,
       promotionApplied: selectedPromotion ? { id: selectedPromotion.promotion.id, code: selectedPromotion.promotion.code ?? null, name: selectedPromotion.promotion.name, discountType: selectedPromotion.promotion.discountType, discountValue: Number(selectedPromotion.promotion.discountValue) } : null,
-      available: inventoryAvailable && restrictionsValid && occupancyValid,
+      available: inventoryAvailable && restrictionsValid && occupancyValid && !(agentSlabContext && !slabCoverage),
       availableRooms: inventoryComplete ? Math.min(...occupiedNights.map((night) => {
         const day = inventoryByDate.get(toDateOnly(night));
         return Math.max(0, day.available - day.held - day.sold - Number(day.groupBlocked ?? 0));
       })) : 0,
       priceBreakdown: breakdown,
-      priceSource: 'RATE_PLAN',
+      priceSource: breakdown.find((item) => item.priceSource)?.priceSource ?? 'RATE_PLAN',
       agentRatePlanId: resolved.assignment?.id ?? null,
+      agentPricing: breakdown.find((item) => item.agentPricing)?.agentPricing ?? null,
+      contractRateUnavailable: Boolean(agentSlabContext && breakdown.some((item) => item.rooms.some((roomItem: any) => roomItem.contractRateUnavailable))),
       restrictions: { cta: Boolean(arrivalRate?.cta), ctd: Boolean(departureRate?.ctd), minLos: arrivalRate?.minLos ?? null, maxLos: arrivalRate?.maxLos ?? null },
     };
   }
@@ -220,14 +239,18 @@ export class AvailabilityService {
     return persons <= 1 ? 'single' : persons === 2 ? 'double' : persons === 3 ? 'triple' : 'quad';
   }
 
-  private normalizeOccupancy(input: { rooms: number; adults: number; children: number; occupancies?: RoomOccupancy[] }) {
-    if (!input.occupancies?.length) return input;
-    return { ...input, rooms: input.occupancies.length, adults: input.occupancies.reduce((sum, item) => sum + item.adults, 0), children: input.occupancies.reduce((sum, item) => sum + item.children, 0) };
+  private normalizeOccupancy(input: { rooms: number; adults: number; children: number; childrenWithBed?: number; childrenWithoutBed?: number; occupancies?: RoomOccupancy[] }) {
+    if (!input.occupancies?.length) {
+      const explicit = input.childrenWithBed !== undefined || input.childrenWithoutBed !== undefined;
+      return explicit ? { ...input, children: Number(input.childrenWithBed ?? 0) + Number(input.childrenWithoutBed ?? 0) } : input;
+    }
+    return { ...input, rooms: input.occupancies.length, adults: input.occupancies.reduce((sum, item) => sum + item.adults, 0), children: input.occupancies.reduce((sum, item) => sum + item.children, 0), childrenWithBed: input.occupancies.reduce((sum, item) => sum + Number(item.childrenWithBed ?? 0), 0), childrenWithoutBed: input.occupancies.reduce((sum, item) => sum + Number(item.childrenWithoutBed ?? 0), 0) };
   }
 
-  private distributeOccupancy(room: any, input: { rooms: number; adults: number; children: number }) {
+  private distributeOccupancy(room: any, input: { rooms: number; adults: number; children: number; childrenWithBed?: number; childrenWithoutBed?: number }) {
     let adults = input.adults;
-    let children = input.children;
+    let childrenWithBed = input.childrenWithBed ?? input.children;
+    let childrenWithoutBed = input.childrenWithoutBed ?? 0;
     const maxAdults = Math.max(1, Number(room.maxAdults ?? 1));
     const maxChildren = Math.max(0, Number(room.maxChildren ?? 0));
     const maxOccupancy = Math.max(1, Number(room.maxOccupancy ?? maxAdults + maxChildren));
@@ -236,12 +259,14 @@ export class AvailabilityService {
       const adultsForRoom = Math.min(adults, maxAdults, maxOccupancy);
       adults -= adultsForRoom;
       const childrenCapacity = Math.min(maxChildren, maxOccupancy - adultsForRoom);
-      const childrenForRoom = Math.min(children, Math.max(0, childrenCapacity));
-      children -= childrenForRoom;
+      const childrenForRoomWithBed = Math.min(childrenWithBed, Math.max(0, childrenCapacity));
+      childrenWithBed -= childrenForRoomWithBed;
+      const childrenForRoomWithoutBed = Math.min(childrenWithoutBed, Math.max(0, childrenCapacity - childrenForRoomWithBed));
+      childrenWithoutBed -= childrenForRoomWithoutBed;
       // A booked room is charged at least its single-occupancy price even when
       // aggregate guest counts leave one room empty.
-      if (roomsLeft === 0 && (adults > 0 || children > 0)) return { adults: adultsForRoom + adults + children, children: childrenForRoom };
-      return { adults: adultsForRoom, children: childrenForRoom };
+      if (roomsLeft === 0 && (adults > 0 || childrenWithBed > 0 || childrenWithoutBed > 0)) return { adults: adultsForRoom + adults + childrenWithBed + childrenWithoutBed, children: childrenForRoomWithBed + childrenForRoomWithoutBed, childrenWithBed: childrenForRoomWithBed, childrenWithoutBed: childrenForRoomWithoutBed };
+      return { adults: adultsForRoom, children: childrenForRoomWithBed + childrenForRoomWithoutBed, childrenWithBed: childrenForRoomWithBed, childrenWithoutBed: childrenForRoomWithoutBed };
     });
   }
 }

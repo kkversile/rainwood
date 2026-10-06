@@ -49,12 +49,12 @@ test('payment terms display one milestone per line in the agent table', () => {
   assert.match(globalsCss, /agentPaymentMilestones\{flex-direction:column/);
 });
 
-test('rate plan assignments use the selected hotel count and business wording', () => {
-  assert.match(agentsPage, /Save assignment/);
-  assert.match(agentsPage, /hotel-rate-plan/);
-  assert.match(agentsPage, /selectedMasterId/);
-  assert.match(agentsPage, /Multiple rate plans are currently assigned to this hotel/);
-  assert.match(agentsPage, /aria-label=\{'Edit rate plans for ' \+ agent\.name\}/);
+test('legacy agent mappings are displayed as migration fallback and cannot be mutated here', () => {
+  assert.match(agentsPage, /Pricing source: Legacy Agent Rate Plan · view only · migration fallback/);
+  assert.match(agentsPage, /Legacy commercial editing is view-only here/);
+  assert.doesNotMatch(agentsPage, /Save assignment/);
+  assert.doesNotMatch(agentsPage, /Delete assignment/);
+  assert.doesNotMatch(agentsPage, /aria-label=\{'Edit rate plans for ' \+ agent\.name\}/);
   assert.doesNotMatch(agentsPage, /selectedHotelPlanIds/);
   assert.doesNotMatch(agentsPage, /Contract Rate|Hotel Rate|pricingMode|AGENT_OVERRIDE/);
 });

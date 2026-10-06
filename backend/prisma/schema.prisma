@@ -242,6 +242,18 @@ enum ReservationSettlementStatus {
   VOIDED
 }
 
+enum AgentRateSlabStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+enum RatePlanMasterKind {
+  CANONICAL_MEAL
+  SPECIAL_PRODUCT
+  LEGACY
+}
+
 enum HotelBusinessDayStatus {
   OPEN
   CLOSED
@@ -608,7 +620,7 @@ model User {
   refreshTokens                    RefreshToken[]
   auditLogs                        AuditLog[]                  @relation("AuditActor")
   featureSettingsUpdated           FeatureSetting[]            @relation("FeatureSettingUpdatedBy")
-  featureOverridesUpdated          HotelFeatureOverride[]       @relation("HotelFeatureOverrideUpdatedBy")
+  featureOverridesUpdated          HotelFeatureOverride[]      @relation("HotelFeatureOverrideUpdatedBy")
   createdReservations              Reservation[]               @relation("ReservationCreator")
   reconfirmedReservations          Reservation[]               @relation("ReservationReconfirmedBy")
   checkedInReservations            Reservation[]               @relation("ReservationCheckedInBy")
@@ -640,6 +652,12 @@ model User {
   recordedTdsDeductions            TdsDeduction[]              @relation("TdsRecorder")
   reversedTdsDeductions            TdsDeduction[]              @relation("TdsReverser")
   assignedRatePlans                AgentRatePlan[]
+  agentRateSlabAssignments         AgentRateSlabAssignment[]
+  createdAgentRateSlabs            AgentRateSlab[]             @relation("AgentRateSlabCreatedBy")
+  updatedAgentRateSlabs            AgentRateSlab[]             @relation("AgentRateSlabUpdatedBy")
+  createdAgentRateSlabAssignments  AgentRateSlabAssignment[]   @relation("AgentRateSlabAssignmentCreatedBy")
+  agentRateSheets                  AgentRateSheet[]
+  publishedAgentRateSheets         AgentRateSheet[]            @relation("AgentRateSheetPublishedBy")
   guestNotes                       GuestNote[]
   paymentMilestones                AgentPaymentMilestone[]
   createdGroups                    GroupReservation[]          @relation("GroupCreator")
@@ -796,6 +814,7 @@ model Hotel {
   documentSequences       DocumentSequence[]
   serviceItems            ServiceItem[]
   serviceOrders           GuestServiceOrder[]
+  bankAccounts            HotelBankAccount[]
   lostFoundItems          LostFoundItem[]
   cashierShifts           CashierShift[]
   taxProfiles             HotelTaxProfile[]
@@ -1001,6 +1020,7 @@ model RatePlanMaster {
   code        String
   name        String
   mealPlan    String
+  kind        RatePlanMasterKind @default(LEGACY)
   description String?
   active      Boolean    @default(true)
   createdAt   DateTime   @default(now())
@@ -1258,6 +1278,7 @@ model RatePlan {
   holdLines               InventoryHoldLine[]
   cancellationRules       CancellationRule[]
   assignedAgents          AgentRatePlan[]
+  slabRates               AgentRateSlabRate[]
   promotionRates          PromotionRatePlan[]
   seasonRates             RateSeasonRatePlan[]
   corporateRateAgreements CorporateRateAgreement[]
@@ -1294,6 +1315,89 @@ model AgentRatePlan {
   @@unique([agentId, ratePlanId])
   @@index([ratePlanId])
   @@index([agentId, active])
+}
+
+model AgentRateSlab {
+  id          String                    @id @default(cuid())
+  code        String
+  name        String
+  description String?
+  validFrom   DateTime                  @db.Date
+  validTo     DateTime                  @db.Date
+  version     Int                       @default(1)
+  status      AgentRateSlabStatus       @default(DRAFT)
+  active      Boolean                   @default(true)
+  createdById String?
+  createdBy   User?                     @relation("AgentRateSlabCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById String?
+  updatedBy   User?                     @relation("AgentRateSlabUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  rates       AgentRateSlabRate[]
+  assignments AgentRateSlabAssignment[]
+  sheets      AgentRateSheet[]
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+
+  @@unique([code, version])
+  @@index([code, active, status])
+  @@index([validFrom, validTo])
+}
+
+model AgentRateSlabRate {
+  id                      String        @id @default(cuid())
+  slabId                  String
+  ratePlanId              String
+  validFrom               DateTime      @db.Date
+  validTo                 DateTime      @db.Date
+  amount                  Decimal       @db.Decimal(12, 2)
+  extraAdultAmount        Decimal       @default(0) @db.Decimal(12, 2)
+  extraChildWithBedAmount Decimal       @default(0) @db.Decimal(12, 2)
+  childWithoutBedAmount   Decimal       @default(0) @db.Decimal(12, 2)
+  occupancyPrices         Json?
+  active                  Boolean       @default(true)
+  slab                    AgentRateSlab @relation(fields: [slabId], references: [id], onDelete: Cascade)
+  ratePlan                RatePlan      @relation(fields: [ratePlanId], references: [id], onDelete: Restrict)
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  @@unique([slabId, ratePlanId, validFrom, validTo])
+  @@index([slabId, active, validFrom, validTo])
+  @@index([ratePlanId, active, validFrom, validTo])
+}
+
+model AgentRateSlabAssignment {
+  id          String        @id @default(cuid())
+  agentId     String
+  slabId      String
+  validFrom   DateTime      @db.Date
+  validTo     DateTime      @db.Date
+  active      Boolean       @default(true)
+  createdById String?
+  agent       User          @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  slab        AgentRateSlab @relation(fields: [slabId], references: [id], onDelete: Cascade)
+  createdBy   User?         @relation("AgentRateSlabAssignmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([agentId, slabId, validFrom])
+  @@index([agentId, active, validFrom, validTo])
+  @@index([slabId, active])
+}
+
+model AgentRateSheet {
+  id            String        @id @default(cuid())
+  agentId       String
+  slabId        String
+  version       Int
+  snapshotJson  Json
+  publishedAt   DateTime      @default(now())
+  publishedById String?
+  agent         User          @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  slab          AgentRateSlab @relation(fields: [slabId], references: [id], onDelete: Cascade)
+  publishedBy   User?         @relation("AgentRateSheetPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime      @default(now())
+
+  @@unique([agentId, slabId, version])
+  @@index([agentId, publishedAt])
 }
 
 model AgentWallet {
@@ -1403,6 +1507,24 @@ model HotelSupplementaryCharge {
   updatedAt          DateTime                 @updatedAt
 
   @@index([hotelId, active, startDate, endDate])
+}
+
+model HotelBankAccount {
+  id                      String   @id @default(cuid())
+  hotelId                 String
+  hotel                   Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  accountName             String
+  bankName                String
+  branch                  String?
+  accountNumber           String
+  ifsc                    String?
+  accountType             String?
+  active                  Boolean  @default(true)
+  displayOnAgentRateSheet Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([hotelId, active, displayOnAgentRateSheet])
 }
 
 model InventoryDay {
@@ -1606,6 +1728,8 @@ model InventoryHoldLine {
   rooms           Int
   adults          Int
   children        Int                  @default(0)
+  childrenWithBed Int                  @default(0)
+  childrenWithoutBed Int               @default(0)
   quotedTotal     Decimal              @db.Decimal(12, 2)
   quotedTax       Decimal              @default(0) @db.Decimal(12, 2)
   quotedBreakdown Json
@@ -2583,6 +2707,8 @@ model ReservationLine {
   rooms           Int
   adults          Int
   children        Int                         @default(0)
+  childrenWithBed Int                         @default(0)
+  childrenWithoutBed Int                      @default(0)
   nightlyRate     Decimal                     @db.Decimal(12, 2)
   taxAmount       Decimal                     @default(0) @db.Decimal(12, 2)
   lineTotal       Decimal                     @db.Decimal(12, 2)

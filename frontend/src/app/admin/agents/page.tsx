@@ -1,8 +1,8 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { FormEvent, useEffect, useState } from 'react';
 import { AdminLayout } from '../../../components/Shell';
+import { useAdminProfile } from '../../../components/AdminData';
 import { apiFileBlob, apiRequest } from '../../../lib/api';
 import { hasUsableDocumentFile } from '../../../lib/booking-pricing';
 import {
@@ -49,6 +49,7 @@ type Agent = {
   paymentMilestones?: ApiMilestone[];
   agentDocuments?: AgentDocument[];
   assignedRatePlans?: Mapping[];
+  agentRateSlabAssignments?: { id: string; active: boolean; validFrom: string; validTo: string; slab: { code: string; name: string; version: number } }[];
 };
 type AgentDetail = Agent & {
   contactPerson?: string | null;
@@ -62,15 +63,7 @@ type AgentDetail = Agent & {
   additionalInformation?: string | null;
   agentDocuments: AgentDocument[];
 };
-type Plan = {
-  id: string;
-  code: string;
-  name: string;
-  mealPlan: string;
-  active: boolean;
-  master: { id: string; code: string; name: string; mealPlan: string; active: boolean };
-  roomType: { name: string; hotel: { id: string; name: string; city: string } };
-};
+type Slab = { id: string; code: string; name: string; version: number; validFrom: string; validTo: string; status: string; active: boolean };
 
 const blank = { name: '', email: '', password: '' };
 
@@ -90,19 +83,9 @@ function agentEmail(email: string) {
   if (at <= 0) return <span className="agentEmail">{email}</span>;
   return <span className="agentEmail"><span>{email.slice(0, at)}</span><span className="agentEmailDomain">@{email.slice(at + 1)}</span></span>;
 }
-function AgentRateAssignmentSave({ busy, disabled, warning, onSave }: { busy: boolean; disabled: boolean; warning: boolean; onSave: () => void }) {
-  const [target, setTarget] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    setTarget(document.querySelector<HTMLElement>('.agentRateModal .rangeSectionHeader'));
-    if (warning) {
-      const warningElement = document.querySelector<HTMLElement>('.agentRateModal p.error');
-      if (warningElement) warningElement.textContent = 'Multiple rate plans are currently assigned to this hotel. Select the single commercial rate plan that should remain active.';
-    }
-  }, [warning]);
-  if (!target) return null;
-  return createPortal(<button className="agentRateModalHeaderSave smallBtn" type="button" disabled={busy || disabled} onClick={onSave}>{busy ? 'Saving...' : 'Save assignment'}</button>, target);
-}
 export default function AgentsPage() {
+  const { profile } = useAdminProfile();
+  const canManageSlabs = profile?.role === 'SUPER_ADMIN' || profile?.role === 'CORPORATE_ADMIN';
   const [agents, setAgents] = useState<Agent[]>([]);
   const [form, setForm] = useState(blank);
   const [formMilestones, setFormMilestones] = useState<MilestoneDraft[]>(defaultMilestones());
@@ -112,11 +95,11 @@ export default function AgentsPage() {
   const [editingPaymentAgentId, setEditingPaymentAgentId] = useState<string | null>(null);
   const [termsMilestones, setTermsMilestones] = useState<MilestoneDraft[]>(defaultMilestones());
   const [remarks, setRemarks] = useState<Record<string, string>>({});
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [assignmentAgent, setAssignmentAgent] = useState<Agent | null>(null);
-  const [selectedMasterId, setSelectedMasterId] = useState('');
-  const [hotelFilter, setHotelFilter] = useState('');
-  const [planSearch, setPlanSearch] = useState('');
+  const [slabAssignmentAgent, setSlabAssignmentAgent] = useState<Agent | null>(null);
+  const [slabs, setSlabs] = useState<Slab[]>([]);
+  const [selectedSlabId, setSelectedSlabId] = useState('');
+  const [slabValidFrom, setSlabValidFrom] = useState('');
+  const [slabValidTo, setSlabValidTo] = useState('');
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -124,7 +107,9 @@ export default function AgentsPage() {
 
   async function load() {
     try {
-      setAgents(await apiRequest<Agent[]>('/users/agents'));
+      const base = await apiRequest<Agent[]>('/users/agents');
+      const enriched = await Promise.all(base.map(async (agent) => ({ ...agent, agentRateSlabAssignments: await apiRequest<NonNullable<Agent['agentRateSlabAssignments']>>(`/agents/${agent.id}/rate-slab`) })));
+      setAgents(enriched);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not load agents');
     }
@@ -280,74 +265,47 @@ export default function AgentsPage() {
     }
   }
   function openAssignments(agent: Agent) {
-    setAssignmentAgent(agent);
-    setSelectedMasterId('');
-    setHotelFilter('');
-    setPlanSearch('');
+    setSlabAssignmentAgent(agent);
+    const activeAssignment = agent.agentRateSlabAssignments?.find((item) => item.active);
+    setSelectedSlabId(activeAssignment?.slab ? '' : '');
+    setSlabValidFrom(activeAssignment?.validFrom.slice(0, 10) ?? '');
+    setSlabValidTo(activeAssignment?.validTo.slice(0, 10) ?? '');
     setError('');
-    void apiRequest<Plan[]>('/hotels/rate-plans')
-      .then((items) => setPlans(items.filter((item) => item.active)))
-      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load rate plans'));
+    void apiRequest<Slab[]>('/agent-rate-slabs')
+      .then((items) => setSlabs(items.filter((item) => item.active && item.status === 'PUBLISHED')))
+      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load published rate slabs'));
   }
-  const hotels = useMemo(() => Array.from(new Map(plans.map((plan) => [plan.roomType.hotel.id, plan.roomType.hotel])).values()).sort((a, b) => a.name.localeCompare(b.name)), [plans]);
-  const visiblePlans = useMemo(() => {
-    const query = planSearch.trim().toLowerCase();
-    return plans.filter((plan) => Boolean(hotelFilter) && plan.roomType.hotel.id === hotelFilter && (!query || `${plan.code} ${plan.name} ${plan.mealPlan} ${plan.roomType.name}`.toLowerCase().includes(query)));
-  }, [hotelFilter, planSearch, plans]);
-  const masterGroups = useMemo(() => {
-    const groups = new Map<string, { master: Plan['master']; plans: Plan[] }>();
-    for (const plan of visiblePlans) {
-      const group = groups.get(plan.master.id) ?? { master: plan.master, plans: [] };
-      group.plans.push(plan);
-      groups.set(plan.master.id, group);
-    }
-    return [...groups.values()].sort((a, b) => `${a.master.code} ${a.master.name}`.localeCompare(`${b.master.code} ${b.master.name}`));
-  }, [visiblePlans]);
-  const assignedMasterGroups = useMemo(() => {
-    const groups = new Map<string, { hotel: Mapping['ratePlan']['roomType']['hotel']; master: Mapping['ratePlan']['master']; items: Mapping[] }>();
-    for (const mapping of (assignmentAgent?.assignedRatePlans ?? []).filter((item) => item.active !== false)) {
-      const key = `${mapping.ratePlan.roomType.hotel.id}:${mapping.ratePlan.master.id}`;
-      const group = groups.get(key) ?? { hotel: mapping.ratePlan.roomType.hotel, master: mapping.ratePlan.master, items: [] };
-      group.items.push(mapping);
-      groups.set(key, group);
-    }
-    return [...groups.values()];
-  }, [assignmentAgent]);
-  const hotelConflicts = useMemo(() => !selectedMasterId && new Set(assignedMasterGroups.filter((group) => group.hotel.id === hotelFilter).map((group) => group.master.id)).size > 1, [assignedMasterGroups, hotelFilter, selectedMasterId]);
-  useEffect(() => {
-    if (!hotelFilter) return;
-    const masters = new Set((assignmentAgent?.assignedRatePlans ?? []).filter((item) => item.active !== false && item.ratePlan.roomType.hotel.id === hotelFilter).map((item) => item.ratePlan.master.id));
-    setSelectedMasterId(masters.size === 1 ? [...masters][0] : '');
-  }, [assignmentAgent, hotelFilter]);
-  async function saveAssignments() {
-    if (!assignmentAgent || !hotelFilter || !selectedMasterId) return;
+  const selectedSlab = slabs.find((item) => item.id === selectedSlabId);
+  async function saveSlabAssignments() {
+    if (!slabAssignmentAgent || !selectedSlabId || !slabValidFrom || !slabValidTo) return;
     setBusy(true);
     setError('');
     try {
-      const saved = await apiRequest<Agent>(`/users/agents/${assignmentAgent.id}/hotel-rate-plan`, {
-        method: 'PUT',
-        body: JSON.stringify({ hotelId: hotelFilter, masterId: selectedMasterId }),
+      const savedAssignment = await apiRequest<NonNullable<Agent['agentRateSlabAssignments']>[number]>(`/agents/${slabAssignmentAgent.id}/rate-slab`, {
+        method: 'POST',
+        body: JSON.stringify({ slabId: selectedSlabId, validFrom: slabValidFrom, validTo: slabValidTo }),
       });
-      setAssignmentAgent(null);
-      setMessage(`Rate plans saved for ${assignmentAgent.name}. Access mappings were preserved.`);
-      setAgents((current) => current.map((item) => item.id === saved.id ? saved : item));
+      const assignments = await apiRequest<NonNullable<Agent['agentRateSlabAssignments']>>(`/agents/${slabAssignmentAgent.id}/rate-slab`);
+      setSlabAssignmentAgent({ ...slabAssignmentAgent, agentRateSlabAssignments: assignments });
+      setAgents((current) => current.map((item) => item.id === slabAssignmentAgent.id ? { ...item, agentRateSlabAssignments: assignments } : item));
+      setMessage(`Rate slab ${savedAssignment.slab.code} assigned to ${slabAssignmentAgent.name}.`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not save rate-plan assignments');
+      setError(reason instanceof Error ? reason.message : 'Could not assign rate slab');
     } finally {
       setBusy(false);
     }
   }
-  async function removeAssignment(masterId: string, hotelName: string) {
-    if (!assignmentAgent || !window.confirm(`Remove the commercial rate plan from ${hotelName}? The agent will no longer receive its rates.`)) return;
+  async function removeSlabAssignment(assignmentId: string, slabName: string) {
+    if (!slabAssignmentAgent || !window.confirm(`Remove ${slabName} from this agent?`)) return;
     setBusy(true);
     try {
-      const saved = await apiRequest<Agent>(`/users/agents/${assignmentAgent.id}/rate-plan-masters/${masterId}`, { method: 'DELETE' });
-      setAssignmentAgent(saved);
-      setAgents((current) => current.map((item) => item.id === saved.id ? saved : item));
-      if (selectedMasterId === masterId) setSelectedMasterId('');
-      setMessage(`Rate plan removed from ${hotelName}.`);
+      await apiRequest(`/agents/${slabAssignmentAgent.id}/rate-slab/${assignmentId}/remove`, { method: 'POST' });
+      const assignments = await apiRequest<NonNullable<Agent['agentRateSlabAssignments']>>(`/agents/${slabAssignmentAgent.id}/rate-slab`);
+      setSlabAssignmentAgent({ ...slabAssignmentAgent, agentRateSlabAssignments: assignments });
+      setAgents((current) => current.map((item) => item.id === slabAssignmentAgent.id ? { ...item, agentRateSlabAssignments: assignments } : item));
+      setMessage(`Rate slab removed from ${slabAssignmentAgent.name}.`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not remove rate-plan assignment');
+      setError(reason instanceof Error ? reason.message : 'Could not remove rate slab assignment');
     } finally { setBusy(false); }
   }
   const kycReady = Boolean(review?.agentDocuments.length && review.agentDocuments.every((document) => document.status === 'APPROVED'));
@@ -378,14 +336,13 @@ export default function AgentsPage() {
             <td><b>{agent.name}</b><small>{agent.companyName || ''}</small></td>
             <td className="agentEmailCell">{agentEmail(agent.email)}</td>
             <td className="agentPaymentTermsCell">{isEditingTerms ? <CompactPaymentTermsEditor value={termsMilestones} onChange={setTermsMilestones} onCancel={cancelTerms} onSave={() => void saveInlineTerms()} busy={busy} /> : <div className="agentPaymentTermsDisplay"><div className="agentMilestoneBadges agentPaymentMilestones">{agent.paymentMilestones?.length ? agent.paymentMilestones.map((item, index) => <span className="status" title={item.dueType === 'DAYS_BEFORE_CHECKIN' ? String(Number(item.daysBeforeCheckIn ?? 0)) + ' days before check-in' : 'Due when the booking is made'} key={item.dueType + '-' + String(item.daysBeforeCheckIn) + '-' + String(index)}>{milestoneLabel(item)}</span>) : <span>{agentHasTerms(agent) ? String(Number(agent.bookingPaymentPercent ?? 0)) + '% legacy' : 'Unassigned'}</span>}</div><button className="paymentTermsEditIcon" type="button" aria-label={'Edit payment terms for ' + agent.name} onClick={() => openTerms(agent)}>Edit</button></div>}</td>
-            <td><div className="agentMilestoneBadges agentRatePlanSummary">{summary.map((item) => <span className="status" key={item}>{item}</span>)}{!summary.length && <span>Not assigned</span>}<button className="paymentTermsEditIcon" type="button" aria-label={'Edit rate plans for ' + agent.name} onClick={() => openAssignments(agent)}>Edit</button></div></td>
+              <td><div className="agentMilestoneBadges agentRatePlanSummary">{agent.agentRateSlabAssignments?.filter((item) => item.active).map((item) => <span className="status ok" key={item.id}>{item.slab.code} · {item.slab.name}<small>Version {item.slab.version} · {item.validFrom.slice(0, 10)} → {item.validTo.slice(0, 10)}</small></span>)}{!agent.agentRateSlabAssignments?.some((item) => item.active) && summary.map((item) => <span className="status" key={item}>{item}</span>)}{!summary.length && !agent.agentRateSlabAssignments?.some((item) => item.active) && <span>Not assigned</span>}{canManageSlabs && <button className="paymentTermsEditIcon" type="button" aria-label={'Change rate slab for ' + agent.name} onClick={() => openAssignments(agent)}>Change</button>}</div>{agent.agentRateSlabAssignments?.some((item) => item.active) ? <small className="mutedText">Pricing source: Agent Rate Slab</small> : mappings.length ? <small className="mutedText">Pricing source: Legacy Agent Rate Plan · view only · migration fallback</small> : null}</td>
             <td><span className={'status ' + (status === 'Active' ? 'ok' : status === 'Under Review' || status === 'KYC Pending' ? 'warn' : 'muted')}>{status}</span></td>
             <td><div className="rowActions"><button className="smallBtn" type="button" onClick={() => void openReview(agent)}>{status === 'Under Review' || status === 'KYC Pending' ? 'Open / Review' : 'Open Details'}</button><button className="smallBtn" type="button" onClick={() => edit(agent)}>Edit</button>{status === 'Active' && <button className="smallBtn secondary" type="button" disabled={busy} onClick={() => void toggle(agent)}>Deactivate</button>}{status === 'Deactivated' && <button className="smallBtn secondary" type="button" disabled={busy} onClick={() => void toggle(agent)}>Reactivate</button>}</div></td>
           </tr>;
         })}
       </tbody></table></div></section>
     </section>
-    {assignmentAgent && <div className="agentRateModalBackdrop"><section className="panel agentRateEditor agentRateModal" role="dialog" aria-modal="true" aria-label="Rate plan assignments"><div className="rangeSectionHeader"><div><span>Rate-plan access</span><h2>Rate Plan Assignments - {assignmentAgent.companyName || assignmentAgent.name}</h2></div><button className="smallBtn" type="button" onClick={() => setAssignmentAgent(null)}>Cancel</button></div><label>Hotel<select value={hotelFilter} onChange={(event) => setHotelFilter(event.target.value)}><option value="">Select a hotel</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name} - {hotel.city}</option>)}</select></label>{hotelFilter ? <><label>Search commercial plans<input value={planSearch} onChange={(event) => setPlanSearch(event.target.value)} placeholder="BAR, CP Breakfast or Deluxe Room" /></label><p className="mutedText">Choose exactly one commercial rate plan for this hotel. All of its active room plans will be available to the agent.</p>{hotelConflicts && <p className="error">This agent currently has more than one commercial plan for this hotel. Select one plan and save to resolve the conflict.</p>}<div className="mappingGrid">{masterGroups.map((group) => <label className={`mappingCard ${selectedMasterId === group.master.id ? 'selected' : ''}`} key={group.master.id}><input type="radio" name={`agent-hotel-master-${hotelFilter}`} value={group.master.id} checked={selectedMasterId === group.master.id} onChange={() => setSelectedMasterId(group.master.id)} /><b>{group.master.code} - {group.master.name}</b><small>{group.master.mealPlan} · Available for: {Array.from(new Set(group.plans.map((plan) => plan.roomType.name))).sort().join(', ')}</small></label>)}{!masterGroups.length && <p className="empty">No active commercial rate plans found for this hotel.</p>}</div></> : <p className="empty">Select a hotel to see its active commercial rate plans.</p>}<h3>Current assignments</h3><div className="currentAssignmentList">{assignedMasterGroups.map((group) => <div key={`${group.hotel.id}:${group.master.id}`}><b>{group.hotel.name} - {group.master.code} - {group.master.name}</b><p className="mutedText">Rooms: {group.items.length} · {Array.from(new Set(group.items.map((item) => item.ratePlan.roomType.name))).sort().join(', ')}</p><button className="smallBtn secondary" type="button" disabled={busy} onClick={() => void removeAssignment(group.master.id, group.hotel.name)}>Delete assignment</button></div>)}{!assignedMasterGroups.length && <p className="empty">No hotel rate-plan assignments.</p>}</div><div className="rowActions"><button className="btn" type="button" disabled={busy || !hotelFilter || !selectedMasterId || hotelConflicts} onClick={() => void saveAssignments()}>{busy ? 'Saving...' : 'Save assignment'}</button></div></section></div>}
-    {assignmentAgent && <AgentRateAssignmentSave busy={busy} disabled={!hotelFilter || !selectedMasterId} warning={hotelConflicts} onSave={() => void saveAssignments()} />}
+    {slabAssignmentAgent && <div className="agentRateModalBackdrop"><section className="panel agentRateEditor agentRateModal" role="dialog" aria-modal="true" aria-label="Agent rate slab assignment"><div className="rangeSectionHeader"><div><span>Commercial configuration</span><h2>Rate Slab Assignment - {slabAssignmentAgent.companyName || slabAssignmentAgent.name}</h2></div><button className="smallBtn" type="button" onClick={() => setSlabAssignmentAgent(null)}>Close</button></div>{slabAssignmentAgent.agentRateSlabAssignments?.filter((item) => item.active).map((item) => <div className="currentAssignmentList" key={item.id}><b>{item.slab.code} · {item.slab.name}</b><p className="mutedText">Version {item.slab.version} · {item.validFrom.slice(0, 10)} → {item.validTo.slice(0, 10)} · Pricing source: Agent Rate Slab</p>{canManageSlabs && <button className="smallBtn secondary" type="button" disabled={busy} onClick={() => void removeSlabAssignment(item.id, item.slab.name)}>Remove assignment</button>}</div>)}{!slabAssignmentAgent.agentRateSlabAssignments?.some((item) => item.active) && <div className="notice"><b>Pricing source: Legacy Agent Rate Plan</b><p>This is migration fallback data. Legacy commercial editing is view-only here; assign a published slab to move this agent to the canonical contract workflow.</p>{(slabAssignmentAgent.assignedRatePlans?.length ?? 0) > 0 && <p>Legacy mappings: {(slabAssignmentAgent.assignedRatePlans ?? []).map((item) => `${item.ratePlan.roomType.hotel.name} · ${item.ratePlan.master.code}`).join(', ')}</p>}</div>}{canManageSlabs && <form className="formGrid" onSubmit={(event) => { event.preventDefault(); void saveSlabAssignments(); }}><label>Published rate slab<select required value={selectedSlabId} onChange={(event) => { setSelectedSlabId(event.target.value); const slab = slabs.find((item) => item.id === event.target.value); if (slab) { setSlabValidFrom(slab.validFrom.slice(0, 10)); setSlabValidTo(slab.validTo.slice(0, 10)); } }}><option value="">Select a published slab</option>{slabs.map((slab) => <option key={slab.id} value={slab.id}>{slab.code} · {slab.name} · v{slab.version}</option>)}</select></label><label>Assignment from<input type="date" required value={slabValidFrom} onChange={(event) => setSlabValidFrom(event.target.value)} /></label><label>Assignment to<input type="date" required value={slabValidTo} onChange={(event) => setSlabValidTo(event.target.value)} /></label><div className="rowActions"><button className="btn" disabled={busy || !selectedSlab}>{busy ? 'Saving...' : 'Assign published slab'}</button></div></form>}{!canManageSlabs && <p className="mutedText">Property ADMIN access is read-only for agent slab assignments.</p>}</section></div>}
   </AdminLayout>;
 }

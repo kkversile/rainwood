@@ -26,6 +26,8 @@ export type AvailabilityOption = {
   rooms: number;
   adults: number;
   children: number;
+  childrenWithBed?: number;
+  childrenWithoutBed?: number;
   total: number;
   taxTotal: number;
   supplementaryTotal: number;

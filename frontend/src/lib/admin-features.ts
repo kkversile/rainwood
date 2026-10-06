@@ -4,7 +4,8 @@ import { apiRequest } from './api';
 import { useAdminProfile } from '../components/AdminData';
 import { ADMIN_GROUPS, FEATURE_NAVIGATION_ITEMS } from '../config/admin-navigation';
 
-export const FEATURE_CATALOG = FEATURE_NAVIGATION_ITEMS.map((item) => [item.featureKey, item.label, item.href] as const);
+const UNIQUE_FEATURE_ITEMS = FEATURE_NAVIGATION_ITEMS.filter((item, index, items) => items.findIndex((candidate) => candidate.featureKey === item.featureKey) === index);
+export const FEATURE_CATALOG = UNIQUE_FEATURE_ITEMS.map((item) => [item.featureKey, item.label, item.href] as const);
 export type AdminFeatureKey = string;
 export const FEATURE_KEYS = FEATURE_CATALOG.map(([key]) => key) as readonly AdminFeatureKey[];
 export const FEATURE_LABELS = Object.fromEntries(FEATURE_CATALOG.map(([key, label]) => [key, label])) as Record<AdminFeatureKey, string>;
@@ -17,7 +18,7 @@ export function canResetFeatureOverride(isDirty: boolean) {
 
 export function orderFeatureRows(rows: Array<{ key: string; enabled: boolean; source?: string }>): FeatureNavigationState[] {
   const backendByKey = new Map(rows.map((row) => [row.key, row]));
-  return FEATURE_NAVIGATION_ITEMS.map((item) => {
+  return UNIQUE_FEATURE_ITEMS.map((item) => {
     const key = item.featureKey;
     const backend = backendByKey.get(key);
     const group = ADMIN_GROUPS.find((candidate) => candidate.itemKeys.some((key) => key === item.key))?.label ?? 'System';
