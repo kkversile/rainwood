@@ -24,6 +24,8 @@ test('rate master is the compact five-column canonical grid', () => {
   assert.match(grid, /Child With Bed/);
   assert.match(grid, /Child Without Bed/);
   assert.doesNotMatch(grid, /Triple/);
+  assert.match(grid, /type="number"/);
+  assert.doesNotMatch(grid, /Mixed/);
   for (const plan of ['EP', 'CP', 'MAP', 'AP']) assert.match(page + grid, new RegExp(plan));
   for (const band of ['RACK', 'A', 'B', 'C', 'D', 'E']) assert.match(grid, new RegExp(`['"]${band}['"]`));
 });

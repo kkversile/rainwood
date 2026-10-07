@@ -123,7 +123,7 @@ export default function RateMasterPage() {
         if (!rack) return;
         for (const row of plan.rows) if (row.band !== 'RACK') {
           for (const field of GRID_FIELDS) row[field] = rack[field];
-          row.mixedFields = [...rack.mixedFields];
+          row.mixedFields = [];
         }
       }
     });
@@ -199,6 +199,6 @@ export default function RateMasterPage() {
     {!validRange && (from || to) && <p className="error" role="alert">Select both dates, with From on or before To, to load stored rates.</p>}
     {loading && <p className="loading" role="status">Loading Rate Master…</p>}
     {draft && !loading && <RateMasterGrid data={draft} expandedRooms={expandedRooms} expandedPlans={expandedPlans} onToggleRoom={toggleRoom} onTogglePlan={togglePlan} onCellChange={cellChange} onCopyRack={copyRack} onClearPlan={clearPlan} />}
-    <footer className="rateMasterStatusBar"><span><b>Keyboard:</b> Tab moves through cells · numeric entry · mixed cells can be replaced directly</span><span>{dirty ? 'Unsaved changes' : 'All changes saved'}</span></footer>
+    <footer className="rateMasterStatusBar"><span><b>Keyboard:</b> Tab moves through cells · numeric entry</span><span>{dirty ? 'Unsaved changes' : 'All changes saved'}</span></footer>
   </section></AdminLayout>;
 }

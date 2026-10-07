@@ -53,6 +53,11 @@ function planKey(roomId: string, ratePlanId: string) {
   return `${roomId}:${ratePlanId}`;
 }
 
+function rateInputValue(value: unknown): string {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue >= 0 ? String(numericValue) : '0';
+}
+
 export function RateMasterGrid({ data, expandedRooms, expandedPlans, onToggleRoom, onTogglePlan, onCellChange, onCopyRack, onClearPlan }: Props) {
   if (!data.rooms.length) return <p className="empty rateGridEmpty">Select a hotel to load the Rate Master grid.</p>;
   return <div className="rateMasterGrid" data-testid="rate-master-grid">
@@ -81,8 +86,7 @@ export function RateMasterGrid({ data, expandedRooms, expandedPlans, onToggleRoo
                 {(['RACK', 'A', 'B', 'C', 'D', 'E'] as GridBand[]).map((band) => {
                   const row = rowFor(plan, band);
                   return <tr className={band === 'RACK' ? 'rateGridRackRow' : ''} key={band}><th scope="row"><span>{band === 'RACK' ? 'Rack' : band}</span>{band === 'RACK' && <small>Base retail</small>}</th>{GRID_FIELDS.map((field) => {
-                    const mixed = row.mixedFields.includes(field);
-                    return <td key={field}><div className="rateGridCell"><span>₹</span><input aria-label={`${room.name} ${plan.mealPlan} ${band === 'RACK' ? 'Rack' : `Category ${band}`} ${FIELD_LABELS[field]}`} className={mixed ? 'isMixed' : ''} type={mixed ? 'text' : 'number'} inputMode="decimal" min="0" value={mixed ? 'Mixed' : String(row[field])} onFocus={(event) => { if (mixed) event.currentTarget.select(); }} onChange={(event) => onCellChange(plan.ratePlanId, band, field, event.target.value)} /></div></td>;
+                    return <td key={field}><div className="rateGridCell"><span>₹</span><input aria-label={`${room.name} ${plan.mealPlan} ${band === 'RACK' ? 'Rack' : `Category ${band}`} ${FIELD_LABELS[field]}`} type="number" inputMode="decimal" min="0" value={rateInputValue(row[field])} onChange={(event) => onCellChange(plan.ratePlanId, band, field, event.target.value)} /></div></td>;
                   })}</tr>;
                 })}
               </tbody></table></div>}
