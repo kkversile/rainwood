@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { BedDouble } from 'lucide-react';
+import { BedDouble, Menu } from 'lucide-react';
 import { AdminAuthGate, invalidateStaffSession, useAdminProfile } from './AdminData';
 import { apiAssetUrl, apiRequest, clearAccessToken } from '../lib/api';
 import { FeatureGate } from './FeatureGate';
@@ -111,32 +111,38 @@ export function isAdminRouteActive(pathname: string, href: string) {
   return href === '/admin/dashboard' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function GroupedAdminNavigation({ links: allowedLinks, pathname }: { links: readonly AdminLink[]; pathname: string }) {
+function GroupedAdminNavigation({ links: allowedLinks, pathname, collapsed, onNavigate }: { links: readonly AdminLink[]; pathname: string; collapsed: boolean; onNavigate?: () => void }) {
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [hoverGroup, setHoverGroup] = useState<string | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
   const groups = buildNavigationGroups(allowedLinks);
   const dashboard = allowedLinks.find((item) => item.key === 'dashboard');
+  const visibleGroup = openGroup ?? hoverGroup;
 
   useEffect(() => {
     if (!openGroup) return;
-    const onPointerDown = (event: PointerEvent) => { if (!navRef.current?.contains(event.target as Node)) setOpenGroup(null); };
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpenGroup(null); };
+    const onPointerDown = (event: PointerEvent) => { if (!navRef.current?.contains(event.target as Node)) { setOpenGroup(null); setHoverGroup(null); } };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') { setOpenGroup(null); setHoverGroup(null); } };
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
     return () => { document.removeEventListener('pointerdown', onPointerDown); document.removeEventListener('keydown', onKeyDown); };
   }, [openGroup]);
 
-  return <nav ref={navRef} className="legacyAgentNav adminTopNav adminGroupedNav" aria-label="Admin navigation">
-    {dashboard && <Link className={isAdminRouteActive(pathname, dashboard.href) ? 'active' : undefined} aria-current={isAdminRouteActive(pathname, dashboard.href) ? 'page' : undefined} href={dashboard.href}>{dashboard.label}</Link>}
+  return <aside ref={navRef} className={`adminSidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Admin navigation">
+    <div className="adminSidebarBrand"><span className="legacyAgentLogo">RW</span><span className="adminSidebarBrandText"><b>RAINWOOD</b><small>HOTELS</small></span></div>
+    <div className="adminSidebarSearch"><UiIcon name="search" size={16} /><span>Search menu...</span></div>
+    <nav className="adminSidebarNav">
+      {dashboard && <Link className={isAdminRouteActive(pathname, dashboard.href) ? 'active' : undefined} aria-current={isAdminRouteActive(pathname, dashboard.href) ? 'page' : undefined} href={dashboard.href} onClick={onNavigate}><span className="adminNavIcon" aria-hidden="true">▦</span><span className="adminNavLabel">{dashboard.label}</span></Link>}
     {groups.map((group) => {
       const active = group.items.some((item) => isAdminRouteActive(pathname, item.href));
-      const open = openGroup === group.key;
-      return <div className={`adminNavGroup adminNavGroup-${group.key}${open ? ' is-open' : ''}`} key={group.key}>
+      const open = visibleGroup === group.key;
+      return <div className={`adminNavGroup adminNavGroup-${group.key}${open ? ' is-open' : ''}`} key={group.key} onMouseEnter={() => setHoverGroup(group.key)} onMouseLeave={() => setHoverGroup(null)}>
         <button className={`adminNavGroupButton${active ? ' active' : ''}${open ? ' open' : ''}`} type="button" aria-haspopup="menu" aria-expanded={open} aria-controls={`admin-nav-menu-${group.key}`} onClick={() => setOpenGroup(open ? null : group.key)}>{group.label}<span aria-hidden="true">⌄</span></button>
-        {open && <div className="adminNavDropdown" id={`admin-nav-menu-${group.key}`} role="menu" aria-label={`${group.label} navigation`}>{group.items.map((item) => <Link key={item.key} role="menuitem" className={isAdminRouteActive(pathname, item.href) ? 'active' : undefined} aria-current={isAdminRouteActive(pathname, item.href) ? 'page' : undefined} href={item.href} onClick={() => setOpenGroup(null)}>{item.label}</Link>)}</div>}
+        <div className={`adminNavDropdown${open ? ' is-visible' : ''}`} id={`admin-nav-menu-${group.key}`} role="menu" aria-label={`${group.label} navigation`} aria-hidden={!open}>{group.items.map((item) => <Link key={item.key} role="menuitem" className={isAdminRouteActive(pathname, item.href) ? 'active' : undefined} aria-current={isAdminRouteActive(pathname, item.href) ? 'page' : undefined} href={item.href} onClick={onNavigate}>{item.label}</Link>)}</div>
       </div>;
     })}
-  </nav>;
+    </nav>
+  </aside>;
 }
 const fallbackLogoUrl = 'https://rainwoodhotels.com/wp-content/webp-express/webp-images/uploads/2023/09/rwh-logo.png.webp';
 function UiIcon({ name, size = 17 }: { name: 'search' | 'bell' | 'chevron' | 'grid'; size?: number }) {
@@ -201,13 +207,16 @@ function AdminTopShell({ title, editClass, children }: { title: string; editClas
   const pathname = usePathname();
   const { profile } = useAdminProfile();
   const role = profile?.role;
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const featureAccess = useAdminFeatureAccess();
   const visibleAdminLinks = filterAdminLinksByFeatures(allowedAdminLinksForRole(role), role, featureAccess.features, featureAccess.status);
   async function signOut() { try { await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({ allDevices: false }) }); } catch { /* Local session is cleared below. */ } finally { invalidateStaffSession(); clearAccessToken(); window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/login`; } }
   const greeting = profile?.name ?? 'Staff';
   const organization = profile?.role === 'CORPORATE_ADMIN' ? 'Corporate Administration' : profile?.staffHotel?.name ?? (profile?.role === 'RESERVATION' ? 'Front Office' : 'RainWood Hotels');
   const contactRequestsVisible = featureAccess.status === 'ready' && featureAccess.isEnabled('contactRequests');
-  return <main className={`legacyAgentShell adminTopShell${editClass}`}><header className="legacyAgentHeader"><div className="legacyAgentBrand"><span className="legacyAgentLogo">RW</span><b>RAINWOOD</b><small>HOTELS</small></div><div className="legacyAgentGreeting">Hi, {greeting}<span>{organization}</span></div><div className="legacyAgentHeaderLinks">{canAccessAdminRoute(role, '/admin/contact-requests') && contactRequestsVisible && <Link href="/admin/contact-requests">Contact Requests</Link>}{canAccessAdminRoute(role, '/admin/reservations') && <Link href="/agent/login">Agent Login</Link>}<button type="button" onClick={() => void signOut()}>Sign out</button></div></header>{pathname === '/admin/dashboard' && <OperationsCommandBar role={role} featureAccess={featureAccess} />}<GroupedAdminNavigation links={visibleAdminLinks} pathname={pathname} /><div className="legacyAgentSectionTitle">{title}</div><section className="adminContent legacyAgentContent legacyAgentPortalContent adminTopContent"><FeatureGate>{children}</FeatureGate></section></main>;
+  const toggleNavigation = () => { if (window.innerWidth <= 820) setMobileNavOpen((open) => !open); else setSidebarCollapsed((collapsed) => !collapsed); };
+  return <main className={`legacyAgentShell adminTopShell adminSidebarShell${editClass}${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}${mobileNavOpen ? ' is-mobile-nav-open' : ''}`}><GroupedAdminNavigation links={visibleAdminLinks} pathname={pathname} collapsed={sidebarCollapsed} onNavigate={() => setMobileNavOpen(false)} /><div className="adminSidebarMain"><header className="adminSidebarTopbar"><button className="adminSidebarToggle" type="button" aria-label={mobileNavOpen || !sidebarCollapsed ? 'Collapse navigation' : 'Expand navigation'} aria-expanded={mobileNavOpen || !sidebarCollapsed} onClick={toggleNavigation}><Menu size={20} aria-hidden="true" /></button><div className="adminSidebarGreeting">Hi, {greeting}<span>{organization}</span></div><div className="adminSidebarHeaderLinks">{canAccessAdminRoute(role, '/admin/contact-requests') && contactRequestsVisible && <Link href="/admin/contact-requests" onClick={() => setMobileNavOpen(false)}>Contact Requests</Link>}{canAccessAdminRoute(role, '/admin/reservations') && <Link href="/agent/login" onClick={() => setMobileNavOpen(false)}>Agent Login</Link>}<button type="button" onClick={() => void signOut()}>Sign out</button></div></header>{pathname === '/admin/dashboard' && <OperationsCommandBar role={role} featureAccess={featureAccess} />}<div className="legacyAgentSectionTitle">{title}</div><section className="adminContent legacyAgentContent legacyAgentPortalContent adminTopContent"><FeatureGate>{children}</FeatureGate></section></div></main>;
 }
 
 function OperationsCommandBar({ role, featureAccess }: { role?: string; featureAccess: ReturnType<typeof useAdminFeatureAccess> }) {
