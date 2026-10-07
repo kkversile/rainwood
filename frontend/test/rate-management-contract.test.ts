@@ -37,7 +37,8 @@ test('rate master defaults to a future one-month range and blocks past dates', (
   assert.match(page, /addHotelDays\(todayInHotelTimezone\(\), DEFAULT_RATE_RANGE_DAYS\)/);
   assert.match(page, /minDate=\{todayInHotelTimezone\(\)\}/);
   assert.match(page, /minDate=\{from \|\| todayInHotelTimezone\(\)\}/);
-  assert.match(styles, /\.rateMasterToolbar\{position:sticky;top:0;z-index:25;/);
+  assert.match(styles, /\.rateMasterToolbar\{position:sticky;top:156px;z-index:47;/);
+  assert.match(styles, /@media\(max-width:820px\)\{\.rateMasterToolbar\{top:0;z-index:25\}\}/);
 });
 
 test('promotions are a separate admin workflow with disable action', () => {
