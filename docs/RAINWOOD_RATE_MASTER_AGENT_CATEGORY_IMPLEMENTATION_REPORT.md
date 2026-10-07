@@ -34,4 +34,8 @@
 
 ## Deployment status
 
-The local release gate is green. Push and live-demo deployment are the next release actions; no live database has been changed by local verification.
+- Commit `8dde7b04823827bb3723e5177e7536891f7bf294` is pushed to `origin/main`.
+- The RainWood demo server applied both additive Prisma migrations, rebuilt the backend and frontend, and restarted `rainwood-api.service` and `rainwood-web.service`; both services are active.
+- Live HTTP checks passed for `/rainwood`, `/rainwood/login`, and `/rainwood/api/v1/health/ready`.
+- Chrome smoke checks passed for the live Rate Master, Agent Category Mappings, and Agent My Rates pages with no browser errors or warnings. The live demo shows generic canonical CP/MAP rates and existing contract-rate assignments.
+- The remote pre-existing `frontend/package-lock.json` edit and `frontend/.env.production` file were preserved and were not part of the release commit.
