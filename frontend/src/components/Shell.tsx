@@ -113,16 +113,14 @@ export function isAdminRouteActive(pathname: string, href: string) {
 
 function GroupedAdminNavigation({ links: allowedLinks, pathname, collapsed, onNavigate }: { links: readonly AdminLink[]; pathname: string; collapsed: boolean; onNavigate?: () => void }) {
   const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const [hoverGroup, setHoverGroup] = useState<string | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
   const groups = buildNavigationGroups(allowedLinks);
   const dashboard = allowedLinks.find((item) => item.key === 'dashboard');
-  const visibleGroup = openGroup ?? hoverGroup;
 
   useEffect(() => {
     if (!openGroup) return;
-    const onPointerDown = (event: PointerEvent) => { if (!navRef.current?.contains(event.target as Node)) { setOpenGroup(null); setHoverGroup(null); } };
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') { setOpenGroup(null); setHoverGroup(null); } };
+    const onPointerDown = (event: PointerEvent) => { if (!navRef.current?.contains(event.target as Node)) setOpenGroup(null); };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpenGroup(null); };
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
     return () => { document.removeEventListener('pointerdown', onPointerDown); document.removeEventListener('keydown', onKeyDown); };
@@ -135,8 +133,8 @@ function GroupedAdminNavigation({ links: allowedLinks, pathname, collapsed, onNa
       {dashboard && <Link className={isAdminRouteActive(pathname, dashboard.href) ? 'active' : undefined} aria-current={isAdminRouteActive(pathname, dashboard.href) ? 'page' : undefined} href={dashboard.href} onClick={onNavigate}><span className="adminNavIcon" aria-hidden="true">▦</span><span className="adminNavLabel">{dashboard.label}</span></Link>}
     {groups.map((group) => {
       const active = group.items.some((item) => isAdminRouteActive(pathname, item.href));
-      const open = visibleGroup === group.key;
-      return <div className={`adminNavGroup adminNavGroup-${group.key}${open ? ' is-open' : ''}`} key={group.key} onMouseEnter={() => setHoverGroup(group.key)} onMouseLeave={() => setHoverGroup(null)}>
+      const open = openGroup === group.key;
+      return <div className={`adminNavGroup adminNavGroup-${group.key}${open ? ' is-open' : ''}`} key={group.key}>
         <button className={`adminNavGroupButton${active ? ' active' : ''}${open ? ' open' : ''}`} type="button" aria-haspopup="menu" aria-expanded={open} aria-controls={`admin-nav-menu-${group.key}`} onClick={() => setOpenGroup(openGroup === group.key ? null : group.key)}>{group.label}<span aria-hidden="true">⌄</span></button>
         <div className={`adminNavDropdown${open ? ' is-visible' : ''}`} id={`admin-nav-menu-${group.key}`} role="menu" aria-label={`${group.label} navigation`} aria-hidden={!open}>{group.items.map((item) => <Link key={item.key} role="menuitem" className={isAdminRouteActive(pathname, item.href) ? 'active' : undefined} aria-current={isAdminRouteActive(pathname, item.href) ? 'page' : undefined} href={item.href} onClick={onNavigate}>{item.label}</Link>)}</div>
       </div>;

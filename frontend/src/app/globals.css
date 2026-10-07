@@ -1080,3 +1080,10 @@
 .adminSidebarShell .adminSidebar .adminNavDropdown a:hover,.adminSidebarShell .adminSidebar .adminNavDropdown a:focus-visible{background:#e0f5f6;color:#087e84!important}
 .adminSidebarShell.is-sidebar-collapsed .adminSidebar .adminNavDropdown{position:absolute!important;top:0;left:calc(100% + 7px);z-index:80;display:none!important;min-width:245px;margin:0;padding:7px;border:1px solid var(--line);border-radius:9px;background:#fff;box-shadow:0 14px 30px rgba(7,40,62,.18)}
 .adminSidebarShell.is-sidebar-collapsed .adminSidebar .adminNavDropdown.is-visible{display:grid!important}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover{width:252px;overflow-y:auto;overflow-x:hidden;z-index:90}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarBrandText,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarSearch span,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavLabel,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavChevron{display:inline}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarBrand{justify-content:flex-start;padding-inline:10px}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarSearch{justify-content:flex-start;padding-inline:10px;border-color:rgba(206,244,244,.22);background:rgba(255,255,255,.07)}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarNav>a,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavGroupButton{justify-content:flex-start;padding-inline:10px;font-size:12px}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavDropdown{position:static!important;top:auto;left:auto;min-width:0;margin:2px 0 3px 30px;padding:3px;border:0;border-left:1px solid rgba(155,215,216,.3);border-radius:0;box-shadow:none;background:transparent}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavDropdown.is-visible{display:grid!important}
