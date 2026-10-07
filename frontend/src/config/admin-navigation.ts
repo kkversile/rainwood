@@ -10,7 +10,7 @@ export type AdminNavigationItem = {
 export const ADMIN_NAVIGATION = [
   { key: 'dashboard', href: '/admin/dashboard', label: 'Dashboard' },
   { key: 'revenueForecast', href: '/admin/revenue-forecast', label: 'Revenue Forecast', featureKey: 'revenueForecast' },
-  { key: 'manageHotels', href: '/admin/hotels', label: 'Manage Hotels' },
+  { key: 'manageHotels', href: '/admin/hotels', label: 'Hotels' },
   { key: 'roomsInventory', href: '/admin/rooms-inventory', label: 'Rooms & Inventory', featureKey: 'roomsInventory' },
   { key: 'physicalRooms', href: '/admin/rooms', label: 'Physical Rooms', featureKey: 'physicalRooms' },
   { key: 'roomRack', href: '/admin/room-rack', label: 'Room Rack', featureKey: 'roomRack' },
@@ -61,10 +61,10 @@ export const ADMIN_NAVIGATION = [
 export const ADMIN_GROUPS = [
   { key: 'operations', label: 'Operations', itemKeys: ['roomsInventory', 'physicalRooms', 'roomRack', 'housekeeping', 'maintenance', 'logbook', 'banquets', 'functionSpaces', 'supplementaryCharges', 'expenses', 'serviceItems', 'cashier'] },
   { key: 'reservations', label: 'Reservations', itemKeys: ['reservations', 'groups', 'frontDesk', 'arrivals', 'inHouse', 'lostFound', 'payments', 'contactRequests'] },
-  { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rates', 'rateCalendar', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
-  { key: 'crmSales', label: 'CRM & Sales', itemKeys: ['guests', 'agents', 'agentRateSlabs', 'corporates', 'inquiries'] },
+  { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rateCalendar', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
+  { key: 'crmSales', label: 'CRM & Sales', itemKeys: ['guests', 'agentRateSlabs', 'corporates', 'inquiries'] },
   { key: 'reports', label: 'Reports', itemKeys: ['reports', 'taxInvoices', 'creditNotes', 'tds', 'nightAudit'] },
-  { key: 'system', label: 'System', itemKeys: ['manageHotels', 'taxSettings', 'axisRooms', 'jobs', 'users', 'siteSettings', 'features', 'auditLogs'] },
+  { key: 'system', label: 'System', itemKeys: ['taxSettings', 'axisRooms', 'jobs', 'users', 'siteSettings', 'features', 'auditLogs'] },
 ] as const;
 
 export const FEATURE_NAVIGATION_ITEMS = ADMIN_NAVIGATION.filter((item): item is Extract<(typeof ADMIN_NAVIGATION)[number], { featureKey: string }> => Boolean((item as AdminNavigationItem).featureKey));

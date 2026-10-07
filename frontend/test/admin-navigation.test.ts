@@ -67,7 +67,6 @@ test("grouped admin navigation keeps the requested information architecture", ()
     [
       "Revenue Forecast",
       "Rate Plans",
-      "Rate Master",
       "Rate Calendar",
       "Rate Seasons",
       "Yield Rules",
@@ -78,7 +77,7 @@ test("grouped admin navigation keeps the requested information architecture", ()
   );
   assert.deepEqual(
     groups[3].items.map((item) => item.label),
-    ["Guests", "Agents", "Agent Rate Slabs", "Corporates", "Inquiries"],
+    ["Guests", "Agent Rate Slabs", "Corporates", "Inquiries"],
   );
   assert.deepEqual(
     groups[4].items.map((item) => item.label),
@@ -87,7 +86,6 @@ test("grouped admin navigation keeps the requested information architecture", ()
   assert.deepEqual(
     groups[5].items.map((item) => item.label),
     [
-      "Manage Hotels",
       "Tax Settings",
       "AxisRooms",
       "Jobs",
@@ -112,7 +110,7 @@ test("role filtering is fail-closed and groups only allowed links", () => {
     buildNavigationGroups(asAdminLinks("ADMIN")).some(
       (group) =>
         group.key === "system" &&
-        group.items.some((item) => item.label === "Manage Hotels"),
+        group.items.some((item) => item.label === "Hotels"),
     ),
     false,
   );

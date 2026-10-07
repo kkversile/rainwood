@@ -14,7 +14,7 @@ type AdminLink = AdminNavigationItem;
 export const legacyAdminLinks = [
   { key: 'dashboard', href: '/admin/dashboard', label: 'Dashboard' },
   { key: 'revenueForecast', href: '/admin/revenue-forecast', label: 'Revenue Forecast' },
-  { key: 'manageHotels', href: '/admin/hotels', label: 'Manage Hotels' },
+  { key: 'manageHotels', href: '/admin/hotels', label: 'Hotels' },
   { key: 'roomsInventory', href: '/admin/rooms-inventory', label: 'Rooms & Inventory' },
   { key: 'physicalRooms', href: '/admin/rooms', label: 'Physical Rooms' },
   { key: 'roomRack', href: '/admin/room-rack', label: 'Room Rack' },
@@ -66,10 +66,10 @@ const propertyHiddenLinks = new Set(['/admin/hotels', '/admin/settings', '/admin
 export const legacyAdminGroupDefinitions = [
   { key: 'operations', label: 'Operations', itemKeys: ['roomsInventory', 'physicalRooms', 'roomRack', 'housekeeping', 'maintenance', 'logbook', 'banquets', 'functionSpaces', 'supplementaryCharges', 'expenses', 'serviceItems', 'cashier'] },
   { key: 'reservations', label: 'Reservations', itemKeys: ['reservations', 'groups', 'frontDesk', 'arrivals', 'inHouse', 'lostFound', 'payments', 'contactRequests'] },
-  { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rates', 'rateCalendar', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
-  { key: 'crmSales', label: 'CRM & Sales', itemKeys: ['guests', 'agents', 'corporates', 'inquiries'] },
+  { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rateCalendar', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
+  { key: 'crmSales', label: 'CRM & Sales', itemKeys: ['guests', 'agentRateSlabs', 'corporates', 'inquiries'] },
   { key: 'reports', label: 'Reports', itemKeys: ['reports', 'taxInvoices', 'creditNotes', 'tds', 'nightAudit'] },
-  { key: 'system', label: 'System', itemKeys: ['manageHotels', 'taxSettings', 'axisRooms', 'jobs', 'users', 'siteSettings', 'features', 'auditLogs'] },
+  { key: 'system', label: 'System', itemKeys: ['taxSettings', 'axisRooms', 'jobs', 'users', 'siteSettings', 'features', 'auditLogs'] },
 ] as const;
 const adminGroupDefinitions = ADMIN_GROUPS;
 
@@ -116,6 +116,14 @@ function GroupedAdminNavigation({ links: allowedLinks, pathname, collapsed, onNa
   const navRef = useRef<HTMLElement | null>(null);
   const groups = buildNavigationGroups(allowedLinks);
   const dashboard = allowedLinks.find((item) => item.key === 'dashboard');
+  const standaloneTopLevel = ['manageHotels', 'rates', 'agents']
+    .map((key) => allowedLinks.find((item) => item.key === key))
+    .filter((item): item is AdminLink => Boolean(item));
+  const routeGroup = groups.find((group) => group.items.some((item) => isAdminRouteActive(pathname, item.href)))?.key ?? null;
+
+  useEffect(() => {
+    setOpenGroup(routeGroup);
+  }, [pathname, routeGroup]);
 
   useEffect(() => {
     if (!openGroup) return;
@@ -131,6 +139,10 @@ function GroupedAdminNavigation({ links: allowedLinks, pathname, collapsed, onNa
     <div className="adminSidebarSearch"><UiIcon name="search" size={16} /><span>Search menu...</span></div>
     <nav className="adminSidebarNav">
       {dashboard && <Link className={isAdminRouteActive(pathname, dashboard.href) ? 'active' : undefined} aria-current={isAdminRouteActive(pathname, dashboard.href) ? 'page' : undefined} href={dashboard.href} onClick={onNavigate}><span className="adminNavIcon" aria-hidden="true">▦</span><span className="adminNavLabel">{dashboard.label}</span></Link>}
+    {standaloneTopLevel.map((item) => {
+      const active = isAdminRouteActive(pathname, item.href);
+      return <Link key={item.key} className={active ? 'active' : undefined} aria-current={active ? 'page' : undefined} href={item.href} onClick={onNavigate}><span className="adminNavIcon" aria-hidden="true">▦</span><span className="adminNavLabel">{item.label}</span></Link>;
+    })}
     {groups.map((group) => {
       const active = group.items.some((item) => isAdminRouteActive(pathname, item.href));
       const open = openGroup === group.key;
