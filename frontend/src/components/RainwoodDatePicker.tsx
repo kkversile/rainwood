@@ -84,7 +84,7 @@ export function RainwoodDatePicker({ label, value, onChange, minDate, maxDate, p
       <CalendarDays size={15} aria-hidden="true" />
       <span>{value || placeholder}</span>
     </button>
-    {open && <div className="rainwoodDatePopover" role="dialog" aria-label={`${label} calendar`}>
+    {open && <div className="rainwoodDatePopover" role="dialog" aria-label={`${label} calendar`} onClick={(event) => event.preventDefault()}>
       <div className="rainwoodDatePopoverHeader">
         <span>{label}</span>
         <div className="rainwoodDateSelectors">
