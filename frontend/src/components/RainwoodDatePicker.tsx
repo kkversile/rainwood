@@ -8,6 +8,8 @@ type RainwoodDatePickerProps = {
   value: string;
   onChange: (value: string) => void;
   minDate?: string;
+  maxDate?: string;
+  placeholder?: string;
   accent?: boolean;
 };
 
@@ -33,16 +35,18 @@ function addMonths(date: Date, amount: number) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + amount, 1));
 }
 
-export function RainwoodDatePicker({ label, value, onChange, minDate, accent = false }: RainwoodDatePickerProps) {
+export function RainwoodDatePicker({ label, value, onChange, minDate, maxDate, placeholder = label, accent = false }: RainwoodDatePickerProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const selectedDate = parseDate(value);
   const minimumDate = parseDate(minDate ?? '');
+  const maximumDate = parseDate(maxDate ?? '');
   const [open, setOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState(() => monthStart(selectedDate ?? minimumDate ?? new Date()));
 
   useEffect(() => {
     if (selectedDate) setVisibleMonth(monthStart(selectedDate));
-  }, [value]);
+    else if (minimumDate) setVisibleMonth(monthStart(minimumDate));
+  }, [value, minDate]);
 
   useEffect(() => {
     function closeOnOutsideClick(event: MouseEvent) {
@@ -73,9 +77,9 @@ export function RainwoodDatePicker({ label, value, onChange, minDate, accent = f
   }, [visibleMonth]);
 
   return <div className="rainwoodDatePicker" ref={wrapperRef}>
-    <button type="button" className={`rainwoodDateTrigger${value ? ' hasValue' : ''}${accent && value ? ' selected' : ''}`} aria-label={label} onClick={() => setOpen((current) => !current)}>
+    <button type="button" className={`rainwoodDateTrigger${value ? ' hasValue' : ''}${accent && value ? ' selected' : ''}`} aria-label={label} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
       <CalendarDays size={15} aria-hidden="true" />
-      <span>{value || label}</span>
+      <span>{value || placeholder}</span>
     </button>
     {open && <div className="rainwoodDatePopover" role="dialog" aria-label={`${label} calendar`}>
       <div className="rainwoodDatePopoverHeader">
@@ -99,7 +103,7 @@ export function RainwoodDatePicker({ label, value, onChange, minDate, accent = f
         const dateValue = formatDate(day);
         const isCurrentMonth = day.getUTCMonth() === visibleMonth.getUTCMonth();
         const isSelected = dateValue === value;
-        const isDisabled = Boolean(minimumDate && day < minimumDate);
+        const isDisabled = Boolean((minimumDate && day < minimumDate) || (maximumDate && day > maximumDate));
         return <button type="button" key={dateValue} className={`${isCurrentMonth ? '' : 'outsideMonth '}${isSelected ? 'selectedDay' : ''}`} disabled={isDisabled} onClick={() => { onChange(dateValue); setVisibleMonth(monthStart(day)); setOpen(false); }}>{day.getUTCDate()}</button>;
       })}</div>
     </div>}

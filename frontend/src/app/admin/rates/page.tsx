@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminLayout } from '../../../components/Shell';
 import { GRID_FIELDS, GridBand, GridField, RateMasterGrid, RateMasterGridData } from '../../../components/RateMasterGrid';
+import { RainwoodDatePicker } from '../../../components/RainwoodDatePicker';
 import { apiRequest } from '../../../lib/api';
 
 type Hotel = { id: string; name: string };
@@ -92,11 +93,6 @@ export default function RateMasterPage() {
     if (!confirmDiscard()) return;
     if (field === 'from') setFrom(value);
     else setTo(value);
-  }
-
-  function loadSelectedRange() {
-    if (!hotelId || !isValidRange(from, to)) return;
-    void loadGrid(hotelId, from, to);
   }
 
   function updateDraft(mutator: (next: RateMasterGridData) => void) {
@@ -194,10 +190,10 @@ export default function RateMasterPage() {
     {message && <p className="notice" role="status">{message}</p>}
     <section className="rateMasterToolbar" aria-label="Rate Master controls">
       <label>Hotel<select aria-label="Hotel" value={hotelId} onChange={(event) => changeHotel(event.target.value)}><option value="">Select hotel</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label>
-      <label>From<input aria-label="From date" type="date" value={from} onInput={(event) => changeDate('from', event.currentTarget.value)} onBlur={loadSelectedRange} /></label>
+      <label>From<RainwoodDatePicker label="From date" value={from} onChange={(value) => changeDate('from', value)} /></label>
       <span className="rateMasterArrow" aria-hidden="true">→</span>
-      <label>To<input aria-label="To date" type="date" value={to} onInput={(event) => changeDate('to', event.currentTarget.value)} onBlur={loadSelectedRange} /></label>
-      <button className="smallBtn secondary" type="button" disabled={!validRange || loading} onClick={loadSelectedRange}>Load rates</button>
+      <label>To<RainwoodDatePicker label="To date" value={to} minDate={from} onChange={(value) => changeDate('to', value)} /></label>
+      <button className="smallBtn secondary" type="button" disabled={!validRange || loading} onClick={() => void loadGrid(hotelId, from, to)}>Load rates</button>
       <div className="rateMasterToolbarActions"><button className="smallBtn secondary" type="button" disabled={!dirty} onClick={revert}>Revert Unsaved</button><button className="smallBtn" type="button" disabled={saveDisabled} onClick={() => void save()}>{saving ? 'Saving…' : 'Save Rates'}</button></div>
     </section>
     {!validRange && (from || to) && <p className="error" role="alert">Select both dates, with From on or before To, to load stored rates.</p>}
