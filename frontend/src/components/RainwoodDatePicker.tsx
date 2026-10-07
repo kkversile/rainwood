@@ -79,7 +79,7 @@ export function RainwoodDatePicker({ label, value, onChange, minDate, maxDate, p
     });
   }, [visibleMonth]);
 
-  return <div className="rainwoodDatePicker" ref={wrapperRef}>
+  return <div className="rainwoodDatePicker" ref={wrapperRef} onClick={(event) => event.stopPropagation()}>
     <button type="button" className={`rainwoodDateTrigger${value ? ' hasValue' : ''}${accent && value ? ' selected' : ''}`} aria-label={label} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
       <CalendarDays size={15} aria-hidden="true" />
       <span>{value || placeholder}</span>
