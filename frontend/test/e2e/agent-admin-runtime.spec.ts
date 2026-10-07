@@ -34,11 +34,12 @@ test('new agent setup uses payment milestones and does not expose legacy policy 
   await expect(page.getByText('100% Full Payment (Existing)', { exact: false })).toHaveCount(0);
 });
 
-test('legacy agent mapping URL redirects and retired navigation is absent', async ({ page }) => {
+test('agent mapping deep link is available and retired terminology is absent', async ({ page }) => {
   await signIn(page);
   await expect(page.getByText('Agent Access & Contract Rates', { exact: true })).toHaveCount(0);
   await page.goto(`${frontendUrl}/admin/agent-mappings`);
-  await expect(page).toHaveURL(`${frontendUrl}/admin/agents`);
+  await expect(page).toHaveURL(`${frontendUrl}/admin/agent-mappings`);
+  await expect(page.getByRole('heading', { name: 'Agent → Hotel → Category', exact: true })).toBeVisible();
 });
 
 test('legacy agent mappings remain visible as read-only migration fallback', async ({ page }) => {
@@ -48,14 +49,10 @@ test('legacy agent mappings remain visible as read-only migration fallback', asy
   await expect(page.getByRole('button', { name: /Save assignment/ })).toHaveCount(0);
 });
 
-test('rate plan catalog hides legacy plans until the SUPER_ADMIN migration toggle is used', async ({ page }) => {
+test('Rate Master is the canonical rate administration surface', async ({ page }) => {
   await signIn(page);
-  await page.goto(`${frontendUrl}/admin/rate-plans`);
-  const codes = page.locator('.ratePlanName code');
-  await expect(page.getByRole('button', { name: 'Legacy rate plans' })).toBeVisible();
-  for (const code of ['EP', 'CP', 'MAP', 'AP']) await expect(codes.filter({ hasText: new RegExp(`^${code}$`) })).toHaveCount(1);
-  for (const code of ['A', 'B', 'C', 'D']) await expect(codes.filter({ hasText: new RegExp(`^${code}$`) })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Legacy rate plans' }).click();
-  await expect(page.getByRole('button', { name: 'Hide legacy plans' })).toBeVisible();
-  await expect(codes.filter({ hasText: /^A$/ })).toHaveCount(1);
+  await page.goto(`${frontendUrl}/admin/rates`);
+  await expect(page.getByRole('heading', { name: 'Rate Master', exact: true })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Single', exact: true })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Rate Plan', exact: true })).toHaveCount(0);
 });

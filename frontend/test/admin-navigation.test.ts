@@ -67,7 +67,8 @@ test("grouped admin navigation keeps the requested information architecture", ()
     [
       "Revenue Forecast",
       "Rate Plans",
-      "Rates",
+      "Rate Master",
+      "Rate Calendar",
       "Rate Seasons",
       "Yield Rules",
       "Rate Simulator",

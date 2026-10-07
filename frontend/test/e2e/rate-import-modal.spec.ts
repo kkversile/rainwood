@@ -28,6 +28,7 @@ test('rate plan import opens a locked modal and waits for explicit import', asyn
     await route.continue();
   });
   await signInAdmin(page);
+  await page.getByLabel('Filter by hotel').selectOption({ label: 'RainWood Aurum Kodaikanal' });
   await page.getByRole('button', { name: 'Legacy rate plans' }).click();
   const row = page.locator('tbody tr').filter({ hasText: 'Contracted Nett Rate' }).first();
   await row.getByRole('button', { name: 'Import rates' }).click();

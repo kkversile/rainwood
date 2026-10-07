@@ -41,6 +41,7 @@ import { GroupsModule } from './modules/groups/groups.module';
 import { BanquetsModule } from './modules/banquets/banquets.module';
 import { FeaturesModule } from './modules/features/features.module';
 import { AgentRateSlabsModule } from './modules/agent-rate-slabs/agent-rate-slabs.module';
+import { RateMasterModule } from './modules/rate-master/rate-master.module';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { AgentRateSlabsModule } from './modules/agent-rate-slabs/agent-rate-slab
     BanquetsModule,
     FeaturesModule,
     AgentRateSlabsModule,
+    RateMasterModule,
   ],
 })
 export class AppModule {}

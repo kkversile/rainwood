@@ -36,7 +36,7 @@ test('rate import form keeps modal context locked and reports row-level errors',
 });
 
 test('agent access page has no agent Excel import actions', () => {
-  assert.match(agentMappingsPage, /redirect\('\/admin\/agents'\)/);
+  assert.match(agentMappingsPage, /Agent .*Hotel .*Category/);
   assert.doesNotMatch(shell, /Agent Access & Contract Rates/);
   assert.doesNotMatch(agentMappingsPage, /Import Agent Rates|Download Agent Rate Template|agents\/rates\/import|rate-import-template|Use Contract Rate|Manage Contract Rates/);
 });

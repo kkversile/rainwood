@@ -20,7 +20,8 @@ export const ADMIN_NAVIGATION = [
   { key: 'banquets', href: '/admin/banquets', label: 'Banquets & Events', featureKey: 'banquets' },
   { key: 'functionSpaces', href: '/admin/function-spaces', label: 'Function Spaces', featureKey: 'functionSpaces' },
   { key: 'ratePlans', href: '/admin/rate-plans', label: 'Rate Plans', featureKey: 'ratePlans' },
-  { key: 'rates', href: '/admin/rates', label: 'Rates', featureKey: 'rates' },
+  { key: 'rates', href: '/admin/rates', label: 'Rate Master', featureKey: 'rates' },
+  { key: 'rateCalendar', href: '/admin/rate-calendar', label: 'Rate Calendar', featureKey: 'rates' },
   { key: 'rateSeasons', href: '/admin/rate-seasons', label: 'Rate Seasons', featureKey: 'rateSeasons' },
   { key: 'yieldRules', href: '/admin/yield-rules', label: 'Yield Rules', featureKey: 'yieldRules' },
   { key: 'rateSimulator', href: '/admin/rate-simulator', label: 'Rate Simulator', featureKey: 'rateSimulator' },
@@ -60,7 +61,7 @@ export const ADMIN_NAVIGATION = [
 export const ADMIN_GROUPS = [
   { key: 'operations', label: 'Operations', itemKeys: ['roomsInventory', 'physicalRooms', 'roomRack', 'housekeeping', 'maintenance', 'logbook', 'banquets', 'functionSpaces', 'supplementaryCharges', 'expenses', 'serviceItems', 'cashier'] },
   { key: 'reservations', label: 'Reservations', itemKeys: ['reservations', 'groups', 'frontDesk', 'arrivals', 'inHouse', 'lostFound', 'payments', 'contactRequests'] },
-  { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rates', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
+  { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rates', 'rateCalendar', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
   { key: 'crmSales', label: 'CRM & Sales', itemKeys: ['guests', 'agents', 'agentRateSlabs', 'corporates', 'inquiries'] },
   { key: 'reports', label: 'Reports', itemKeys: ['reports', 'taxInvoices', 'creditNotes', 'tds', 'nightAudit'] },
   { key: 'system', label: 'System', itemKeys: ['manageHotels', 'taxSettings', 'axisRooms', 'jobs', 'users', 'siteSettings', 'features', 'auditLogs'] },

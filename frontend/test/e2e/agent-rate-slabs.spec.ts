@@ -5,23 +5,25 @@ import { resolve } from 'node:path';
 const frontendUrl = 'http://localhost:3001/rainwood';
 
 function localEnv(name: string) {
-  const line = readFileSync(resolve(process.cwd(), '.env.local'), 'utf8').split(/\r?\n/).find((item) => item.startsWith(`${name}=`));
+  const line = readFileSync(resolve(process.cwd(), '.env.local'), 'utf8').split(/\r\n|\n|\r/).find((item) => item.startsWith(`${name}=`));
   return line?.slice(name.length + 1) ?? '';
 }
 
-async function signIn(page: import('@playwright/test').Page, role: 'admin' | 'agent') {
-  const next = role === 'admin' ? '/rainwood/admin/agent-rate-slabs' : '/rainwood/agent/rate-plans';
-  await page.goto(`${frontendUrl}/login?next=${encodeURIComponent(next)}`);
-  await page.getByLabel('Email').fill(localEnv(role === 'admin' ? 'NEXT_PUBLIC_DEMO_ADMIN_EMAIL' : 'NEXT_PUBLIC_DEMO_AGENT_EMAIL'));
+async function signIn(page: import('@playwright/test').Page, role: 'admin' | 'agent', agentEmail = localEnv('NEXT_PUBLIC_DEMO_AGENT_EMAIL')) {
+  const next = role === 'admin' ? '/rainwood/admin/agent-rate-slabs' : '/rainwood/agent';
+  await page.goto(`${role === 'admin' ? frontendUrl + '/login?next=' + encodeURIComponent(next) : frontendUrl + '/agent/login'}`);
+  await page.getByLabel('Email').fill(role === 'admin' ? localEnv('NEXT_PUBLIC_DEMO_ADMIN_EMAIL') : agentEmail);
   await page.getByLabel('Password').fill(localEnv(role === 'admin' ? 'NEXT_PUBLIC_DEMO_ADMIN_PASSWORD' : 'NEXT_PUBLIC_DEMO_AGENT_PASSWORD'));
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(`${frontendUrl}${role === 'admin' ? '/admin/agent-rate-slabs' : '/agent/rate-plans'}`);
+  await expect(page).toHaveURL(`${frontendUrl}${role === 'admin' ? '/admin/agent-rate-slabs' : '/agent'}`);
+  if (role === 'agent') await page.goto(`${frontendUrl}/agent/rate-plans`);
 }
 
 test('admin publishes a two-band slab and the agent can read the contract bands', async ({ page }) => {
   test.setTimeout(150_000);
   await signIn(page, 'admin');
   await page.getByRole('button', { name: '+ New slab' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Draft form ready.' })).toBeVisible();
   await expect(page.getByLabel('Code')).toBeEnabled();
   const slabCode = `SLAB-B-${Date.now()}`;
   await page.getByLabel('Code').fill(slabCode);
@@ -55,14 +57,14 @@ test('admin publishes a two-band slab and the agent can read the contract bands'
   await expect(page.getByText('Slab published and now immutable.')).toBeVisible();
 
   const agentSelect = page.getByLabel('Agent');
-  const agentValue = await agentSelect.locator('option').filter({ hasText: 'RainWood Existing Agent' }).first().getAttribute('value');
+  const agentValue = await agentSelect.locator('option').filter({ hasText: 'South India Holidays' }).first().getAttribute('value');
   expect(agentValue).toBeTruthy();
   await agentSelect.selectOption(agentValue!);
   await page.getByLabel('Assignment from').fill('2026-10-01');
   await page.getByLabel('Assignment to').fill('2027-03-31');
   await page.getByRole('button', { name: 'Assign published slab' }).last().click();
   await expect(page.getByText('Slab assigned to the agent.')).toBeVisible();
-  const assignmentRow = page.locator('tbody tr').filter({ hasText: 'agent@rainwood.demo' });
+  const assignmentRow = page.locator('tbody tr').filter({ hasText: 'south.agent@rainwood.demo' });
   await assignmentRow.getByRole('button', { name: 'Preview' }).click();
   const sheet = page.frameLocator('iframe[title="Rendered agent rate sheet"]');
   await expect(sheet.getByRole('cell', { name: '2026-10-01', exact: true })).toBeVisible();
@@ -73,12 +75,12 @@ test('admin publishes a two-band slab and the agent can read the contract bands'
   await expect(page.getByRole('link', { name: 'Download HTML' }).first()).toBeVisible();
 
   await page.goto(`${frontendUrl}/admin/agents`);
-  const agentRow = page.locator('tbody tr').filter({ hasText: 'agent@rainwood.demo' }).first();
+  const agentRow = page.locator('tbody tr').filter({ hasText: 'south.agent@rainwood.demo' }).first();
   await expect(agentRow).toContainText(slabCode);
-  await expect(agentRow).toContainText('Pricing source: Agent Rate Slab');
+  await expect(agentRow).toContainText('Pricing source: Legacy Agent Rate Slab · migration fallback');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/login/);
-  await signIn(page, 'agent');
+  await signIn(page, 'agent', 'south.agent@rainwood.demo');
   await expect(page.getByRole('heading', { name: 'My Rates' })).toBeVisible();
   await expect(page.getByText(slabCode)).toBeVisible();
   await expect(page.getByText('Price source: Contract Rate')).toBeVisible();

@@ -56,7 +56,8 @@ test('legacy agent mappings are displayed as migration fallback and cannot be mu
   assert.doesNotMatch(agentsPage, /Delete assignment/);
   assert.doesNotMatch(agentsPage, /aria-label=\{'Edit rate plans for ' \+ agent\.name\}/);
   assert.doesNotMatch(agentsPage, /selectedHotelPlanIds/);
-  assert.doesNotMatch(agentsPage, /Contract Rate|Hotel Rate|pricingMode|AGENT_OVERRIDE/);
+  assert.match(agentsPage, /Hotel Rate Mapping/);
+  assert.match(agentsPage, /Rate Mapping/);
 });
 
 test('admin reservation details render the saved payment schedule without a pay action', () => {

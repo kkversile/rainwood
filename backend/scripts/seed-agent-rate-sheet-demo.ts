@@ -198,6 +198,31 @@ async function main() {
   if (!assignment) {
     await prisma.agentRateSlabAssignment.create({ data: { agentId: agent.id, slabId: slab.id, validFrom: date(VALID_FROM), validTo: date(VALID_TO), active: true, createdById: admin.id } });
   }
+  // Seed the canonical Agent -> Hotel -> Category path alongside the legacy
+  // slab so the demo exercises precedence, dated mappings, and guest supplements.
+  for (const { source, hotel, roomPlans } of sourceRecords) {
+    await prisma.agentHotelRateCategoryAssignment.upsert({
+      where: { agentId_hotelId_validFrom: { agentId: agent.id, hotelId: hotel.id, validFrom: date(VALID_FROM) } },
+      update: { category: 'B', validTo: date(VALID_TO), active: true, updatedById: admin.id },
+      create: { agentId: agent.id, hotelId: hotel.id, category: 'B', validFrom: date(VALID_FROM), validTo: date(VALID_TO), active: true, createdById: admin.id, updatedById: admin.id },
+    });
+    for (const { cp, map, source } of roomPlans) {
+      for (const [plan, amount] of [[cp, source.cp], [map, source.map]] as const) {
+        await prisma.agentCategoryRateBand.upsert({
+          where: { ratePlanId_validFrom_validTo: { ratePlanId: plan.id, validFrom: date(VALID_FROM), validTo: date(VALID_TO) } },
+          update: { categoryAAmount: amount * 1.15, categoryBAmount: amount * 1.05, categoryCAmount: amount, categoryDAmount: amount * 0.95, categoryEAmount: amount * 0.9, active: true, updatedById: admin.id },
+          create: { ratePlanId: plan.id, validFrom: date(VALID_FROM), validTo: date(VALID_TO), categoryAAmount: amount * 1.15, categoryBAmount: amount * 1.05, categoryCAmount: amount, categoryDAmount: amount * 0.95, categoryEAmount: amount * 0.9, active: true, createdById: admin.id, updatedById: admin.id },
+        });
+      }
+    }
+    for (const [mealPlan, extras] of [['CP', source.extras], ['MAP', source.extras]] as const) {
+      await prisma.mealPlanGuestSupplementBand.upsert({
+        where: { hotelId_mealPlan_validFrom_validTo: { hotelId: hotel.id, mealPlan, validFrom: date(VALID_FROM), validTo: date(VALID_TO) } },
+        update: { extraAdultAmount: extras.adult, childWithBedAmount: extras.childWithBed, childWithoutBedAmount: extras.childWithoutBed, active: true, updatedById: admin.id },
+        create: { hotelId: hotel.id, mealPlan, validFrom: date(VALID_FROM), validTo: date(VALID_TO), extraAdultAmount: extras.adult, childWithBedAmount: extras.childWithBed, childWithoutBedAmount: extras.childWithoutBed, active: true, createdById: admin.id, updatedById: admin.id },
+      });
+    }
+  }
   const stored = await prisma.agentRateSlabRate.findMany({ where: { slabId: slab.id }, include: { ratePlan: { include: { roomType: { include: { hotel: true } }, master: true } } }, orderBy: { ratePlanId: 'asc' } });
   const commercialMismatches = expectedRates.filter((expected) => !stored.some((actual) => actual.ratePlanId === expected.ratePlanId && Number(actual.amount) === expected.amount));
   const supplementMismatches: string[] = [];

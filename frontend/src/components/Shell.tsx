@@ -24,7 +24,8 @@ export const legacyAdminLinks = [
   { key: 'banquets', href: '/admin/banquets', label: 'Banquets & Events' },
   { key: 'functionSpaces', href: '/admin/function-spaces', label: 'Function Spaces' },
   { key: 'ratePlans', href: '/admin/rate-plans', label: 'Rate Plans' },
-  { key: 'rates', href: '/admin/rates', label: 'Rates' },
+  { key: 'rates', href: '/admin/rates', label: 'Rate Master' },
+  { key: 'rateCalendar', href: '/admin/rate-calendar', label: 'Rate Calendar' },
   { key: 'rateSeasons', href: '/admin/rate-seasons', label: 'Rate Seasons' },
   { key: 'yieldRules', href: '/admin/yield-rules', label: 'Yield Rules' },
   { key: 'rateSimulator', href: '/admin/rate-simulator', label: 'Rate Simulator' },
@@ -65,7 +66,7 @@ const propertyHiddenLinks = new Set(['/admin/hotels', '/admin/settings', '/admin
 export const legacyAdminGroupDefinitions = [
   { key: 'operations', label: 'Operations', itemKeys: ['roomsInventory', 'physicalRooms', 'roomRack', 'housekeeping', 'maintenance', 'logbook', 'banquets', 'functionSpaces', 'supplementaryCharges', 'expenses', 'serviceItems', 'cashier'] },
   { key: 'reservations', label: 'Reservations', itemKeys: ['reservations', 'groups', 'frontDesk', 'arrivals', 'inHouse', 'lostFound', 'payments', 'contactRequests'] },
-  { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rates', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
+  { key: 'revenue', label: 'Revenue', itemKeys: ['revenueForecast', 'ratePlans', 'rates', 'rateCalendar', 'rateSeasons', 'yieldRules', 'rateSimulator', 'promotions', 'rateImport'] },
   { key: 'crmSales', label: 'CRM & Sales', itemKeys: ['guests', 'agents', 'corporates', 'inquiries'] },
   { key: 'reports', label: 'Reports', itemKeys: ['reports', 'taxInvoices', 'creditNotes', 'tds', 'nightAudit'] },
   { key: 'system', label: 'System', itemKeys: ['manageHotels', 'taxSettings', 'axisRooms', 'jobs', 'users', 'siteSettings', 'features', 'auditLogs'] },

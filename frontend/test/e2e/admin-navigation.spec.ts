@@ -30,7 +30,7 @@ test('admin grouped navigation opens one menu, closes safely, and preserves acti
   await expect(page.getByRole('menu', { name: 'Reservations navigation' })).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Revenue', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Rates', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Rate Master', exact: true }).click();
   await expect(page).toHaveURL(`${frontendUrl}/admin/rates`);
   await expect(page.getByRole('button', { name: 'Revenue', exact: true })).toHaveClass(/active/);
   await expect(page.getByRole('menu')).toHaveCount(0);

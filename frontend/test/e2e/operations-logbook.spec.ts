@@ -84,6 +84,7 @@ test("front desk reservation reference preselects a database-linked reservation"
     page,
     base,
     "/rainwood/admin/logbook?reservationRef=RW-ARRIVAL-001&category=ARRIVAL",
+    "hotel.admin@rainwood.demo",
   );
   const formDialog = page.getByRole("dialog", {
     name: "Add to Operations Logbook",

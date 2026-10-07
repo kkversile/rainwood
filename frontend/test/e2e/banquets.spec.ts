@@ -77,14 +77,17 @@ test("Reservation user completes event edit, function, BEO save-and-finalize, ca
     page.getByRole("heading", { name: "Banquets & Events" }),
   ).toBeVisible();
   const eventName = `Synthetic Catering Event ${Date.now()}`;
+  const eventDate = futureDate(14 + (Date.now() % 300));
   const eventForm = page
     .locator("form")
     .filter({ hasText: "Create event" })
     .first();
-  await eventForm.getByLabel("Hotel").selectOption({ index: 0 });
+  await eventForm
+    .getByLabel("Hotel")
+    .selectOption({ label: "RainWood Aurum Kodaikanal" });
   await eventForm.getByLabel("Event name").fill(eventName);
-  await eventForm.getByLabel("Start date").fill(futureDate(14));
-  await eventForm.getByLabel("End date").fill(futureDate(14));
+  await eventForm.getByLabel("Start date").fill(eventDate);
+  await eventForm.getByLabel("End date").fill(eventDate);
   await eventForm.getByLabel("Primary contact").fill("Synthetic Event Contact");
   await eventForm.getByLabel("Contact mobile").fill("9000012345");
   const createResponsePromise = page.waitForResponse(
@@ -94,7 +97,7 @@ test("Reservation user completes event edit, function, BEO save-and-finalize, ca
   );
   await eventForm.getByRole("button", { name: "Create event" }).click();
   const createdEvent = await (await createResponsePromise).json();
-  await expect(page.getByText(/Created BQT-/)).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('Created');
 
   const overviewForm = page
     .locator("form")
@@ -137,7 +140,7 @@ test("Reservation user completes event edit, function, BEO save-and-finalize, ca
     .getByLabel("Function space")
     .selectOption({ label: "Grand Ballroom (BALLROOM)" });
   await functionForm.getByLabel("Function name").fill("Synthetic Main Session");
-  await functionForm.getByLabel("Date", { exact: true }).fill(futureDate(14));
+  await functionForm.getByLabel("Date", { exact: true }).fill(eventDate);
   await functionForm.getByLabel("Start").fill("18:00");
   await functionForm.getByLabel("End").fill("19:00");
   await functionForm.getByLabel("Expected PAX").fill("40");
@@ -241,7 +244,7 @@ test("Reservation user completes event edit, function, BEO save-and-finalize, ca
     `${frontendUrl}/admin/banquets?event=${encodeURIComponent(createdEvent.id)}`,
   );
   await page.getByRole("link", { name: "Function calendar" }).click();
-  await page.getByLabel("From").fill(futureDate(14));
+  await page.getByLabel("From").fill(eventDate);
   await expect(
     page.getByRole("link", { name: new RegExp(createdEvent.eventCode) }),
   ).toBeVisible();
@@ -325,7 +328,9 @@ test("Accounts and Viewer can select a hotel and inspect banquet details without
       page.getByRole("heading", { name: "Create banquet event" }),
     ).toHaveCount(0);
     await expect(page.getByLabel("Event hotel")).toBeVisible();
-    await page.getByLabel("Event hotel").selectOption({ index: 1 });
+    await page
+      .getByLabel("Event hotel")
+      .selectOption({ label: "RainWood Aurum Kodaikanal" });
     await expect(page.locator(".banquetTable tbody tr").first()).toContainText(
       "RainWood Aurum Kodaikanal",
     );

@@ -24,6 +24,14 @@ async function signOut(page: Page) {
   }
 }
 
+function propertyFeatureLink(page: Page) {
+  return page
+    .locator('tr')
+    .filter({ hasText: 'RainWood Aurum Kodaikanal' })
+    .locator('a[title="Feature settings"]')
+    .first();
+}
+
 test('SUPER_ADMIN can review, disable, and restore a group feature setting', async ({ page }) => {
   page.on('dialog', (dialog) => void dialog.accept());
   await signInAdmin(page);
@@ -42,7 +50,7 @@ test('SUPER_ADMIN can open a hotel-scoped settings link and use search and group
   page.on('dialog', (dialog) => void dialog.accept());
   await signInAdmin(page);
   await page.goto(`${frontendUrl}/admin/hotels`);
-  const featureLink = page.locator('a[href^="/rainwood/admin/features?hotelId="]').first();
+  const featureLink = propertyFeatureLink(page);
   await expect(featureLink).toBeVisible();
   await featureLink.click();
   await expect(page).toHaveURL(/\/admin\/features\?hotelId=.+/);
@@ -64,7 +72,7 @@ test('hotel override flow hides admin features, blocks the direct route and API,
   page.on('dialog', (dialog) => void dialog.accept());
   await signInAdmin(page);
   await page.goto(`${frontendUrl}/admin/hotels`);
-  const featureLink = page.locator('a[href^="/rainwood/admin/features?hotelId="]').first();
+  const featureLink = propertyFeatureLink(page);
   const featureHref = await featureLink.getAttribute('href');
   await featureLink.click();
   await expect(page).toHaveURL(/\/admin\/features\?hotelId=.+/);
@@ -115,7 +123,7 @@ test('Agents admin feature OFF hides management navigation without affecting Age
   page.on('dialog', (dialog) => void dialog.accept());
   await signInAdmin(page);
   await page.goto(`${frontendUrl}/admin/hotels`);
-  const featureLink = page.locator('a[href^="/rainwood/admin/features?hotelId="]').first();
+  const featureLink = propertyFeatureLink(page);
   const featureHref = await featureLink.getAttribute('href');
   await featureLink.click();
   await expect(page).toHaveURL(/\/admin\/features\?hotelId=.+/);
@@ -152,7 +160,7 @@ test('browser feature switches keep in-house and room navigation independent', a
   page.on('dialog', (dialog) => void dialog.accept());
   await signInAdmin(page);
   await page.goto(`${frontendUrl}/admin/hotels`);
-  const featureLink = page.locator('a[href^="/rainwood/admin/features?hotelId="]').first();
+  const featureLink = propertyFeatureLink(page);
   const featureHref = await featureLink.getAttribute('href');
   await featureLink.click();
   await expect(page).toHaveURL(/\/admin\/features\?hotelId=.+/);

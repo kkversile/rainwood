@@ -13,10 +13,11 @@ function localEnv(name: string) {
 const fixturePrefix = `RW-GROUP-BROWSER-${Date.now()}`;
 const fixtureScript = resolve(process.cwd(), '..', 'backend', 'test', 'groups-browser-fixture.ts');
 const tsxCli = resolve(process.cwd(), '..', 'backend', 'node_modules', 'tsx', 'dist', 'cli.mjs');
-const fixture = JSON.parse(execFileSync(process.execPath, [tsxCli, fixtureScript, 'seed', fixturePrefix], { cwd: resolve(process.cwd(), '..', 'backend'), env: { ...process.env, DATABASE_URL: process.env.E2E_DATABASE_URL }, encoding: 'utf8' }));
+const fixtureDatabaseUrl = process.env.E2E_DATABASE_URL ?? process.env.DATABASE_URL;
+const fixture = JSON.parse(execFileSync(process.execPath, [tsxCli, fixtureScript, 'seed', fixturePrefix], { cwd: resolve(process.cwd(), '..', 'backend'), env: { ...process.env, DATABASE_URL: fixtureDatabaseUrl }, encoding: 'utf8' }));
 
 test.afterAll(() => {
-  execFileSync(process.execPath, [tsxCli, fixtureScript, 'cleanup', fixturePrefix], { cwd: resolve(process.cwd(), '..', 'backend'), env: { ...process.env, DATABASE_URL: process.env.E2E_DATABASE_URL }, stdio: 'ignore' });
+  execFileSync(process.execPath, [tsxCli, fixtureScript, 'cleanup', fixturePrefix], { cwd: resolve(process.cwd(), '..', 'backend'), env: { ...process.env, DATABASE_URL: fixtureDatabaseUrl }, stdio: 'ignore' });
 });
 
 async function login(page: any, email: string, next = '/rainwood/admin/groups') {
@@ -36,7 +37,7 @@ test('Reservation user completes a multi-night group pickup and opens Reservatio
   await expect(page.getByRole('heading', { name: 'Groups & room blocks' })).toBeVisible();
 
   const createForm = page.locator('form').filter({ hasText: 'Create group' }).first();
-  await createForm.getByLabel('Hotel').selectOption({ index: 0 });
+  await createForm.getByLabel('Hotel').selectOption({ label: fixture.hotelAName });
   await createForm.getByLabel('Group name').fill(`Nightly workflow ${Date.now()}`);
   await createForm.getByLabel('Arrival').fill(arrival);
   await createForm.getByLabel('Departure').fill(departure);

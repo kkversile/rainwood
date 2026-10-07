@@ -248,6 +248,14 @@ enum AgentRateSlabStatus {
   RETIRED
 }
 
+enum AgentRateCategory {
+  A
+  B
+  C
+  D
+  E
+}
+
 enum RatePlanMasterKind {
   CANONICAL_MEAL
   SPECIAL_PRODUCT
@@ -658,6 +666,13 @@ model User {
   createdAgentRateSlabAssignments  AgentRateSlabAssignment[]   @relation("AgentRateSlabAssignmentCreatedBy")
   agentRateSheets                  AgentRateSheet[]
   publishedAgentRateSheets         AgentRateSheet[]            @relation("AgentRateSheetPublishedBy")
+  createdAgentCategoryRateBands    AgentCategoryRateBand[]     @relation("AgentCategoryRateBandCreatedBy")
+  updatedAgentCategoryRateBands    AgentCategoryRateBand[]     @relation("AgentCategoryRateBandUpdatedBy")
+  createdMealPlanSupplementBands   MealPlanGuestSupplementBand[] @relation("MealPlanGuestSupplementBandCreatedBy")
+  updatedMealPlanSupplementBands   MealPlanGuestSupplementBand[] @relation("MealPlanGuestSupplementBandUpdatedBy")
+  agentHotelRateCategoryAssignments AgentHotelRateCategoryAssignment[] @relation("AgentHotelRateCategoryAgent")
+  createdAgentHotelCategoryMappings AgentHotelRateCategoryAssignment[] @relation("AgentHotelRateCategoryCreatedBy")
+  updatedAgentHotelCategoryMappings AgentHotelRateCategoryAssignment[] @relation("AgentHotelRateCategoryUpdatedBy")
   guestNotes                       GuestNote[]
   paymentMilestones                AgentPaymentMilestone[]
   createdGroups                    GroupReservation[]          @relation("GroupCreator")
@@ -780,6 +795,8 @@ model Hotel {
   rooms                   RoomType[]
   physicalRooms           Room[]
   ratePlanMasters         RatePlanMaster[]
+  mealPlanGuestSupplementBands MealPlanGuestSupplementBand[]
+  agentHotelRateCategoryAssignments AgentHotelRateCategoryAssignment[]
   images                  HotelImage[]
   videos                  HotelVideo[]
   amenities               HotelAmenity[]
@@ -1279,6 +1296,7 @@ model RatePlan {
   cancellationRules       CancellationRule[]
   assignedAgents          AgentRatePlan[]
   slabRates               AgentRateSlabRate[]
+  agentCategoryBands      AgentCategoryRateBand[]
   promotionRates          PromotionRatePlan[]
   seasonRates             RateSeasonRatePlan[]
   corporateRateAgreements CorporateRateAgreement[]
@@ -1386,18 +1404,87 @@ model AgentRateSlabAssignment {
 model AgentRateSheet {
   id            String        @id @default(cuid())
   agentId       String
-  slabId        String
+  sourceType    String        @default("AGENT_SLAB")
+  slabId        String?
   version       Int
   snapshotJson  Json
   publishedAt   DateTime      @default(now())
   publishedById String?
   agent         User          @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  slab          AgentRateSlab @relation(fields: [slabId], references: [id], onDelete: Cascade)
+  slab          AgentRateSlab? @relation(fields: [slabId], references: [id], onDelete: Cascade)
   publishedBy   User?         @relation("AgentRateSheetPublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
   createdAt     DateTime      @default(now())
 
   @@unique([agentId, slabId, version])
+  @@unique([agentId, sourceType, version])
   @@index([agentId, publishedAt])
+}
+
+model AgentCategoryRateBand {
+  id              String   @id @default(cuid())
+  ratePlanId      String
+  ratePlan        RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+  validFrom       DateTime @db.Date
+  validTo         DateTime @db.Date
+  categoryAAmount Decimal  @db.Decimal(12, 2)
+  categoryBAmount Decimal  @db.Decimal(12, 2)
+  categoryCAmount Decimal  @db.Decimal(12, 2)
+  categoryDAmount Decimal  @db.Decimal(12, 2)
+  categoryEAmount Decimal  @db.Decimal(12, 2)
+  active          Boolean  @default(true)
+  createdById     String?
+  createdBy       User?    @relation("AgentCategoryRateBandCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById     String?
+  updatedBy       User?    @relation("AgentCategoryRateBandUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([ratePlanId, validFrom, validTo])
+  @@index([ratePlanId, active, validFrom, validTo])
+}
+
+model MealPlanGuestSupplementBand {
+  id                    String   @id @default(cuid())
+  hotelId               String
+  hotel                 Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  mealPlan              String
+  validFrom             DateTime @db.Date
+  validTo               DateTime @db.Date
+  extraAdultAmount      Decimal  @db.Decimal(12, 2)
+  childWithBedAmount    Decimal  @db.Decimal(12, 2)
+  childWithoutBedAmount Decimal  @db.Decimal(12, 2)
+  active                Boolean  @default(true)
+  createdById           String?
+  createdBy             User?    @relation("MealPlanGuestSupplementBandCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById           String?
+  updatedBy             User?    @relation("MealPlanGuestSupplementBandUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([hotelId, mealPlan, validFrom, validTo])
+  @@index([hotelId, mealPlan, active, validFrom, validTo])
+}
+
+model AgentHotelRateCategoryAssignment {
+  id        String           @id @default(cuid())
+  agentId   String
+  hotelId   String
+  category  AgentRateCategory
+  validFrom DateTime         @db.Date
+  validTo   DateTime         @db.Date
+  active    Boolean          @default(true)
+  agent     User             @relation("AgentHotelRateCategoryAgent", fields: [agentId], references: [id], onDelete: Cascade)
+  hotel     Hotel            @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy User?            @relation("AgentHotelRateCategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById String?
+  updatedBy User?            @relation("AgentHotelRateCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([agentId, hotelId, validFrom])
+  @@index([agentId, hotelId, active, validFrom, validTo])
+  @@index([hotelId, active, validFrom, validTo])
 }
 
 model AgentWallet {

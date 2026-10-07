@@ -12,6 +12,7 @@ import { serializable } from '../../common/transactions';
 import { assertReservationTransition } from './reservation-state';
 import { RateResolverService } from '../availability/rate-resolver';
 import { AgentRateSlabsService } from '../agent-rate-slabs/agent-rate-slabs.service';
+import { RateMasterService } from '../rate-master/rate-master.service';
 import { AvailabilityService } from '../availability/availability.service';
 import { calculateAgentBookingPaymentTerms, calculateReservationPaymentSchedule } from '../../common/agent-payment-terms';
 import { HousekeepingService } from '../housekeeping/housekeeping.service';
@@ -32,7 +33,7 @@ const checkoutInclude = {
 
 @Injectable()
 export class ReservationsService {
-  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, @Optional() private readonly agentRateSlabs?: AgentRateSlabsService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService, @Optional() private readonly availability?: AvailabilityService, @Optional() private readonly cashierShifts?: CashierShiftsService, @Optional() private readonly groups?: GroupsService) {}
+  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, @Optional() private readonly agentRateSlabs?: AgentRateSlabsService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService, @Optional() private readonly availability?: AvailabilityService, @Optional() private readonly cashierShifts?: CashierShiftsService, @Optional() private readonly groups?: GroupsService, @Optional() private readonly rateMaster?: RateMasterService) {}
 
   private operationalRoles = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'];
 
@@ -415,6 +416,8 @@ export class ReservationsService {
     if (end && end.getTime() - start.getTime() > 370 * 86_400_000) throw new BadRequestException('Rate plan date ranges cannot exceed 371 days');
     const dateFilter = { date: { gte: start, ...(end ? { lte: end } : {}) } };
     const take = end ? 371 : 31;
+    const categoryRates = this.rateMaster ? await this.rateMaster.effectiveRatesForAgent(userId, start, end ?? new Date(start.getTime() + 30 * 86_400_000)) : null;
+    if (categoryRates) return categoryRates.rates;
     const slabContext = this.agentRateSlabs ? await this.agentRateSlabs.context(userId, start, end ?? new Date(start.getTime() + 30 * 86_400_000)) : null;
     if (slabContext) {
       if (!slabContext.fullAssignmentCoverage && end) throw new BadRequestException('Contract rate is not available for all selected nights.');
