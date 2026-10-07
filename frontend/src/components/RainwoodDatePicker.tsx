@@ -104,7 +104,7 @@ export function RainwoodDatePicker({ label, value, onChange, minDate, maxDate, p
         const isCurrentMonth = day.getUTCMonth() === visibleMonth.getUTCMonth();
         const isSelected = dateValue === value;
         const isDisabled = Boolean((minimumDate && day < minimumDate) || (maximumDate && day > maximumDate));
-        return <button type="button" key={dateValue} className={`${isCurrentMonth ? '' : 'outsideMonth '}${isSelected ? 'selectedDay' : ''}`} disabled={isDisabled} onClick={() => { onChange(dateValue); setVisibleMonth(monthStart(day)); setOpen(false); }}>{day.getUTCDate()}</button>;
+        return <button type="button" key={dateValue} className={`${isCurrentMonth ? '' : 'outsideMonth '}${isSelected ? 'selectedDay' : ''}`} disabled={isDisabled} onClick={() => { setOpen(false); setVisibleMonth(monthStart(day)); onChange(dateValue); }}>{day.getUTCDate()}</button>;
       })}</div>
     </div>}
   </div>;
