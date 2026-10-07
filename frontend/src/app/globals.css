@@ -1073,3 +1073,10 @@
   .adminSidebarShell .adminTopContent{padding:18px 15px 45px}
   .adminSidebarShell .rateMasterToolbar{top:0}
 }
+.adminSidebarShell .adminSidebar .adminNavGroup{display:block!important}
+.adminSidebarShell .adminSidebar .adminNavDropdown{position:static!important;display:none!important;min-width:0;margin:2px 0 3px 30px;box-shadow:none}
+.adminSidebarShell .adminSidebar .adminNavDropdown.is-visible{display:grid!important}
+.adminSidebarShell .adminSidebar .adminNavDropdown a{color:#315b60!important;background:#fff}
+.adminSidebarShell .adminSidebar .adminNavDropdown a:hover,.adminSidebarShell .adminSidebar .adminNavDropdown a:focus-visible{background:#e0f5f6;color:#087e84!important}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar .adminNavDropdown{position:absolute!important;top:0;left:calc(100% + 7px);z-index:80;display:none!important;min-width:245px;margin:0;padding:7px;border:1px solid var(--line);border-radius:9px;background:#fff;box-shadow:0 14px 30px rgba(7,40,62,.18)}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar .adminNavDropdown.is-visible{display:grid!important}
