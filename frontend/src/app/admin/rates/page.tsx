@@ -49,6 +49,11 @@ export default function RateMasterPage() {
 
   useEffect(() => {
     if (!hotelId) return;
+    if (!from || !to) {
+      void loadGrid(hotelId, '', '');
+      return;
+    }
+    if (!isValidRange(from, to)) return;
     void loadGrid(hotelId, from, to);
   }, [hotelId, from, to]);
 
