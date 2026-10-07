@@ -30,6 +30,14 @@ test('rate master is the compact five-column canonical grid', () => {
   for (const band of ['RACK', 'A', 'B', 'C', 'D', 'E']) assert.match(grid, new RegExp(`['"]${band}['"]`));
 });
 
+test('rate master defaults to a future one-month range and blocks past dates', () => {
+  const page = readFileSync(join(root, 'app/admin/rates/page.tsx'), 'utf8');
+  assert.match(page, /todayInHotelTimezone/);
+  assert.match(page, /addHotelDays\(todayInHotelTimezone\(\), DEFAULT_RATE_RANGE_DAYS\)/);
+  assert.match(page, /minDate=\{todayInHotelTimezone\(\)\}/);
+  assert.match(page, /minDate=\{from \|\| todayInHotelTimezone\(\)\}/);
+});
+
 test('promotions are a separate admin workflow with disable action', () => {
   const page = readFileSync(join(root, 'app/admin/promotions/page.tsx'), 'utf8');
   assert.match(page, /Promotions/);

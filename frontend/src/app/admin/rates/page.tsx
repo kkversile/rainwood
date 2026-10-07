@@ -5,8 +5,10 @@ import { AdminLayout } from '../../../components/Shell';
 import { GRID_FIELDS, GridBand, GridField, RateMasterGrid, RateMasterGridData } from '../../../components/RateMasterGrid';
 import { RainwoodDatePicker } from '../../../components/RainwoodDatePicker';
 import { apiRequest } from '../../../lib/api';
+import { addHotelDays, todayInHotelTimezone } from '../../../lib/hotel-date-time';
 
 type Hotel = { id: string; name: string };
+const DEFAULT_RATE_RANGE_DAYS = 30;
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -23,8 +25,8 @@ function isValidRange(from: string, to: string) {
 export default function RateMasterPage() {
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [hotelId, setHotelId] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [from, setFrom] = useState(() => todayInHotelTimezone());
+  const [to, setTo] = useState(() => addHotelDays(todayInHotelTimezone(), DEFAULT_RATE_RANGE_DAYS));
   const [draft, setDraft] = useState<RateMasterGridData | null>(null);
   const [original, setOriginal] = useState<RateMasterGridData | null>(null);
   const [expandedRooms, setExpandedRooms] = useState<Set<string>>(new Set());
@@ -91,7 +93,10 @@ export default function RateMasterPage() {
 
   function changeDate(field: 'from' | 'to', value: string) {
     if (!confirmDiscard()) return;
-    if (field === 'from') setFrom(value);
+    if (field === 'from') {
+      setFrom(value);
+      if (!to || to < value) setTo(addHotelDays(value, DEFAULT_RATE_RANGE_DAYS));
+    }
     else setTo(value);
   }
 
@@ -190,9 +195,9 @@ export default function RateMasterPage() {
     {message && <p className="notice" role="status">{message}</p>}
     <section className="rateMasterToolbar" aria-label="Rate Master controls">
       <label>Hotel<select aria-label="Hotel" value={hotelId} onChange={(event) => changeHotel(event.target.value)}><option value="">Select hotel</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label>
-      <label>From<RainwoodDatePicker label="From date" value={from} onChange={(value) => changeDate('from', value)} /></label>
+      <label>From<RainwoodDatePicker label="From date" value={from} minDate={todayInHotelTimezone()} onChange={(value) => changeDate('from', value)} /></label>
       <span className="rateMasterArrow" aria-hidden="true">→</span>
-      <label>To<RainwoodDatePicker label="To date" value={to} minDate={from} onChange={(value) => changeDate('to', value)} /></label>
+      <label>To<RainwoodDatePicker label="To date" value={to} minDate={from || todayInHotelTimezone()} onChange={(value) => changeDate('to', value)} /></label>
       <button className="smallBtn secondary" type="button" disabled={!validRange || loading} onClick={() => void loadGrid(hotelId, from, to)}>Load rates</button>
       <div className="rateMasterToolbarActions"><button className="smallBtn secondary" type="button" disabled={!dirty} onClick={revert}>Revert Unsaved</button><button className="smallBtn" type="button" disabled={saveDisabled} onClick={() => void save()}>{saving ? 'Saving…' : 'Save Rates'}</button></div>
     </section>
