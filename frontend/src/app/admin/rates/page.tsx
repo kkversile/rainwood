@@ -190,7 +190,6 @@ export default function RateMasterPage() {
 
   const saveDisabled = !hotelId || !validRange || !dirty || saving;
   return <AdminLayout title="Rate Master"><section className="pageSection rateMasterPage">
-    <header className="pageTitle rateMasterPageTitle"><div><span>Revenue management</span><h1>Rate Master</h1><p>Enter Rack and A-E category rates across all canonical meal plans.</p></div></header>
     {error && <p className="error" role="alert">{error}</p>}
     {message && <p className="notice" role="status">{message}</p>}
     <section className="rateMasterToolbar" aria-label="Rate Master controls">
