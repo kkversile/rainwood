@@ -1145,6 +1145,22 @@
 .adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarBrand{justify-content:flex-start;padding-inline:10px}
 .adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarSearch{justify-content:flex-start;padding-inline:10px;border-color:var(--rw-sidebar-separator);background:rgba(255,255,255,.06)}
 .adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarNav>a,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavGroupButton{justify-content:flex-start;padding-inline:12px;font-size:13px}
+
+/* Keep sidebar labels readable in every writing context and avoid repeating the
+   group label when a collapsed rail is expanded to show its flyout. */
+.adminSidebarShell .adminSidebar,
+.adminSidebarShell .adminSidebarNav,
+.adminSidebarShell .adminNavGroupButton,
+.adminSidebarShell .adminNavDropdown,
+.adminSidebarShell .adminNavLabel,
+.adminSidebarShell .adminNavDropdownHeader,
+.adminSidebarShell .adminNavChildLabel{direction:ltr;unicode-bidi:isolate}
+.adminSidebarShell .adminNavLabel,
+.adminSidebarShell .adminNavDropdownHeader,
+.adminSidebarShell .adminNavChildLabel{text-align:left}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavGroup.is-open>.adminNavGroupButton .adminNavLabel{display:none!important}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavGroup.is-open>.adminNavGroupButton{justify-content:center}
+
 @media(max-width:820px){
   .adminSidebarShell .adminSidebar .adminNavDropdown,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:not(:hover) .adminNavDropdown{position:static!important;min-width:0!important;margin:3px 0 5px 30px!important;box-shadow:none!important}
   .adminSidebarShell.is-mobile-nav-open .adminSidebar [data-tooltip]::after{display:none!important}
