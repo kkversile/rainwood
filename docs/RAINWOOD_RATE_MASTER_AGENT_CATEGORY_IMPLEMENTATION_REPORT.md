@@ -18,6 +18,7 @@
 - Added blank-date zero structure, date-range loading, mixed-value markers, local copy/clear/revert, expand/collapse, and dirty-cell bulk saving. Untouched Mixed cells are omitted from save requests.
 - Added generic EP/CP/MAP/AP seed coverage and source-rate verification for the normalized daily grid.
 - Added stale-request protection so a partial-date zero response cannot overwrite a completed date-range response.
+- Added an explicit accessible Load rates action, blur loading, and native date-input handling so completed ranges can be refreshed deterministically in live browsers.
 
 1. Added `AgentRateCategory` and three additive Prisma models with overlap-friendly date indexes and foreign keys.
 2. Added migration `20261007120000_add_agent_category_mapping/migration.sql`.
@@ -45,6 +46,6 @@
 
 ## Deployment status
 
-- The preceding category-mapping release at commit `8dde7b04823827bb3723e5177e7536891f7bf294` is pushed to `origin/main` and live.
-- The current Rate Master grid changes are locally verified and are pending the release commit and live deployment checks.
+- The current Rate Master grid release at commit `532be24ce3d8b179183aa867ef27b4a687993b7d` is pushed to `origin/main`, deployed to `/var/www/rainwood`, and live with `rainwood-web.service` active.
+- Chrome verification passed at `https://demo.dhisoft.in/rainwood/admin/rates`: Casa Bella Thekkady, 2026-10-07 through 2026-10-09, explicit Load rates action, visible seeded EP Rack values, all five canonical fields, four canonical meal plans, and no Triple field.
 - The remote pre-existing `frontend/package-lock.json` edit and `frontend/.env.production` file were preserved and were not part of the release commit.
