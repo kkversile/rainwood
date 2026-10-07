@@ -32,10 +32,12 @@ test('rate master is the compact five-column canonical grid', () => {
 
 test('rate master defaults to a future one-month range and blocks past dates', () => {
   const page = readFileSync(join(root, 'app/admin/rates/page.tsx'), 'utf8');
+  const styles = readFileSync(join(root, 'app/globals.css'), 'utf8');
   assert.match(page, /todayInHotelTimezone/);
   assert.match(page, /addHotelDays\(todayInHotelTimezone\(\), DEFAULT_RATE_RANGE_DAYS\)/);
   assert.match(page, /minDate=\{todayInHotelTimezone\(\)\}/);
   assert.match(page, /minDate=\{from \|\| todayInHotelTimezone\(\)\}/);
+  assert.match(styles, /\.rateMasterToolbar\{position:sticky;top:0;z-index:25;/);
 });
 
 test('promotions are a separate admin workflow with disable action', () => {
