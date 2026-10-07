@@ -123,7 +123,7 @@ function GroupedAdminNavigation({ links: allowedLinks, pathname, collapsed, onNa
 
   useEffect(() => {
     setOpenGroup(routeGroup);
-  }, [pathname, routeGroup]);
+  }, [collapsed, pathname, routeGroup]);
 
   useEffect(() => {
     if (!openGroup) return;
