@@ -132,21 +132,24 @@ async function upsertHotel(source: SourceHotel) {
   }
   await prisma.hotelPolicy.upsert({ where: { hotelId: hotel.id }, update: {}, create: { hotelId: hotel.id, houseRules: 'Subject to property availability and the published seasonal contract terms.' } });
   const masters: Record<string, any> = {};
-  for (const item of [{ code: 'CP', name: 'CP - Breakfast', description: 'Room with breakfast included.' }, { code: 'MAP', name: 'MAP - Breakfast + Dinner', description: 'Room with breakfast and dinner included.' }]) {
+  for (const item of [{ code: 'EP', name: 'EP - Room Only', description: 'Room only.' }, { code: 'CP', name: 'CP - Breakfast', description: 'Room with breakfast included.' }, { code: 'MAP', name: 'MAP - Breakfast + Dinner', description: 'Room with breakfast and dinner included.' }, { code: 'AP', name: 'AP - Breakfast + Lunch + Dinner', description: 'Room with breakfast, lunch and dinner included.' }]) {
     masters[item.code] = await prisma.ratePlanMaster.upsert({ where: { hotelId_code: { hotelId: hotel.id, code: item.code } }, update: { active: true, name: item.name, mealPlan: item.code, kind: 'CANONICAL_MEAL', description: item.description }, create: { hotelId: hotel.id, code: item.code, name: item.name, mealPlan: item.code, kind: 'CANONICAL_MEAL', description: item.description } });
   }
-  const roomPlans: { room: any; cp: any; map: any; source: SourceRoom }[] = [];
+  const roomPlans: { room: any; ep: any; cp: any; map: any; ap: any; source: SourceRoom }[] = [];
   for (let index = 0; index < source.rooms.length; index += 1) {
     const sourceRoom = source.rooms[index];
     const code = `SRC-${String(index + 1).padStart(2, '0')}`;
     const room = await prisma.roomType.upsert({ where: { hotelId_code: { hotelId: hotel.id, code } }, update: { name: sourceRoom.name, active: true, roomsAvailable: 3, maxAdults: /4 Pax/i.test(sourceRoom.name) ? 4 : 2, maxChildren: 2, maxOccupancy: /4 Pax/i.test(sourceRoom.name) ? 4 : 3, acAvailable: /AC|Suite|Cottage/i.test(sourceRoom.name) }, create: { hotelId: hotel.id, code, name: sourceRoom.name, roomsAvailable: 3, maxAdults: /4 Pax/i.test(sourceRoom.name) ? 4 : 2, maxChildren: 2, maxOccupancy: /4 Pax/i.test(sourceRoom.name) ? 4 : 3, acAvailable: /AC|Suite|Cottage/i.test(sourceRoom.name) } });
+    const ep = await prisma.ratePlan.upsert({ where: { roomTypeId_masterId: { roomTypeId: room.id, masterId: masters.EP.id } }, update: { active: true, code: 'EP', name: masters.EP.name, mealPlan: 'EP', description: masters.EP.description }, create: { roomTypeId: room.id, masterId: masters.EP.id, code: 'EP', name: masters.EP.name, mealPlan: 'EP', description: masters.EP.description } });
     const cp = await prisma.ratePlan.upsert({ where: { roomTypeId_masterId: { roomTypeId: room.id, masterId: masters.CP.id } }, update: { active: true, code: 'CP', name: masters.CP.name, mealPlan: 'CP', description: masters.CP.description }, create: { roomTypeId: room.id, masterId: masters.CP.id, code: 'CP', name: masters.CP.name, mealPlan: 'CP', description: masters.CP.description } });
     const map = await prisma.ratePlan.upsert({ where: { roomTypeId_masterId: { roomTypeId: room.id, masterId: masters.MAP.id } }, update: { active: true, code: 'MAP', name: masters.MAP.name, mealPlan: 'MAP', description: masters.MAP.description }, create: { roomTypeId: room.id, masterId: masters.MAP.id, code: 'MAP', name: masters.MAP.name, mealPlan: 'MAP', description: masters.MAP.description } });
-    roomPlans.push({ room, cp, map, source: sourceRoom });
+    const ap = await prisma.ratePlan.upsert({ where: { roomTypeId_masterId: { roomTypeId: room.id, masterId: masters.AP.id } }, update: { active: true, code: 'AP', name: masters.AP.name, mealPlan: 'AP', description: masters.AP.description }, create: { roomTypeId: room.id, masterId: masters.AP.id, code: 'AP', name: masters.AP.name, mealPlan: 'AP', description: masters.AP.description } });
+    roomPlans.push({ room, ep, cp, map, ap, source: sourceRoom });
+    const planAmounts = [{ plan: ep, mealPlan: 'EP', amount: Math.max(1000, sourceRoom.cp - 500) }, { plan: cp, mealPlan: 'CP', amount: sourceRoom.cp }, { plan: map, mealPlan: 'MAP', amount: sourceRoom.map }, { plan: ap, mealPlan: 'AP', amount: sourceRoom.map + 1200 }];
     for (let cursor = date(VALID_FROM); cursor <= date(VALID_TO); cursor = new Date(cursor.getTime() + 86_400_000)) {
       const day = new Date(cursor);
       await prisma.inventoryDay.upsert({ where: { roomTypeId_date: { roomTypeId: room.id, date: day } }, update: { available: 3, stopSell: false }, create: { roomTypeId: room.id, date: day, available: 3, stopSell: false } });
-      for (const [plan, amount] of [[cp, sourceRoom.cp], [map, sourceRoom.map]] as const) await prisma.rateDay.upsert({ where: { ratePlanId_date: { ratePlanId: plan.id, date: day } }, update: { amount, baseAmount: amount, taxAmount: Math.round(amount * ROOM_TAX_RATE * 100) / 100, minLos: 1, maxLos: 30 }, create: { ratePlanId: plan.id, date: day, amount, baseAmount: amount, taxAmount: Math.round(amount * ROOM_TAX_RATE * 100) / 100, minLos: 1, maxLos: 30 } });
+      for (const { plan, amount } of planAmounts) await prisma.rateDay.upsert({ where: { ratePlanId_date: { ratePlanId: plan.id, date: day } }, update: { amount, baseAmount: amount, taxAmount: Math.round(amount * ROOM_TAX_RATE * 100) / 100, childAmount: source.extras.childWithBed, childWithoutBedAmount: source.extras.childWithoutBed, extraAdultAmount: source.extras.adult, occupancyPrices: { single: Math.round(amount * 0.9), double: amount }, minLos: 1, maxLos: 30 }, create: { ratePlanId: plan.id, date: day, amount, baseAmount: amount, taxAmount: Math.round(amount * ROOM_TAX_RATE * 100) / 100, childAmount: source.extras.childWithBed, childWithoutBedAmount: source.extras.childWithoutBed, extraAdultAmount: source.extras.adult, occupancyPrices: { single: Math.round(amount * 0.9), double: amount }, minLos: 1, maxLos: 30 } });
     }
   }
   for (const supplement of source.supplements) {
@@ -206,16 +209,28 @@ async function main() {
       update: { category: 'B', validTo: date(VALID_TO), active: true, updatedById: admin.id },
       create: { agentId: agent.id, hotelId: hotel.id, category: 'B', validFrom: date(VALID_FROM), validTo: date(VALID_TO), active: true, createdById: admin.id, updatedById: admin.id },
     });
-    for (const { cp, map, source } of roomPlans) {
-      for (const [plan, amount] of [[cp, source.cp], [map, source.map]] as const) {
+    for (const { ep, cp, map, ap, source: roomSource } of roomPlans) {
+      const planAmounts = [{ plan: ep, amount: Math.max(1000, roomSource.cp - 500) }, { plan: cp, amount: roomSource.cp }, { plan: map, amount: roomSource.map }, { plan: ap, amount: roomSource.map + 1200 }];
+      for (const { plan, amount } of planAmounts) {
+        const categoryMultipliers = { A: 1.15, B: 1.05, C: 1, D: 0.95, E: 0.9 } as const;
         await prisma.agentCategoryRateBand.upsert({
           where: { ratePlanId_validFrom_validTo: { ratePlanId: plan.id, validFrom: date(VALID_FROM), validTo: date(VALID_TO) } },
           update: { categoryAAmount: amount * 1.15, categoryBAmount: amount * 1.05, categoryCAmount: amount, categoryDAmount: amount * 0.95, categoryEAmount: amount * 0.9, active: true, updatedById: admin.id },
           create: { ratePlanId: plan.id, validFrom: date(VALID_FROM), validTo: date(VALID_TO), categoryAAmount: amount * 1.15, categoryBAmount: amount * 1.05, categoryCAmount: amount, categoryDAmount: amount * 0.95, categoryEAmount: amount * 0.9, active: true, createdById: admin.id, updatedById: admin.id },
         });
+        for (let cursor = date(VALID_FROM); cursor <= date(VALID_TO); cursor = new Date(cursor.getTime() + 86_400_000)) {
+          const day = new Date(cursor);
+          for (const [category, multiplier] of Object.entries(categoryMultipliers) as Array<[keyof typeof categoryMultipliers, number]>) {
+            await prisma.agentCategoryRateDay.upsert({
+              where: { ratePlanId_category_date: { ratePlanId: plan.id, category, date: day } },
+              update: { singleAmount: Math.round(amount * multiplier * 0.9), doubleAmount: Math.round(amount * multiplier), extraAdultAmount: Math.round(source.extras.adult * multiplier), childWithBedAmount: Math.round(source.extras.childWithBed * multiplier), childWithoutBedAmount: Math.round(source.extras.childWithoutBed * multiplier), active: true, updatedById: admin.id },
+              create: { ratePlanId: plan.id, category, date: day, singleAmount: Math.round(amount * multiplier * 0.9), doubleAmount: Math.round(amount * multiplier), extraAdultAmount: Math.round(source.extras.adult * multiplier), childWithBedAmount: Math.round(source.extras.childWithBed * multiplier), childWithoutBedAmount: Math.round(source.extras.childWithoutBed * multiplier), active: true, createdById: admin.id, updatedById: admin.id },
+            });
+          }
+        }
       }
     }
-    for (const [mealPlan, extras] of [['CP', source.extras], ['MAP', source.extras]] as const) {
+    for (const [mealPlan, extras] of [['EP', source.extras], ['CP', source.extras], ['MAP', source.extras], ['AP', source.extras]] as const) {
       await prisma.mealPlanGuestSupplementBand.upsert({
         where: { hotelId_mealPlan_validFrom_validTo: { hotelId: hotel.id, mealPlan, validFrom: date(VALID_FROM), validTo: date(VALID_TO) } },
         update: { extraAdultAmount: extras.adult, childWithBedAmount: extras.childWithBed, childWithoutBedAmount: extras.childWithoutBed, active: true, updatedById: admin.id },

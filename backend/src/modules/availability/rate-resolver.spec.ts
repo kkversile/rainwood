@@ -85,6 +85,18 @@ describe('RateResolverService', () => {
     expect(categoryRateMatches(context, 'plan-1', [new Date('2099-01-10')])).toBe(true);
   });
 
+  it('prefers a normalized daily category row over legacy scalar bands', () => {
+    const context: any = {
+      agentId: 'agent-1', hotelId: 'hotel-1', category: 'C', categoryByDate: { '2099-01-10': 'C' }, complete: true,
+      dailyRates: [{ id: 'daily-1', ratePlanId: 'plan-1', category: 'C', date: new Date('2099-01-10'), singleAmount: 5100, doubleAmount: 5600, extraAdultAmount: 700, childWithBedAmount: 350, childWithoutBedAmount: 150 }],
+      bands: [{ id: 'legacy-1', ratePlanId: 'plan-1', validFrom: new Date('2099-01-01'), validTo: new Date('2099-01-31'), categoryAAmount: 7000, categoryBAmount: 6800, categoryCAmount: 6400, categoryDAmount: 6100, categoryEAmount: 5900 }],
+      supplements: [{ mealPlan: 'CP', validFrom: new Date('2099-01-01'), validTo: new Date('2099-01-31'), extraAdultAmount: 900, childWithBedAmount: 450, childWithoutBedAmount: 200 }],
+    };
+    const result = resolver.byDate({ id: 'plan-1', mealPlan: 'CP' }, 'agent-1', null, context).get({ ...base, date: new Date('2099-01-10'), amount: 5000, taxAmount: 900 });
+    expect(result).toMatchObject({ amount: 5600, priceSource: 'AGENT_CATEGORY', canonicalPricing: true, extraAdultAmount: 700, childWithBedAmount: 350, childWithoutBedAmount: 150, rateBandId: 'daily-1' });
+    expect(result.occupancyPrices).toEqual({ single: 5100, double: 5600 });
+  });
+
   it('marks a category period incomplete instead of falling back', () => {
     const context: any = { category: 'A', bands: [{ ratePlanId: 'plan-1', validFrom: new Date('2099-01-01'), validTo: new Date('2099-01-10'), active: true }] };
     expect(categoryRateMatches(context, 'plan-1', [new Date('2099-01-10'), new Date('2099-01-11')])).toBe(false);

@@ -71,12 +71,23 @@ describe('availability restrictions and pricing', () => {
     expect(invalid.available).toBe(false);
   });
 
-  it('treats an exact triple occupancy price as the complete room price', () => {
+  it('uses double plus extra adult for three adults and ignores legacy triple prices', () => {
     const calculate = (service as any).calculate.bind(service);
     const triplePlan = { ...plan, rates: plan.rates.map((rate) => ({ ...rate, amount: 3500, extraAdultAmount: 800, occupancyPrices: { triple: 5000 } })) };
     const option = calculate({ ...room, maxAdults: 3, maxOccupancy: 3 }, triplePlan, { rooms: 1, adults: 3, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2);
-    expect(option.priceBreakdown[0].baseAmount).toBe(5000);
-    expect(option.priceBreakdown[0].extrasAmount).toBe(0);
+    expect(option.priceBreakdown[0].baseAmount).toBe(3500);
+    expect(option.priceBreakdown[0].extrasAmount).toBe(800);
+  });
+
+  it('uses adult count for the canonical Single/Double grid and keeps child supplements separate', () => {
+    const calculate = (service as any).calculate.bind(service);
+    const canonicalPlan = { ...plan, rates: plan.rates.map((rate) => ({ ...rate, amount: 2000, occupancyPrices: { single: 1500, double: 2000 }, extraAdultAmount: 500, childAmount: 300, childWithoutBedAmount: 200 })) };
+    const oneAdult = calculate({ ...room, maxAdults: 4, maxChildren: 2, maxOccupancy: 6 }, canonicalPlan, { rooms: 1, adults: 1, children: 1 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2);
+    expect(oneAdult.priceBreakdown[0].rooms[0]).toEqual(expect.objectContaining({ baseRate: 1500, supplementAmount: 300 }));
+    const twoAdultsAndChild = calculate({ ...room, maxAdults: 4, maxChildren: 2, maxOccupancy: 6 }, canonicalPlan, { rooms: 1, adults: 2, children: 1 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2);
+    expect(twoAdultsAndChild.priceBreakdown[0].rooms[0]).toEqual(expect.objectContaining({ baseRate: 2000, supplementAmount: 300 }));
+    const fourAdults = calculate({ ...room, maxAdults: 4, maxChildren: 0, maxOccupancy: 4 }, canonicalPlan, { rooms: 1, adults: 4, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2);
+    expect(fourAdults.priceBreakdown[0].rooms[0]).toEqual(expect.objectContaining({ baseRate: 2000, supplementAmount: 1000 }));
   });
 
   it('applies child and extra-adult supplements only on the base-rate fallback path', () => {

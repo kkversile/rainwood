@@ -2,64 +2,193 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AdminLayout } from '../../../components/Shell';
-import { AccessibleDialog } from '../../../components/ReactDialog';
+import { GRID_FIELDS, GridBand, GridField, RateMasterGrid, RateMasterGridData } from '../../../components/RateMasterGrid';
 import { apiRequest } from '../../../lib/api';
 
 type Hotel = { id: string; name: string };
-type RateDay = { date: string; amount?: number | string; baseAmount?: number | string | null; taxAmount?: number | string | null; occupancyPrices?: Record<string, number | string> | null };
-type Band = { id: string; validFrom: string; validTo: string; active: boolean; categoryAAmount: number | string; categoryBAmount: number | string; categoryCAmount: number | string; categoryDAmount: number | string; categoryEAmount: number | string };
-type Supplement = { id: string; mealPlan: string; validFrom: string; validTo: string; active: boolean; extraAdultAmount: number | string; childWithBedAmount: number | string; childWithoutBedAmount: number | string };
-type Period = { validFrom: string; validTo: string };
-type B2cPeriod = Period & { single: number | null; double: number | null; triple: number | null; taxAmount: number | null };
-type RatePlan = { id: string; hotelId: string; active: boolean; hotel: Hotel; roomType: { id: string; code: string; name: string }; master: { code: string; name: string; mealPlan: string; kind: string }; categoryBands: Band[]; supplementBands: Supplement[]; rates: RateDay[]; b2cPeriods: B2cPeriod[]; periodState: { code: 'UNIFORM' | 'MULTIPLE_PERIODS'; periods: Period[] } };
-type Editor = { validFrom: string; validTo: string; single: string; double: string; triple: string; taxAmount: string; categoryAAmount: string; categoryBAmount: string; categoryCAmount: string; categoryDAmount: string; categoryEAmount: string; supplementExtraAdultAmount: string; supplementChildWithBedAmount: string; supplementChildWithoutBedAmount: string };
 
-const CANONICAL = ['EP', 'CP', 'MAP', 'AP'];
-const iso = (value: Date) => value.toISOString().slice(0, 10);
-const initialFrom = iso(new Date());
-const initialTo = iso(new Date(Date.now() + 30 * 86_400_000));
-const emptyEditor: Editor = { validFrom: initialFrom, validTo: initialTo, single: '', double: '', triple: '', taxAmount: '', categoryAAmount: '', categoryBAmount: '', categoryCAmount: '', categoryDAmount: '', categoryEAmount: '', supplementExtraAdultAmount: '', supplementChildWithBedAmount: '', supplementChildWithoutBedAmount: '' };
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
 
-function money(value: unknown) { return value == null || value === '' ? '—' : `₹${Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`; }
-function textValue(value: unknown) { return value == null ? '' : String(value); }
-function day(value: string) { return value.slice(0, 10); }
-function key(period: Period) { return `${day(period.validFrom)}:${day(period.validTo)}`; }
+function sameValues(left: string[], right: string[]) {
+  return [...left].sort().join('|') === [...right].sort().join('|');
+}
+
+function isValidRange(from: string, to: string) {
+  return Boolean(from && to && from <= to);
+}
 
 export default function RateMasterPage() {
-  const [hotels, setHotels] = useState<Hotel[]>([]); const [hotelId, setHotelId] = useState(''); const [from, setFrom] = useState(initialFrom); const [to, setTo] = useState(initialTo); const [roomTypeId, setRoomTypeId] = useState(''); const [mealPlan, setMealPlan] = useState(''); const [status, setStatus] = useState('active'); const [rows, setRows] = useState<RatePlan[]>([]); const [loading, setLoading] = useState(false); const [selected, setSelected] = useState<RatePlan | null>(null); const [editor, setEditor] = useState<Editor>(emptyEditor); const [original, setOriginal] = useState(''); const [periodKey, setPeriodKey] = useState(''); const [saving, setSaving] = useState(false); const [message, setMessage] = useState(''); const [error, setError] = useState('');
+  const [hotels, setHotels] = useState<Hotel[]>([]);
+  const [hotelId, setHotelId] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [draft, setDraft] = useState<RateMasterGridData | null>(null);
+  const [original, setOriginal] = useState<RateMasterGridData | null>(null);
+  const [expandedRooms, setExpandedRooms] = useState<Set<string>>(new Set());
+  const [expandedPlans, setExpandedPlans] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
-  useEffect(() => { apiRequest<Hotel[]>('/hotels').then((items) => { setHotels(items); if (!hotelId && items[0]) setHotelId(items[0].id); }).catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load hotels')); }, [hotelId]);
-  const roomOptions = useMemo(() => { const map = new Map<string, string>(); for (const row of rows) map.set(row.roomType.id, `${row.roomType.name} (${row.roomType.code})`); return [...map.entries()]; }, [rows]);
-  const query = useMemo(() => { const params = new URLSearchParams(); if (hotelId) params.set('hotelId', hotelId); if (from) params.set('from', from); if (to) params.set('to', to); if (roomTypeId) params.set('roomTypeId', roomTypeId); if (mealPlan) params.set('mealPlan', mealPlan); if (status) params.set('status', status); return params.toString(); }, [hotelId, from, to, roomTypeId, mealPlan, status]);
-  async function load() { if (!hotelId) return; setLoading(true); setError(''); try { setRows(await apiRequest<RatePlan[]>(`/rate-master?${query}`)); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load Rate Master'); } finally { setLoading(false); } }
-  useEffect(() => { void load(); }, [query]);
+  const dirty = useMemo(() => Boolean(draft && original && JSON.stringify(draft) !== JSON.stringify(original)), [draft, original]);
+  const validRange = isValidRange(from, to);
 
-  function editorFrom(row: RatePlan, preferredKey?: string): Editor {
-    const period = row.periodState.periods.find((item) => key(item) === preferredKey) ?? row.periodState.periods[0];
-    const periodKeyValue = period ? key(period) : '';
-    const band = row.categoryBands.find((item) => key(item) === periodKeyValue);
-    const supplement = row.supplementBands.find((item) => key(item) === periodKeyValue);
-    const b2c = row.b2cPeriods.find((item) => key(item) === periodKeyValue);
-    const first = row.rates.find((item) => day(item.date) >= day(period?.validFrom ?? '') && day(item.date) <= day(period?.validTo ?? '')) ?? row.rates[0];
-    const prices = first?.occupancyPrices ?? {};
-    return { validFrom: day(period?.validFrom ?? from), validTo: day(period?.validTo ?? to), single: textValue(b2c?.single ?? prices.single), double: textValue(b2c?.double ?? prices.double ?? first?.baseAmount ?? first?.amount), triple: textValue(b2c?.triple ?? prices.triple), taxAmount: textValue(b2c?.taxAmount ?? first?.taxAmount), categoryAAmount: textValue(band?.categoryAAmount), categoryBAmount: textValue(band?.categoryBAmount), categoryCAmount: textValue(band?.categoryCAmount), categoryDAmount: textValue(band?.categoryDAmount), categoryEAmount: textValue(band?.categoryEAmount), supplementExtraAdultAmount: textValue(supplement?.extraAdultAmount), supplementChildWithBedAmount: textValue(supplement?.childWithBedAmount), supplementChildWithoutBedAmount: textValue(supplement?.childWithoutBedAmount) };
+  useEffect(() => {
+    let active = true;
+    apiRequest<Hotel[]>('/hotels').then((items) => {
+      if (!active) return;
+      setHotels(items);
+      if (!hotelId && items[0]) setHotelId(items[0].id);
+    }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : 'Could not load hotels'); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!hotelId) return;
+    void loadGrid(hotelId, from, to);
+  }, [hotelId, from, to]);
+
+  async function loadGrid(selectedHotelId: string, selectedFrom: string, selectedTo: string) {
+    setLoading(true);
+    setError('');
+    setMessage('');
+    try {
+      const params = new URLSearchParams({ hotelId: selectedHotelId });
+      if (isValidRange(selectedFrom, selectedTo)) { params.set('from', selectedFrom); params.set('to', selectedTo); }
+      const data = await apiRequest<RateMasterGridData>(`/rate-master/grid?${params.toString()}`);
+      setDraft(data);
+      setOriginal(clone(data));
+      setExpandedRooms(new Set(data.rooms.map((room) => room.id)));
+      setExpandedPlans(new Set(data.rooms.flatMap((room) => room.plans.map((plan) => `${room.id}:${plan.ratePlanId}`))));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not load Rate Master');
+    } finally {
+      setLoading(false);
+    }
   }
 
-  async function openEditor(row: RatePlan) { setError(''); setMessage(''); setSelected(row); const firstKey = row.periodState.periods[0] ? key(row.periodState.periods[0]) : ''; setPeriodKey(firstKey); const next = editorFrom(row, firstKey); setEditor(next); setOriginal(JSON.stringify(next)); try { const authoritative = await apiRequest<RatePlan>(`/rate-master/${row.id}?from=${encodeURIComponent(next.validFrom)}&to=${encodeURIComponent(next.validTo)}`); setSelected(authoritative); const loaded = editorFrom(authoritative, firstKey); setEditor(loaded); setOriginal(JSON.stringify(loaded)); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load the selected rate period'); } }
-  async function reloadPeriod(nextFrom: string, nextTo: string) { if (!selected || !nextFrom || !nextTo || nextFrom > nextTo) return; try { const authoritative = await apiRequest<RatePlan>(`/rate-master/${selected.id}?from=${nextFrom}&to=${nextTo}`); setSelected(authoritative); const nextKey = authoritative.periodState.periods[0] ? key(authoritative.periodState.periods[0]) : `${nextFrom}:${nextTo}`; setPeriodKey(nextKey); const loaded = editorFrom(authoritative, nextKey); setEditor(loaded); setOriginal(JSON.stringify(loaded)); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load the selected dates'); } }
-  function dirty() { return JSON.stringify(editor) !== original; }
-  function changeDate(field: 'validFrom' | 'validTo', value: string) { const next = { ...editor, [field]: value }; if (dirty() && !window.confirm('You have unsaved rate changes.\n\nChanging the validity period will reload stored rates and discard these edits.')) return; setEditor(next); void reloadPeriod(next.validFrom, next.validTo); }
-  function change(field: keyof Editor, value: string) { setEditor((current) => ({ ...current, [field]: value })); }
-  function closeEditor() { if (dirty() && !window.confirm('Discard unsaved Rate Master changes?')) return; setSelected(null); setError(''); }
-  async function save() { if (!selected) return; if (editor.validFrom > editor.validTo) { setError('Valid from must be on or before valid to.'); return; } const categoryValues = [editor.categoryAAmount, editor.categoryBAmount, editor.categoryCAmount, editor.categoryDAmount, editor.categoryEAmount]; const categoryEntered = categoryValues.some((value) => value.trim() !== ''); const existingBand = selected.categoryBands.some((band) => key(band) === `${editor.validFrom}:${editor.validTo}`); if (categoryEntered && !existingBand && categoryValues.some((value) => !value.trim() || Number(value) <= 0)) { setError('All five Agent category rates A-E are required and must be greater than zero for a new period.'); return; } setSaving(true); setError(''); setMessage(''); try { const numeric = (value: string) => value.trim() === '' ? undefined : Number(value); await apiRequest(`/rate-master/${selected.id}`, { method: 'PUT', body: JSON.stringify({ validFrom: editor.validFrom, validTo: editor.validTo, single: numeric(editor.single), double: numeric(editor.double), triple: numeric(editor.triple), taxAmount: numeric(editor.taxAmount), categoryAAmount: numeric(editor.categoryAAmount), categoryBAmount: numeric(editor.categoryBAmount), categoryCAmount: numeric(editor.categoryCAmount), categoryDAmount: numeric(editor.categoryDAmount), categoryEAmount: numeric(editor.categoryEAmount), supplementExtraAdultAmount: numeric(editor.supplementExtraAdultAmount), supplementChildWithBedAmount: numeric(editor.supplementChildWithBedAmount), supplementChildWithoutBedAmount: numeric(editor.supplementChildWithoutBedAmount) }) }); setMessage('Rate Master saved atomically.'); setOriginal(JSON.stringify(editor)); await load(); setSelected(null); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not save Rate Master'); } finally { setSaving(false); } }
-  const groups = useMemo(() => { const result = new Map<string, RatePlan[]>(); for (const row of rows) result.set(row.roomType.id, [...(result.get(row.roomType.id) ?? []), row]); return [...result.values()]; }, [rows]);
-  const selectedPeriods = selected?.periodState.periods ?? [];
-  const selectedBand = selected?.categoryBands.find((item) => key(item) === `${editor.validFrom}:${editor.validTo}`);
-  const categoryRequired = Boolean(selected && !selectedBand && [editor.categoryAAmount, editor.categoryBAmount, editor.categoryCAmount, editor.categoryDAmount, editor.categoryEAmount].some((value) => value.trim() !== ''));
+  function confirmDiscard() {
+    return !dirty || window.confirm('You have unsaved Rate Master changes. Discard them?');
+  }
 
-  return <AdminLayout title="Rate Master"><section className="pageSection"><header className="pageTitle"><div><span>Revenue management</span><h1>Rate Master</h1><p>Maintain canonical EP, CP, MAP and AP rates, agent categories and guest supplements by validity period.</p></div></header>{error && <p className="error" role="alert">{error}</p>}{message && <p className="notice" role="status">{message}</p>}
-    <section className="panel"><div className="rangeToolbar"><label>Hotel<select value={hotelId} onChange={(event) => { setHotelId(event.target.value); setRoomTypeId(''); }}><option value="">Select hotel</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label><label>From date<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><label>To date<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label><label>Room category<select value={roomTypeId} onChange={(event) => setRoomTypeId(event.target.value)}><option value="">All room categories</option>{roomOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label><label>Meal plan<select value={mealPlan} onChange={(event) => setMealPlan(event.target.value)}><option value="">All canonical plans</option>{CANONICAL.map((item) => <option key={item} value={item}>{item}</option>)}</select></label><label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="active">Active</option><option value="inactive">Inactive</option></select></label></div><div className="listActions"><button className="smallBtn" type="button" disabled={loading || !hotelId} onClick={() => void load()}>{loading ? 'Loading…' : 'Apply filters'}</button><button className="smallBtn secondary" type="button" onClick={() => { setFrom(initialFrom); setTo(initialTo); setRoomTypeId(''); setMealPlan(''); setStatus('active'); }}>Clear</button><a className="smallBtn" href="/rainwood/admin/rate-calendar">Rate Calendar</a></div><p className="mutedText">Rate Calendar retains Base, Override and Effective daily controls, including Preview changes and Apply preview. Rate Master is the canonical EP / CP / MAP / AP contract table.</p></section>
-    <section className="panel"><div className="rangeSectionHeader"><div><h2>Rate Master table</h2><p className="mutedText">{rows.length} canonical rate plan(s). Multiple periods are never flattened into first-period values.</p></div></div>{rows.length ? <div className="tableScroll"><table className="dataTable"><thead><tr><th>Room category</th><th>Meal plan</th><th>Single</th><th>Double</th><th>Triple</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>Extra adult</th><th>Child with bed</th><th>Child without bed</th><th>Validity</th><th>Status</th><th>Actions</th></tr></thead><tbody>{groups.map((group) => <>{<tr key={`${group[0].roomType.id}-group`} className="rateMasterGroupRow"><th colSpan={16}>{group[0].roomType.name} <span className="mutedText">({group[0].roomType.code})</span></th></tr>}{group.map((row) => { const multiple = row.periodState.code === 'MULTIPLE_PERIODS'; const rate = multiple ? null : row.rates[0]; const prices = rate?.occupancyPrices ?? {}; const band = multiple ? null : row.categoryBands[0]; const supplement = multiple ? null : row.supplementBands[0]; const value = (item: unknown) => multiple ? 'Multiple' : money(item); const validity = multiple ? 'Multiple periods' : band ? `${day(band.validFrom)} → ${day(band.validTo)}` : supplement ? `${day(supplement.validFrom)} → ${day(supplement.validTo)}` : row.b2cPeriods[0] ? `${day(row.b2cPeriods[0].validFrom)} → ${day(row.b2cPeriods[0].validTo)}` : '—'; return <tr key={row.id}><td>{row.roomType.name}</td><td><strong>{row.master.mealPlan}</strong><br /><span className="mutedText">{row.master.name}</span></td><td>{value(prices.single)}</td><td>{value(prices.double ?? rate?.baseAmount ?? rate?.amount)}</td><td>{value(prices.triple)}</td><td>{value(band?.categoryAAmount)}</td><td>{value(band?.categoryBAmount)}</td><td>{value(band?.categoryCAmount)}</td><td>{value(band?.categoryDAmount)}</td><td>{value(band?.categoryEAmount)}</td><td>{value(supplement?.extraAdultAmount)}</td><td>{value(supplement?.childWithBedAmount)}</td><td>{value(supplement?.childWithoutBedAmount)}</td><td>{validity}</td><td><span className={`statusPill ${row.active ? '' : 'inactive'}`}>{row.active ? 'Active' : 'Inactive'}</span></td><td><button className="smallBtn" type="button" onClick={() => void openEditor(row)}>{multiple ? 'View periods / Edit' : 'Edit'}</button></td></tr>; })}</>)} </tbody></table></div> : <p className="empty">{loading ? 'Loading rate plans…' : 'No canonical rate plans match the selected filters.'}</p>}</section>
-    {selected && <AccessibleDialog title="Edit Rates" eyebrow="Rate Master" onClose={closeEditor} className="rateMasterDialog"><p className="mutedText">{selected.roomType.name} · {selected.master.mealPlan} · Edit one stored validity period at a time.</p>{selected.periodState.code === 'MULTIPLE_PERIODS' && <p className="error" role="alert">Multiple periods were found. Select the exact period to edit; values are not merged.</p>}{selectedPeriods.length > 0 && <label>Rate period<select value={periodKey} onChange={(event) => { if (dirty() && !window.confirm('You have unsaved rate changes.\n\nChanging the validity period will reload stored rates and discard these edits.')) return; const nextKey = event.target.value; setPeriodKey(nextKey); const next = editorFrom(selected, nextKey); setEditor(next); setOriginal(JSON.stringify(next)); }}>{selectedPeriods.map((item) => <option key={key(item)} value={key(item)}>{day(item.validFrom)} → {day(item.validTo)}</option>)}</select></label>}<div className="formGrid"><label>Hotel<input value={selected.hotel.name} readOnly /></label><label>Room category<input value={selected.roomType.name} readOnly /></label><label>Meal plan<input value={selected.master.mealPlan} readOnly /></label><label>From date<input type="date" value={editor.validFrom} onChange={(event) => changeDate('validFrom', event.target.value)} /></label><label>To date<input type="date" value={editor.validTo} onChange={(event) => changeDate('validTo', event.target.value)} /></label></div><h3>Public / B2C</h3><div className="formGrid"><label>Single<input type="number" min="0" value={editor.single} onChange={(event) => change('single', event.target.value)} /></label><label>Double<input type="number" min="0" value={editor.double} onChange={(event) => change('double', event.target.value)} /></label><label>Triple<input type="number" min="0" value={editor.triple} onChange={(event) => change('triple', event.target.value)} /></label><label>Tax amount<input type="number" min="0" value={editor.taxAmount} onChange={(event) => change('taxAmount', event.target.value)} /></label></div><h3>Agent category rates</h3><div className="formGrid">{(['A', 'B', 'C', 'D', 'E'] as const).map((category) => { const field = `category${category}Amount` as keyof Editor; return <label key={category}>{category}<input type="number" min="0.01" step="0.01" required={categoryRequired} value={editor[field] as string} onChange={(event) => change(field, event.target.value)} /></label>; })}</div><p className="mutedText">All five category rates are required and must be greater than zero when creating a new category period.</p><h3>Extra guest charges</h3><div className="formGrid"><label>Extra adult<input type="number" min="0" value={editor.supplementExtraAdultAmount} onChange={(event) => change('supplementExtraAdultAmount', event.target.value)} /></label><label>Child with bed<input type="number" min="0" value={editor.supplementChildWithBedAmount} onChange={(event) => change('supplementChildWithBedAmount', event.target.value)} /></label><label>Child without bed<input type="number" min="0" value={editor.supplementChildWithoutBedAmount} onChange={(event) => change('supplementChildWithoutBedAmount', event.target.value)} /></label></div><div className="dialogActions"><button className="smallBtn secondary" type="button" onClick={closeEditor}>Cancel</button><button className="btn" type="button" disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save Rates'}</button></div></AccessibleDialog>}
+  function changeHotel(value: string) {
+    if (!confirmDiscard()) return;
+    setHotelId(value);
+  }
+
+  function changeDate(field: 'from' | 'to', value: string) {
+    if (!confirmDiscard()) return;
+    if (field === 'from') setFrom(value);
+    else setTo(value);
+  }
+
+  function updateDraft(mutator: (next: RateMasterGridData) => void) {
+    setDraft((current) => {
+      if (!current) return current;
+      const next = clone(current);
+      mutator(next);
+      return next;
+    });
+  }
+
+  function cellChange(ratePlanId: string, band: GridBand, field: GridField, value: string) {
+    const numeric = value.trim() === '' ? 0 : Number(value);
+    updateDraft((next) => {
+      for (const room of next.rooms) for (const plan of room.plans) if (plan.ratePlanId === ratePlanId) {
+        const row = plan.rows.find((item) => item.band === band);
+        if (!row) return;
+        row[field] = Number.isFinite(numeric) && numeric >= 0 ? numeric : 0;
+        row.mixedFields = row.mixedFields.filter((item) => item !== field);
+      }
+    });
+  }
+
+  function copyRack(ratePlanId: string) {
+    updateDraft((next) => {
+      for (const room of next.rooms) for (const plan of room.plans) if (plan.ratePlanId === ratePlanId) {
+        const rack = plan.rows.find((row) => row.band === 'RACK');
+        if (!rack) return;
+        for (const row of plan.rows) if (row.band !== 'RACK') {
+          for (const field of GRID_FIELDS) row[field] = rack[field];
+          row.mixedFields = [...rack.mixedFields];
+        }
+      }
+    });
+    setMessage('Rack values copied locally to categories A-E. Save Rates to persist them.');
+  }
+
+  function clearPlan(ratePlanId: string) {
+    updateDraft((next) => {
+      for (const room of next.rooms) for (const plan of room.plans) if (plan.ratePlanId === ratePlanId) for (const row of plan.rows) {
+        for (const field of GRID_FIELDS) row[field] = 0;
+        row.mixedFields = [];
+      }
+    });
+    setMessage('Plan cleared locally. Save Rates to persist the zero values.');
+  }
+
+  function toggleRoom(roomId: string) {
+    setExpandedRooms((current) => { const next = new Set(current); if (next.has(roomId)) next.delete(roomId); else next.add(roomId); return next; });
+  }
+
+  function togglePlan(key: string) {
+    setExpandedPlans((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  }
+
+  function revert() {
+    if (!original) return;
+    setDraft(clone(original));
+    setMessage('Unsaved Rate Master changes reverted.');
+    setError('');
+  }
+
+  async function save() {
+    if (!draft || !original || !hotelId || !validRange || !dirty) return;
+    const changes: Array<Record<string, unknown>> = [];
+    for (const room of draft.rooms) for (const plan of room.plans) {
+      const originalPlan = original.rooms.flatMap((item) => item.plans).find((item) => item.ratePlanId === plan.ratePlanId);
+      if (!originalPlan) continue;
+      for (const row of plan.rows) {
+        const oldRow = originalPlan.rows.find((item) => item.band === row.band);
+        if (!oldRow) continue;
+        const fields = GRID_FIELDS.filter((field) => row[field] !== oldRow[field] || !sameValues(row.mixedFields.filter((item) => item === field), oldRow.mixedFields.filter((item) => item === field)));
+        if (fields.length) changes.push({ ratePlanId: plan.ratePlanId, band: row.band, fields, ...Object.fromEntries(fields.map((field) => [field, row[field]])) });
+      }
+    }
+    if (!changes.length) return;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const saved = await apiRequest<RateMasterGridData>('/rate-master/grid', { method: 'PUT', body: JSON.stringify({ hotelId, validFrom: from, validTo: to, changes }) });
+      setDraft(saved);
+      setOriginal(clone(saved));
+      setMessage('Rate Master saved successfully.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not save Rate Master');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const saveDisabled = !hotelId || !validRange || !dirty || saving;
+  return <AdminLayout title="Rate Master"><section className="pageSection rateMasterPage">
+    <header className="pageTitle rateMasterPageTitle"><div><span>Revenue management</span><h1>Rate Master</h1><p>Enter Rack and A-E category rates across all canonical meal plans.</p></div></header>
+    {error && <p className="error" role="alert">{error}</p>}
+    {message && <p className="notice" role="status">{message}</p>}
+    <section className="rateMasterToolbar" aria-label="Rate Master controls">
+      <label>Hotel<select aria-label="Hotel" value={hotelId} onChange={(event) => changeHotel(event.target.value)}><option value="">Select hotel</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label>
+      <label>From<input aria-label="From date" type="date" value={from} onChange={(event) => changeDate('from', event.target.value)} /></label>
+      <span className="rateMasterArrow" aria-hidden="true">→</span>
+      <label>To<input aria-label="To date" type="date" value={to} onChange={(event) => changeDate('to', event.target.value)} /></label>
+      <div className="rateMasterToolbarActions"><button className="smallBtn secondary" type="button" disabled={!dirty} onClick={revert}>Revert Unsaved</button><button className="smallBtn" type="button" disabled={saveDisabled} onClick={() => void save()}>{saving ? 'Saving…' : 'Save Rates'}</button></div>
+    </section>
+    {!validRange && (from || to) && <p className="error" role="alert">Select both dates, with From on or before To, to load stored rates.</p>}
+    {loading && <p className="loading" role="status">Loading Rate Master…</p>}
+    {draft && !loading && <RateMasterGrid data={draft} expandedRooms={expandedRooms} expandedPlans={expandedPlans} onToggleRoom={toggleRoom} onTogglePlan={togglePlan} onCellChange={cellChange} onCopyRack={copyRack} onClearPlan={clearPlan} />}
+    <footer className="rateMasterStatusBar"><span><b>Keyboard:</b> Tab moves through cells · numeric entry · mixed cells can be replaced directly</span><span>{dirty ? 'Unsaved changes' : 'All changes saved'}</span></footer>
   </section></AdminLayout>;
 }

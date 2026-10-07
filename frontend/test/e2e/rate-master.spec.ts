@@ -18,33 +18,41 @@ async function signIn(page: import('@playwright/test').Page) {
   await expect(page).toHaveURL(`${frontendUrl}/admin/rates`);
 }
 
-test('Rate Master exposes canonical columns, status semantics, and the period editor', async ({ page }) => {
+test('Rate Master renders the compact canonical grid without Triple', async ({ page }) => {
   await signIn(page);
   await expect(page.getByRole('heading', { name: 'Rate Master', exact: true })).toBeVisible();
-  for (const column of ['Single', 'Double', 'Triple', 'A', 'B', 'C', 'D', 'E', 'Extra adult', 'Child with bed', 'Child without bed', 'Validity', 'Status', 'Actions']) {
-    await expect(page.getByRole('columnheader', { name: column, exact: true })).toBeVisible();
+  for (const column of ['Category', 'Single (₹)', 'Double (₹)', 'Extra Adult (₹)', 'Child With Bed (₹)', 'Child Without Bed (₹)']) {
+    await expect(page.getByRole('columnheader', { name: column, exact: true }).first()).toBeVisible();
   }
-  await expect(page.getByText('Rate Calendar', { exact: true })).toBeVisible();
-
-  const firstEdit = page.getByRole('button', { name: /^(Edit|View periods \/ Edit)$/ }).first();
-  if (await firstEdit.count()) {
-    await firstEdit.click();
-    await expect(page.getByRole('heading', { name: 'Edit Rates', exact: true })).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'Hotel' })).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'Room category' })).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'Meal plan' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Save Rates' })).toBeVisible();
-    await expect(page.getByText(/All five category rates are required/)).toBeVisible();
-    await page.getByRole('button', { name: 'Cancel' }).click();
-  }
+  await expect(page.getByRole('columnheader', { name: /Triple/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save Rates' })).toBeDisabled();
+  for (const plan of ['EP', 'CP', 'MAP', 'AP']) await expect(page.getByText(new RegExp(`^${plan} -`)).first()).toBeVisible();
+  for (const band of ['Rack', 'A', 'B', 'C', 'D', 'E']) await expect(page.getByRole('row', { name: new RegExp(`^${band}`) }).first()).toBeVisible();
 });
 
-test('Rate Master does not flatten rows marked as multiple periods', async ({ page }) => {
+test('Rate Master loads stored values only after both dates are selected', async ({ page }) => {
   await signIn(page);
-  const multipleRow = page.locator('tbody tr').filter({ hasText: 'Multiple periods' }).first();
-  if (await multipleRow.count()) {
-    await expect(multipleRow).toContainText('Multiple');
-    await expect(multipleRow.getByRole('button', { name: 'View periods / Edit' })).toBeVisible();
-    await expect(multipleRow).not.toContainText('₹');
-  }
+  const from = page.getByLabel('From date');
+  const to = page.getByLabel('To date');
+  await expect(from).toHaveValue('');
+  await expect(to).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Save Rates' })).toBeDisabled();
+  await from.fill('2026-10-07');
+  await expect(page.getByRole('alert')).toContainText('Select both dates');
+  await to.fill('2026-11-06');
+  await expect(page.getByRole('row', { name: /Rack/ }).first()).toBeVisible();
+  await expect(page.getByLabel(/Rack Double/).first()).toHaveValue(/.*/);
+});
+
+test('Rate Master local bulk actions do not save until Save Rates is pressed', async ({ page }) => {
+  await signIn(page);
+  await page.getByLabel('From date').fill('2026-10-07');
+  await page.getByLabel('To date').fill('2026-11-06');
+  const copyButton = page.getByRole('button', { name: 'Copy Rack to A-E' }).first();
+  await expect(copyButton).toBeVisible();
+  await copyButton.click();
+  await expect(page.getByRole('status')).toContainText('copied locally');
+  await expect(page.getByRole('button', { name: 'Revert Unsaved' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Revert Unsaved' }).click();
+  await expect(page.getByText('Unsaved Rate Master changes reverted.')).toBeVisible();
 });

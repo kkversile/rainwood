@@ -5,7 +5,7 @@ import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
 import { FeatureGuard } from '../features/feature.guard';
 import { RequireFeature } from '../features/require-feature.decorator';
-import { AgentMappingDto, AgentMappingQueryDto, RateMasterQueryDto, RateMasterUpdateDto } from './rate-master.dto';
+import { AgentMappingDto, AgentMappingQueryDto, RateMasterGridQueryDto, RateMasterGridSaveDto, RateMasterQueryDto, RateMasterUpdateDto } from './rate-master.dto';
 import { RateMasterService } from './rate-master.service';
 
 @Controller('rate-master')
@@ -16,6 +16,8 @@ export class RateMasterController {
   constructor(private readonly service: RateMasterService) {}
 
   @Get() list(@Query() query: RateMasterQueryDto, @CurrentUser() user: any) { return this.service.list(query, user.id); }
+  @Get('grid') grid(@Query() query: RateMasterGridQueryDto, @CurrentUser() user: any) { return this.service.grid(query, user.id); }
+  @Put('grid') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN') saveGrid(@Body() body: RateMasterGridSaveDto, @CurrentUser() user: any) { return this.service.saveGrid(body, user.id); }
   @Get(':ratePlanId') get(@Param('ratePlanId') id: string, @Query() query: RateMasterQueryDto, @CurrentUser() user: any) { return this.service.get(id, query, user.id); }
   @Put(':ratePlanId') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN') update(@Param('ratePlanId') id: string, @Body() body: RateMasterUpdateDto, @CurrentUser() user: any) { return this.service.update(id, body, user.id); }
 }

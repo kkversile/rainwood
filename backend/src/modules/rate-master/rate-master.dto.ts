@@ -1,7 +1,9 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsDateString, IsIn, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsIn, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 
 const CATEGORIES = ['A', 'B', 'C', 'D', 'E'] as const;
+const GRID_BANDS = ['RACK', ...CATEGORIES] as const;
+const GRID_FIELDS = ['single', 'double', 'extraAdult', 'childWithBed', 'childWithoutBed'] as const;
 
 export class RateMasterQueryDto {
   @IsOptional() @IsString() hotelId?: string;
@@ -30,6 +32,30 @@ export class RateMasterUpdateDto {
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) supplementChildWithBedAmount?: number;
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) supplementChildWithoutBedAmount?: number;
   @IsOptional() @IsBoolean() active?: boolean;
+}
+
+export class RateMasterGridQueryDto {
+  @IsOptional() @IsString() hotelId?: string;
+  @IsOptional() @IsDateString() from?: string;
+  @IsOptional() @IsDateString() to?: string;
+}
+
+export class RateMasterGridChangeDto {
+  @IsString() ratePlanId!: string;
+  @IsIn(GRID_BANDS) band!: (typeof GRID_BANDS)[number];
+  @IsOptional() @IsArray() @IsIn(GRID_FIELDS, { each: true }) fields?: (typeof GRID_FIELDS)[number][];
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) single?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) double?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) extraAdult?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) childWithBed?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) childWithoutBed?: number;
+}
+
+export class RateMasterGridSaveDto {
+  @IsString() hotelId!: string;
+  @IsDateString() validFrom!: string;
+  @IsDateString() validTo!: string;
+  @IsArray() @ValidateNested({ each: true }) @Type(() => RateMasterGridChangeDto) changes!: RateMasterGridChangeDto[];
 }
 
 export class AgentMappingDto {

@@ -668,6 +668,8 @@ model User {
   publishedAgentRateSheets         AgentRateSheet[]            @relation("AgentRateSheetPublishedBy")
   createdAgentCategoryRateBands    AgentCategoryRateBand[]     @relation("AgentCategoryRateBandCreatedBy")
   updatedAgentCategoryRateBands    AgentCategoryRateBand[]     @relation("AgentCategoryRateBandUpdatedBy")
+  createdAgentCategoryRateDays      AgentCategoryRateDay[]      @relation("AgentCategoryRateDayCreatedBy")
+  updatedAgentCategoryRateDays      AgentCategoryRateDay[]      @relation("AgentCategoryRateDayUpdatedBy")
   createdMealPlanSupplementBands   MealPlanGuestSupplementBand[] @relation("MealPlanGuestSupplementBandCreatedBy")
   updatedMealPlanSupplementBands   MealPlanGuestSupplementBand[] @relation("MealPlanGuestSupplementBandUpdatedBy")
   agentHotelRateCategoryAssignments AgentHotelRateCategoryAssignment[] @relation("AgentHotelRateCategoryAgent")
@@ -1297,6 +1299,7 @@ model RatePlan {
   assignedAgents          AgentRatePlan[]
   slabRates               AgentRateSlabRate[]
   agentCategoryBands      AgentCategoryRateBand[]
+  agentCategoryRateDays   AgentCategoryRateDay[]
   promotionRates          PromotionRatePlan[]
   seasonRates             RateSeasonRatePlan[]
   corporateRateAgreements CorporateRateAgreement[]
@@ -1441,6 +1444,29 @@ model AgentCategoryRateBand {
 
   @@unique([ratePlanId, validFrom, validTo])
   @@index([ratePlanId, active, validFrom, validTo])
+}
+
+model AgentCategoryRateDay {
+  id                    String          @id @default(cuid())
+  ratePlanId            String
+  ratePlan              RatePlan        @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+  category              AgentRateCategory
+  date                  DateTime        @db.Date
+  singleAmount          Decimal         @default(0) @db.Decimal(12, 2)
+  doubleAmount          Decimal         @default(0) @db.Decimal(12, 2)
+  extraAdultAmount      Decimal         @default(0) @db.Decimal(12, 2)
+  childWithBedAmount    Decimal         @default(0) @db.Decimal(12, 2)
+  childWithoutBedAmount Decimal         @default(0) @db.Decimal(12, 2)
+  active                Boolean         @default(true)
+  createdById           String?
+  createdBy             User?           @relation("AgentCategoryRateDayCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById           String?
+  updatedBy             User?           @relation("AgentCategoryRateDayUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@unique([ratePlanId, category, date])
+  @@index([ratePlanId, category, date])
 }
 
 model MealPlanGuestSupplementBand {
@@ -1663,6 +1689,7 @@ model RateDay {
   overrideAmount    Decimal?  @db.Decimal(12, 2)
   taxAmount         Decimal   @default(0) @db.Decimal(12, 2)
   childAmount       Decimal   @default(0) @db.Decimal(12, 2)
+  childWithoutBedAmount Decimal @default(0) @db.Decimal(12, 2)
   extraAdultAmount  Decimal   @default(0) @db.Decimal(12, 2)
   occupancyPrices   Json?
   cta               Boolean   @default(false)
