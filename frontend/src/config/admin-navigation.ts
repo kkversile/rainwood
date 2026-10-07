@@ -68,3 +68,37 @@ export const ADMIN_GROUPS = [
 ] as const;
 
 export const FEATURE_NAVIGATION_ITEMS = ADMIN_NAVIGATION.filter((item): item is Extract<(typeof ADMIN_NAVIGATION)[number], { featureKey: string }> => Boolean((item as AdminNavigationItem).featureKey));
+
+export type AdminIconKey =
+  | 'layoutDashboard' | 'hotel' | 'calendarRange' | 'usersRound'
+  | 'clipboardList' | 'calendarCheck' | 'revenue' | 'contactRound'
+  | 'chartColumn' | 'settings' | 'trendingUp' | 'layers' | 'calendarDays'
+  | 'calendarClock' | 'slidersHorizontal' | 'calculator' | 'badgePercent'
+  | 'fileUp' | 'bedDouble' | 'doorOpen' | 'grid2X2' | 'brushCleaning'
+  | 'wrench' | 'bookOpenCheck' | 'utensilsCrossed' | 'panelsTopLeft'
+  | 'receiptText' | 'walletCards' | 'package' | 'banknote' | 'receiptIndianRupee'
+  | 'fileText' | 'fileMinus2' | 'fileCheck2' | 'percent' | 'building2'
+  | 'messageSquareText' | 'users' | 'conciergeBell' | 'logIn' | 'packageSearch'
+  | 'moonStar' | 'messagesSquare' | 'creditCard' | 'briefcaseBusiness'
+  | 'userRound' | 'cable' | 'settings2' | 'blocks' | 'fileClock';
+
+// The visual icon language is centralized here so route metadata and permission filtering stay unchanged.
+export const ADMIN_NAV_ICON_BY_KEY: Readonly<Record<string, AdminIconKey>> = {
+  dashboard: 'layoutDashboard', revenueForecast: 'trendingUp', manageHotels: 'hotel',
+  roomsInventory: 'bedDouble', physicalRooms: 'doorOpen', roomRack: 'grid2X2', housekeeping: 'brushCleaning',
+  maintenance: 'wrench', logbook: 'bookOpenCheck', banquets: 'utensilsCrossed', functionSpaces: 'panelsTopLeft',
+  ratePlans: 'layers', rates: 'calendarRange', rateCalendar: 'calendarDays', rateSeasons: 'calendarClock',
+  yieldRules: 'slidersHorizontal', rateSimulator: 'calculator', promotions: 'badgePercent', rateImport: 'fileUp',
+  supplementaryCharges: 'receiptText', expenses: 'walletCards', serviceItems: 'package', cashier: 'banknote',
+  taxSettings: 'receiptIndianRupee', taxInvoices: 'fileText', creditNotes: 'fileMinus2', tds: 'fileCheck2',
+  agents: 'usersRound', agentRateSlabs: 'percent', corporates: 'building2', inquiries: 'messageSquareText',
+  reservations: 'calendarCheck', groups: 'users', frontDesk: 'conciergeBell', arrivals: 'logIn', inHouse: 'hotel',
+  lostFound: 'packageSearch', guests: 'contactRound', nightAudit: 'moonStar', contactRequests: 'messagesSquare',
+  payments: 'creditCard', reports: 'chartColumn', axisRooms: 'cable', jobs: 'briefcaseBusiness', users: 'userRound',
+  siteSettings: 'settings2', features: 'blocks', auditLogs: 'fileClock',
+};
+
+export const ADMIN_GROUP_ICON_BY_KEY: Readonly<Record<string, AdminIconKey>> = {
+  operations: 'clipboardList', reservations: 'calendarCheck', revenue: 'revenue',
+  crmSales: 'contactRound', reports: 'chartColumn', system: 'settings',
+};

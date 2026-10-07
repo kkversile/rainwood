@@ -2,12 +2,28 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { BedDouble, Menu } from 'lucide-react';
+import {
+  BadgePercent, Banknote, BedDouble, BookOpenCheck, BriefcaseBusiness, Building2, BrushCleaning, Blocks, Calculator,
+  CalendarCheck, CalendarClock, CalendarDays, CalendarRange, Cable, ChartColumn,
+  ChartNoAxesCombined, ChevronDown, ClipboardList, ContactRound, ConciergeBell, CreditCard,
+  DoorOpen, FileCheck2, FileClock, FileMinus2, FileText, FileUp, Grid2X2, Hotel, Layers,
+  LayoutDashboard, LogIn, Menu, MessageSquareText, MessagesSquare, MoonStar, Package,
+  PackageSearch, PanelsTopLeft, Percent, ReceiptIndianRupee, ReceiptText, Settings, Settings2,
+  SlidersHorizontal, TrendingUp, UserRound, Users, UsersRound, WalletCards, Wrench,
+  UtensilsCrossed, type LucideIcon,
+} from 'lucide-react';
 import { AdminAuthGate, invalidateStaffSession, useAdminProfile } from './AdminData';
 import { apiAssetUrl, apiRequest, clearAccessToken } from '../lib/api';
 import { FeatureGate } from './FeatureGate';
 import { FEATURE_KEYS, useAdminFeatureAccess, type FeatureAccessStatus } from '../lib/admin-features';
-import { ADMIN_GROUPS, ADMIN_NAVIGATION, type AdminNavigationItem } from '../config/admin-navigation';
+import {
+  ADMIN_GROUP_ICON_BY_KEY,
+  ADMIN_GROUPS,
+  ADMIN_NAV_ICON_BY_KEY,
+  ADMIN_NAVIGATION,
+  type AdminIconKey,
+  type AdminNavigationItem,
+} from '../config/admin-navigation';
 
 const links = [['/', 'Home'], ['/hotels', 'Hotels'], ['/booking', 'Book'], ['/contact', 'Contact'], ['/agent/login', 'Agent Login']];
 type AdminLink = AdminNavigationItem;
@@ -111,9 +127,36 @@ export function isAdminRouteActive(pathname: string, href: string) {
   return href === '/admin/dashboard' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
+const adminIconComponents: Record<AdminIconKey, LucideIcon> = {
+  layoutDashboard: LayoutDashboard, hotel: Hotel, calendarRange: CalendarRange, usersRound: UsersRound,
+  clipboardList: ClipboardList, calendarCheck: CalendarCheck, revenue: ChartNoAxesCombined,
+  contactRound: ContactRound, chartColumn: ChartColumn, settings: Settings, trendingUp: TrendingUp,
+  layers: Layers, calendarDays: CalendarDays, calendarClock: CalendarClock, slidersHorizontal: SlidersHorizontal,
+  calculator: Calculator, badgePercent: BadgePercent, fileUp: FileUp, bedDouble: BedDouble, doorOpen: DoorOpen,
+  grid2X2: Grid2X2, brushCleaning: BrushCleaning, wrench: Wrench, bookOpenCheck: BookOpenCheck,
+  utensilsCrossed: UtensilsCrossed, panelsTopLeft: PanelsTopLeft, receiptText: ReceiptText, walletCards: WalletCards,
+  package: Package, banknote: Banknote, receiptIndianRupee: ReceiptIndianRupee, fileText: FileText,
+  fileMinus2: FileMinus2, fileCheck2: FileCheck2, percent: Percent, building2: Building2,
+  messageSquareText: MessageSquareText, users: Users, conciergeBell: ConciergeBell, logIn: LogIn,
+  packageSearch: PackageSearch, moonStar: MoonStar, messagesSquare: MessagesSquare, creditCard: CreditCard,
+  briefcaseBusiness: BriefcaseBusiness, userRound: UserRound, cable: Cable, settings2: Settings2,
+  blocks: Blocks, fileClock: FileClock,
+};
+
+function AdminNavIcon({ iconKey, size = 19, className }: { iconKey: AdminIconKey; size?: number; className?: string }) {
+  const Icon = adminIconComponents[iconKey] ?? LayoutDashboard;
+  return <Icon className={className} size={size} strokeWidth={1.9} aria-hidden="true" />;
+}
+
+function adminIconKey(key: string, fallback: AdminIconKey): AdminIconKey {
+  return ADMIN_NAV_ICON_BY_KEY[key] ?? fallback;
+}
+
 function GroupedAdminNavigation({ links: allowedLinks, pathname, collapsed, onNavigate }: { links: readonly AdminLink[]; pathname: string; collapsed: boolean; onNavigate?: () => void }) {
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
+  const groupButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const groupMenuRefs = useRef<Record<string, Array<HTMLAnchorElement | null>>>({});
   const groups = buildNavigationGroups(allowedLinks);
   const dashboard = allowedLinks.find((item) => item.key === 'dashboard');
   const standaloneTopLevel = ['manageHotels', 'rates', 'agents']
@@ -127,13 +170,80 @@ function GroupedAdminNavigation({ links: allowedLinks, pathname, collapsed, onNa
 
   useEffect(() => {
     if (!openGroup) return;
-    const onPointerDown = (event: PointerEvent) => { if (!navRef.current?.contains(event.target as Node)) setOpenGroup(null); };
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpenGroup(null); };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!navRef.current?.contains(event.target as Node)) setOpenGroup(null);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenGroup(null);
+        requestAnimationFrame(() => groupButtonRefs.current[openGroup]?.focus());
+      }
+    };
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
-    return () => { document.removeEventListener('pointerdown', onPointerDown); document.removeEventListener('keydown', onKeyDown); };
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [openGroup]);
 
+  function focusGroupItem(groupKey: string, index: number) {
+    const items = groupMenuRefs.current[groupKey] ?? [];
+    const nextIndex = Math.max(0, Math.min(index, items.length - 1));
+    requestAnimationFrame(() => items[nextIndex]?.focus());
+  }
+
+  function handleGroupKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, groupKey: string, itemCount: number) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault(); setOpenGroup(groupKey); focusGroupItem(groupKey, 0);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault(); setOpenGroup(groupKey); focusGroupItem(groupKey, itemCount - 1);
+    } else if (event.key === 'Escape') {
+      event.preventDefault(); setOpenGroup(null);
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault(); setOpenGroup(openGroup === groupKey ? null : groupKey);
+    }
+  }
+
+  function handleMenuKeyDown(event: React.KeyboardEvent<HTMLAnchorElement>, groupKey: string, index: number, itemCount: number) {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusGroupItem(groupKey, event.key === 'ArrowDown' ? (index + 1) % itemCount : (index - 1 + itemCount) % itemCount);
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault(); focusGroupItem(groupKey, event.key === 'Home' ? 0 : itemCount - 1);
+    } else if (event.key === 'Escape') {
+      event.preventDefault(); setOpenGroup(null); requestAnimationFrame(() => groupButtonRefs.current[groupKey]?.focus());
+    }
+  }
+
+  return <aside ref={navRef} className={`adminSidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Admin navigation">
+    <div className="adminSidebarBrand"><span className="legacyAgentLogo">RW</span><span className="adminSidebarBrandText"><b>RAINWOOD</b><small>HOTELS</small></span></div>
+    <div className="adminSidebarSearch" data-tooltip="Search menu"><UiIcon name="search" size={16} /><span>Search menu...</span></div>
+    <nav className="adminSidebarNav">
+      {dashboard && <Link className={isAdminRouteActive(pathname, dashboard.href) ? 'active' : undefined} aria-current={isAdminRouteActive(pathname, dashboard.href) ? 'page' : undefined} href={dashboard.href} onClick={onNavigate} data-tooltip={dashboard.label} title={collapsed ? dashboard.label : undefined}><span className="adminNavIcon" aria-hidden="true"><AdminNavIcon iconKey={adminIconKey(dashboard.key, 'layoutDashboard')} /></span><span className="adminNavLabel">{dashboard.label}</span></Link>}
+      {standaloneTopLevel.map((item) => {
+        const active = isAdminRouteActive(pathname, item.href);
+        return <Link key={item.key} className={active ? 'active' : undefined} aria-current={active ? 'page' : undefined} href={item.href} onClick={onNavigate} data-tooltip={item.label} title={collapsed ? item.label : undefined}><span className="adminNavIcon" aria-hidden="true"><AdminNavIcon iconKey={adminIconKey(item.key, 'hotel')} /></span><span className="adminNavLabel">{item.label}</span></Link>;
+      })}
+      {groups.map((group) => {
+        const active = group.items.some((item) => isAdminRouteActive(pathname, item.href));
+        const open = openGroup === group.key;
+        const groupIcon = ADMIN_GROUP_ICON_BY_KEY[group.key] ?? 'clipboardList';
+        return <div className={`adminNavGroup adminNavGroup-${group.key}${open ? ' is-open' : ''}`} key={group.key}>
+          <button ref={(element) => { groupButtonRefs.current[group.key] = element; }} className={`adminNavGroupButton${active ? ' active' : ''}${open ? ' open' : ''}`} type="button" aria-haspopup="menu" aria-expanded={open} aria-controls={`admin-nav-menu-${group.key}`} aria-label={group.label} data-tooltip={group.label} title={collapsed ? group.label : undefined} onClick={() => setOpenGroup(openGroup === group.key ? null : group.key)} onKeyDown={(event) => handleGroupKeyDown(event, group.key, group.items.length)}><AdminNavIcon iconKey={groupIcon} className="adminNavGroupIcon" /><span className="adminNavLabel">{group.label}</span><ChevronDown className="adminNavChevronIcon" size={17} strokeWidth={2} aria-hidden="true" /></button>
+          <div className={`adminNavDropdown${open ? ' is-visible' : ''}`} id={`admin-nav-menu-${group.key}`} role="menu" aria-label={`${group.label} navigation`} aria-hidden={!open}>
+            <div className="adminNavDropdownHeader"><AdminNavIcon iconKey={groupIcon} size={17} /><span>{group.label}</span></div>
+            {group.items.map((item, index) => {
+              const childActive = isAdminRouteActive(pathname, item.href);
+              return <Link key={item.key} ref={(element) => { const items = groupMenuRefs.current[group.key] ?? []; items[index] = element; groupMenuRefs.current[group.key] = items; }} role="menuitem" className={childActive ? 'active' : undefined} aria-current={childActive ? 'page' : undefined} href={item.href} onClick={onNavigate} onKeyDown={(event) => handleMenuKeyDown(event, group.key, index, group.items.length)}><AdminNavIcon iconKey={adminIconKey(item.key, 'fileText')} size={17} className="adminNavChildIcon" /><span className="adminNavChildLabel">{item.label}</span></Link>;
+            })}
+          </div>
+        </div>;
+      })}
+    </nav>
+  </aside>;
+}
+/*
   return <aside ref={navRef} className={`adminSidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Admin navigation">
     <div className="adminSidebarBrand"><span className="legacyAgentLogo">RW</span><span className="adminSidebarBrandText"><b>RAINWOOD</b><small>HOTELS</small></span></div>
     <div className="adminSidebarSearch"><UiIcon name="search" size={16} /><span>Search menu...</span></div>
@@ -153,7 +263,8 @@ function GroupedAdminNavigation({ links: allowedLinks, pathname, collapsed, onNa
     })}
     </nav>
   </aside>;
-}
+ }
+*/
 const fallbackLogoUrl = 'https://rainwoodhotels.com/wp-content/webp-express/webp-images/uploads/2023/09/rwh-logo.png.webp';
 function UiIcon({ name, size = 17 }: { name: 'search' | 'bell' | 'chevron' | 'grid'; size?: number }) {
   const paths = { search: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></>, bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>, chevron: <path d="m7 10 5 5 5-5" />, grid: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></> };

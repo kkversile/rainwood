@@ -1087,3 +1087,68 @@
 .adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarNav>a,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavGroupButton{justify-content:flex-start;padding-inline:10px;font-size:12px}
 .adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavDropdown{position:static!important;top:auto;left:auto;min-width:0;margin:2px 0 3px 30px;padding:3px;border:0;border-left:1px solid rgba(155,215,216,.3);border-radius:0;box-shadow:none;background:transparent}
 .adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavDropdown.is-visible{display:grid!important}
+
+/* RainWood admin navigation language: one dark teal system for expanded, rail and flyout states. */
+:root{
+  --rw-sidebar-bg:#143D46;
+  --rw-sidebar-submenu:#1B5057;
+  --rw-sidebar-active:#087F88;
+  --rw-sidebar-indicator:#36D3B0;
+  --rw-sidebar-text:#FFFFFF;
+  --rw-sidebar-subtext:#D8EEEE;
+  --rw-sidebar-icon:#90DBCC;
+  --rw-sidebar-hover:#24616A;
+  --rw-sidebar-separator:#355C63;
+  --rw-sidebar-accent:#0BA6AD;
+  --rw-sidebar-focus:#8FF5E5;
+}
+.adminSidebarShell .adminSidebar{background:var(--rw-sidebar-bg)!important;color:var(--rw-sidebar-text);box-shadow:8px 0 26px rgba(7,63,74,.2)}
+.adminSidebarShell .adminSidebarBrand{border-bottom-color:var(--rw-sidebar-separator);padding-bottom:16px}
+.adminSidebarShell .adminSidebarBrand .legacyAgentLogo{background:var(--rw-sidebar-accent);color:var(--rw-sidebar-text)}
+.adminSidebarShell .adminSidebarBrandText b{color:var(--rw-sidebar-text)}
+.adminSidebarShell .adminSidebarBrandText small{color:var(--rw-sidebar-icon)}
+.adminSidebarShell .adminSidebarSearch{border-color:var(--rw-sidebar-separator);background:rgba(255,255,255,.06);color:var(--rw-sidebar-subtext);min-height:44px}
+.adminSidebarShell .adminSidebarNav{gap:4px}
+.adminSidebarShell .adminSidebarNav>a,.adminSidebarShell .adminNavGroupButton{position:relative;min-height:44px;padding:10px 12px;border-left:3px solid transparent;border-radius:8px;background:transparent;color:var(--rw-sidebar-text);gap:12px;font-size:13px;font-weight:800}
+.adminSidebarShell .adminSidebarNav>a:hover,.adminSidebarShell .adminNavGroupButton:hover,.adminSidebarShell .adminNavGroupButton:focus-visible{background:var(--rw-sidebar-hover);color:var(--rw-sidebar-text);outline:none}
+.adminSidebarShell .adminSidebarNav>a:focus-visible,.adminSidebarShell .adminNavGroupButton:focus-visible,.adminSidebarShell .adminNavDropdown a:focus-visible{outline:2px solid var(--rw-sidebar-focus);outline-offset:2px}
+.adminSidebarShell .adminSidebarNav>a.active,.adminSidebarShell .adminNavGroupButton.active{border-left-color:var(--rw-sidebar-indicator);background:var(--rw-sidebar-active);color:var(--rw-sidebar-text)}
+.adminSidebarShell .adminNavIcon,.adminSidebarShell .adminNavGroupIcon{display:grid;place-items:center;flex:0 0 22px;width:22px;height:22px;color:var(--rw-sidebar-icon);font-size:0}
+.adminSidebarShell .adminSidebarNav>a.active .adminNavIcon,.adminSidebarShell .adminNavGroupButton.active .adminNavGroupIcon,.adminSidebarShell .adminNavGroupButton:hover .adminNavGroupIcon{color:var(--rw-sidebar-text)}
+.adminSidebarShell .adminNavIcon svg,.adminSidebarShell .adminNavGroupIcon{display:block}
+.adminSidebarShell .adminNavLabel,.adminSidebarShell .adminNavChildLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adminSidebarShell .adminNavGroupButton::before{content:none!important;display:none!important}
+.adminSidebarShell .adminNavGroupButton>span[aria-hidden="true"]{display:none!important}
+.adminSidebarShell .adminNavChevronIcon{margin-left:auto;flex:0 0 auto;color:var(--rw-sidebar-icon);transition:transform .16s ease}
+.adminSidebarShell .adminNavGroupButton.open .adminNavChevronIcon{transform:rotate(180deg)}
+.adminSidebarShell .adminNavDropdown{position:static!important;display:none!important;gap:3px;margin:3px 0 5px 30px!important;padding:6px!important;border:1px solid var(--rw-sidebar-separator)!important;border-radius:10px!important;border-left:1px solid var(--rw-sidebar-separator)!important;background:var(--rw-sidebar-submenu)!important;box-shadow:none!important;min-width:0!important}
+.adminSidebarShell .adminNavDropdown.is-visible{display:grid!important}
+.adminSidebarShell .adminNavDropdownHeader{display:flex;align-items:center;gap:9px;min-height:32px;padding:5px 9px;border-bottom:1px solid var(--rw-sidebar-separator);color:var(--rw-sidebar-text);font-size:11px;font-weight:900;letter-spacing:.04em;text-transform:uppercase}
+.adminSidebarShell .adminNavDropdownHeader svg{color:var(--rw-sidebar-icon);flex:0 0 auto}
+.adminSidebarShell .adminSidebar .adminNavDropdown a{display:flex!important;align-items:center;gap:9px;min-height:38px;padding:8px 9px!important;border-radius:7px;color:var(--rw-sidebar-subtext)!important;background:transparent!important;font-size:12px;font-weight:700}
+.adminSidebarShell .adminSidebar .adminNavDropdown a:hover,.adminSidebarShell .adminSidebar .adminNavDropdown a:focus-visible{background:var(--rw-sidebar-hover)!important;color:var(--rw-sidebar-text)!important}
+.adminSidebarShell .adminSidebar .adminNavDropdown a.active{position:relative;background:var(--rw-sidebar-active)!important;color:var(--rw-sidebar-text)!important}
+.adminSidebarShell .adminSidebar .adminNavDropdown a.active::before{content:"";position:absolute;left:-7px;top:7px;bottom:7px;width:3px;border-radius:2px;background:var(--rw-sidebar-indicator)}
+.adminSidebarShell .adminSidebar .adminNavChildIcon{flex:0 0 18px;color:var(--rw-sidebar-icon)}
+.adminSidebarShell .adminSidebar .adminNavDropdown a.active .adminNavChildIcon,.adminSidebarShell .adminSidebar .adminNavDropdown a:hover .adminNavChildIcon{color:var(--rw-sidebar-text)}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:not(:hover) .adminSidebarSearch{margin-inline:5px;min-height:44px}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:not(:hover) .adminSidebarNav>a,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:not(:hover) .adminNavGroupButton{justify-content:center;min-height:48px;padding-inline:0;border-left-color:transparent}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:not(:hover) .adminSidebarNav>a.active,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:not(:hover) .adminNavGroupButton.active{border-left-color:var(--rw-sidebar-indicator)}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:not(:hover) .adminNavIcon,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:not(:hover) .adminNavGroupIcon{flex-basis:24px;width:24px;height:24px}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:not(:hover) .adminNavDropdown{position:absolute!important;top:0;left:calc(100% + 8px);z-index:100;display:none!important;min-width:250px!important;margin:0!important;padding:8px!important;border:1px solid var(--rw-sidebar-separator)!important;border-radius:10px!important;background:var(--rw-sidebar-submenu)!important;box-shadow:8px 12px 28px rgba(4,32,38,.3)!important}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:not(:hover) .adminNavDropdown.is-visible{display:grid!important}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavDropdown{position:static!important;top:auto;left:auto;min-width:0!important;margin:3px 0 5px 30px!important;padding:6px!important;border:1px solid var(--rw-sidebar-separator)!important;border-radius:10px!important;box-shadow:none!important;background:var(--rw-sidebar-submenu)!important}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavDropdown.is-visible{display:grid!important}
+.adminSidebarShell.is-sidebar-collapsed:not(.is-mobile-nav-open) .adminSidebar:not(:hover) [data-tooltip]::after{content:attr(data-tooltip);position:absolute;left:calc(100% + 10px);top:50%;z-index:120;transform:translateY(-50%);padding:7px 9px;border:1px solid var(--rw-sidebar-separator);border-radius:6px;background:var(--rw-sidebar-submenu);color:var(--rw-sidebar-text);font-size:11px;font-weight:700;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .14s ease}
+.adminSidebarShell.is-sidebar-collapsed:not(.is-mobile-nav-open) .adminSidebar:not(:hover) [data-tooltip]:hover::after,.adminSidebarShell.is-sidebar-collapsed:not(.is-mobile-nav-open) .adminSidebar:not(:hover) [data-tooltip]:focus-visible::after{opacity:1}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarBrandText,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarSearch span,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavLabel{display:inline}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarBrand{justify-content:flex-start;padding-inline:10px}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarSearch{justify-content:flex-start;padding-inline:10px;border-color:var(--rw-sidebar-separator);background:rgba(255,255,255,.06)}
+.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminSidebarNav>a,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:hover .adminNavGroupButton{justify-content:flex-start;padding-inline:12px;font-size:13px}
+@media(max-width:820px){
+  .adminSidebarShell .adminSidebar .adminNavDropdown,.adminSidebarShell.is-sidebar-collapsed .adminSidebar:not(:hover) .adminNavDropdown{position:static!important;min-width:0!important;margin:3px 0 5px 30px!important;box-shadow:none!important}
+  .adminSidebarShell.is-mobile-nav-open .adminSidebar [data-tooltip]::after{display:none!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .adminSidebarShell .adminSidebar,.adminSidebarShell .adminNavChevronIcon,.adminSidebarShell [data-tooltip]::after{transition:none!important}
+}
