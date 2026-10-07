@@ -44,7 +44,10 @@ export function RainwoodDatePicker({ label, value, onChange, minDate, maxDate, p
   const [visibleMonth, setVisibleMonth] = useState(() => monthStart(selectedDate ?? minimumDate ?? new Date()));
 
   useEffect(() => {
-    if (selectedDate) setVisibleMonth(monthStart(selectedDate));
+    if (selectedDate) {
+      setVisibleMonth(monthStart(selectedDate));
+      setOpen(false);
+    }
     else if (minimumDate) setVisibleMonth(monthStart(minimumDate));
   }, [value, minDate]);
 
