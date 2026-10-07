@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminLayout } from '../../../components/Shell';
 import { GRID_FIELDS, GridBand, GridField, RateMasterGrid, RateMasterGridData } from '../../../components/RateMasterGrid';
 import { apiRequest } from '../../../lib/api';
@@ -32,6 +32,7 @@ export default function RateMasterPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const gridRequestRef = useRef(0);
 
   const dirty = useMemo(() => Boolean(draft && original && JSON.stringify(draft) !== JSON.stringify(original)), [draft, original]);
   const validRange = isValidRange(from, to);
@@ -52,6 +53,7 @@ export default function RateMasterPage() {
   }, [hotelId, from, to]);
 
   async function loadGrid(selectedHotelId: string, selectedFrom: string, selectedTo: string) {
+    const requestId = ++gridRequestRef.current;
     setLoading(true);
     setError('');
     setMessage('');
@@ -59,14 +61,16 @@ export default function RateMasterPage() {
       const params = new URLSearchParams({ hotelId: selectedHotelId });
       if (isValidRange(selectedFrom, selectedTo)) { params.set('from', selectedFrom); params.set('to', selectedTo); }
       const data = await apiRequest<RateMasterGridData>(`/rate-master/grid?${params.toString()}`);
+      if (requestId !== gridRequestRef.current) return;
       setDraft(data);
       setOriginal(clone(data));
       setExpandedRooms(new Set(data.rooms.map((room) => room.id)));
       setExpandedPlans(new Set(data.rooms.flatMap((room) => room.plans.map((plan) => `${room.id}:${plan.ratePlanId}`))));
     } catch (reason) {
+      if (requestId !== gridRequestRef.current) return;
       setError(reason instanceof Error ? reason.message : 'Could not load Rate Master');
     } finally {
-      setLoading(false);
+      if (requestId === gridRequestRef.current) setLoading(false);
     }
   }
 

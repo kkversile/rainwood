@@ -17,6 +17,7 @@
 - Replaced `/admin/rates` with a compact grid containing exactly Single, Double, Extra Adult, Child With Bed, and Child Without Bed. It renders Rack/A/B/C/D/E rows and EP/CP/MAP/AP in canonical order; Triple is excluded from the new flow.
 - Added blank-date zero structure, date-range loading, mixed-value markers, local copy/clear/revert, expand/collapse, and dirty-cell bulk saving. Untouched Mixed cells are omitted from save requests.
 - Added generic EP/CP/MAP/AP seed coverage and source-rate verification for the normalized daily grid.
+- Added stale-request protection so a partial-date zero response cannot overwrite a completed date-range response.
 
 1. Added `AgentRateCategory` and three additive Prisma models with overlap-friendly date indexes and foreign keys.
 2. Added migration `20261007120000_add_agent_category_mapping/migration.sql`.
