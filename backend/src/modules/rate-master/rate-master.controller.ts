@@ -5,7 +5,7 @@ import { Roles } from '../../common/roles.decorator';
 import { RolesGuard } from '../../common/roles.guard';
 import { FeatureGuard } from '../features/feature.guard';
 import { RequireFeature } from '../features/require-feature.decorator';
-import { AgentMappingDto, AgentMappingQueryDto, RateMasterGridQueryDto, RateMasterGridSaveDto, RateMasterQueryDto, RateMasterUpdateDto } from './rate-master.dto';
+import { AgentMappingBulkDto, AgentMappingDto, AgentMappingQueryDto, AgentMappingRenewDto, RateMasterGridQueryDto, RateMasterGridSaveDto, RateMasterQueryDto, RateMasterUpdateDto } from './rate-master.dto';
 import { RateMasterService } from './rate-master.service';
 
 @Controller('rate-master')
@@ -30,7 +30,9 @@ export class AgentCategoryMappingController {
 
   @Get(':agentId/rate-mappings') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'VIEWER') mappings(@Param('agentId') agentId: string, @Query() query: AgentMappingQueryDto, @CurrentUser() user: any) { return this.service.mappings(agentId, query, user.id); }
   @Post(':agentId/rate-mappings') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') create(@Param('agentId') agentId: string, @Body() body: AgentMappingDto, @CurrentUser() user: any) { return this.service.createMapping(agentId, body, user.id); }
+  @Post(':agentId/rate-mappings/bulk') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') bulk(@Param('agentId') agentId: string, @Body() body: AgentMappingBulkDto, @CurrentUser() user: any) { return this.service.bulkCreateMappings(agentId, body, user.id); }
   @Patch(':agentId/rate-mappings/:mappingId') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') update(@Param('agentId') agentId: string, @Param('mappingId') mappingId: string, @Body() body: Partial<AgentMappingDto>, @CurrentUser() user: any) { return this.service.updateMapping(agentId, mappingId, body, user.id); }
+  @Post(':agentId/rate-mappings/:mappingId/renew') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') renew(@Param('agentId') agentId: string, @Param('mappingId') mappingId: string, @Body() body: AgentMappingRenewDto, @CurrentUser() user: any) { return this.service.renewMapping(agentId, mappingId, body, user.id); }
   @Delete(':agentId/rate-mappings/:mappingId') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN') remove(@Param('agentId') agentId: string, @Param('mappingId') mappingId: string, @CurrentUser() user: any) { return this.service.removeMapping(agentId, mappingId, user.id); }
   @Get(':agentId/rate-mappings/:mappingId/rates') @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'VIEWER') rates(@Param('agentId') agentId: string, @Param('mappingId') mappingId: string, @Query() query: AgentMappingQueryDto, @CurrentUser() user: any) { return this.service.mappingRates(agentId, mappingId, query, user.id); }
 }

@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsDateString, IsIn, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsDateString, IsIn, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 
-const CATEGORIES = ['A', 'B', 'C', 'D', 'E'] as const;
+const CATEGORIES = ['RACK', 'A', 'B', 'C', 'D', 'E'] as const;
 const GRID_BANDS = ['RACK', ...CATEGORIES] as const;
 const GRID_FIELDS = ['single', 'double', 'extraAdult', 'childWithBed', 'childWithoutBed'] as const;
 
@@ -70,4 +70,26 @@ export class AgentMappingQueryDto {
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
   @IsOptional() @IsString() hotelId?: string;
+  @IsOptional() @IsString() hotelSearch?: string;
+  @IsOptional() @IsString() destination?: string;
+  @IsOptional() @IsIn(['ACTIVE', 'UPCOMING', 'EXPIRING_SOON', 'EXPIRED', 'INACTIVE']) status?: 'ACTIVE' | 'UPCOMING' | 'EXPIRING_SOON' | 'EXPIRED' | 'INACTIVE';
+}
+
+export class AgentMappingBulkItemDto {
+  @IsString() hotelId!: string;
+  @IsIn(CATEGORIES) category!: (typeof CATEGORIES)[number];
+}
+
+export class AgentMappingBulkDto {
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => AgentMappingBulkItemDto) assignments?: AgentMappingBulkItemDto[];
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => AgentMappingBulkItemDto) hotels?: AgentMappingBulkItemDto[];
+  @IsDateString() validFrom!: string;
+  @IsDateString() validTo!: string;
+  @IsOptional() @IsBoolean() active?: boolean;
+}
+
+export class AgentMappingRenewDto {
+  @IsDateString() validFrom!: string;
+  @IsDateString() validTo!: string;
+  @IsOptional() @IsIn(CATEGORIES) category?: (typeof CATEGORIES)[number];
 }

@@ -77,6 +77,10 @@ function agentStatus(agent: Agent) {
   if (agentHasTerms(agent)) return 'Deactivated';
   return agent.agentDocuments?.length ? 'Under Review' : 'KYC Pending';
 }
+function activeCategoryMappingCount(mappings: CategoryMapping[] | undefined) {
+  const today = new Date().toISOString().slice(0, 10);
+  return (mappings ?? []).filter((mapping) => mapping.active && mapping.validFrom.slice(0, 10) <= today && mapping.validTo.slice(0, 10) >= today).length;
+}
 function planLabel(plan: { code: string; name: string; roomType: { name: string } }) {
   return `${plan.code} - ${plan.name} - ${plan.roomType.name}`;
 }
@@ -109,9 +113,8 @@ export default function AgentsPage() {
 
   async function load() {
     try {
-      const base = await apiRequest<Agent[]>('/users/agents');
-      const enriched = await Promise.all(base.map(async (agent) => ({ ...agent, agentRateSlabAssignments: await apiRequest<NonNullable<Agent['agentRateSlabAssignments']>>(`/agents/${agent.id}/rate-slab`), categoryMappings: await apiRequest<CategoryMapping[]>(`/agents/${agent.id}/rate-mappings`) })));
-      setAgents(enriched);
+      const base = await apiRequest<(Agent & { agentHotelRateCategoryAssignments?: CategoryMapping[] })[]>('/users/agents');
+      setAgents(base.map((agent) => ({ ...agent, categoryMappings: agent.agentHotelRateCategoryAssignments ?? [] })));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not load agents');
     }
@@ -336,12 +339,12 @@ export default function AgentsPage() {
               : []).concat(hotelsWithConflicts ? ['Multiple Plans ⚠'] : []);
           const isEditingTerms = editingPaymentAgentId === agent.id;
           return <tr key={agent.id}>
-            <td><b>{agent.name}</b><small>{agent.companyName || ''}</small></td>
+            <td><b>{agent.name}</b><small>{agent.companyName || ''}</small><small>{activeCategoryMappingCount(categoryMappings)} active hotel contract{activeCategoryMappingCount(categoryMappings) === 1 ? '' : 's'}</small></td>
             <td className="agentEmailCell">{agentEmail(agent.email)}</td>
             <td className="agentPaymentTermsCell">{isEditingTerms ? <CompactPaymentTermsEditor value={termsMilestones} onChange={setTermsMilestones} onCancel={cancelTerms} onSave={() => void saveInlineTerms()} busy={busy} /> : <div className="agentPaymentTermsDisplay"><div className="agentMilestoneBadges agentPaymentMilestones">{agent.paymentMilestones?.length ? agent.paymentMilestones.map((item, index) => <span className="status" title={item.dueType === 'DAYS_BEFORE_CHECKIN' ? String(Number(item.daysBeforeCheckIn ?? 0)) + ' days before check-in' : 'Due when the booking is made'} key={item.dueType + '-' + String(item.daysBeforeCheckIn) + '-' + String(index)}>{milestoneLabel(item)}</span>) : <span>{agentHasTerms(agent) ? String(Number(agent.bookingPaymentPercent ?? 0)) + '% legacy' : 'Unassigned'}</span>}</div><button className="paymentTermsEditIcon" type="button" aria-label={'Edit payment terms for ' + agent.name} onClick={() => openTerms(agent)}>Edit</button></div>}</td>
               <td><div className="agentMilestoneBadges agentRatePlanSummary">{categoryMappings.length ? <>{categoryMappings.slice(0, 3).map((item) => <span className="status ok" key={item.id}>{item.hotel.name} → {item.category}<small>{item.validFrom.slice(0, 10)} → {item.validTo.slice(0, 10)}</small></span>)}{categoryMappings.length > 3 && <span className="status">+{categoryMappings.length - 3} more</span>}<a className="paymentTermsEditIcon" href={`/rainwood/admin/agent-mappings?agentId=${encodeURIComponent(agent.id)}`}>Rate Mapping</a></> : <>{agent.agentRateSlabAssignments?.filter((item) => item.active).map((item) => <span className="status ok" key={item.id}>{item.slab.code} · {item.slab.name}<small>Legacy slab · {item.validFrom.slice(0, 10)} → {item.validTo.slice(0, 10)}</small></span>)}{!agent.agentRateSlabAssignments?.some((item) => item.active) && summary.map((item) => <span className="status" key={item}>{item}</span>)}{!summary.length && !agent.agentRateSlabAssignments?.some((item) => item.active) && <span>Not assigned</span>}{canManageSlabs && <button className="paymentTermsEditIcon" type="button" aria-label={'Open legacy pricing migration for ' + agent.name} onClick={() => openAssignments(agent)}>Legacy pricing</button>}</>}</div>{categoryMappings.length ? <small className="mutedText">Pricing source: Hotel Category Mapping</small> : agent.agentRateSlabAssignments?.some((item) => item.active) ? <small className="mutedText">Pricing source: Legacy Agent Rate Slab · migration fallback</small> : mappings.length ? <small className="mutedText">Pricing source: Legacy Agent Rate Plan · view only · migration fallback</small> : null}</td>
             <td><span className={'status ' + (status === 'Active' ? 'ok' : status === 'Under Review' || status === 'KYC Pending' ? 'warn' : 'muted')}>{status}</span></td>
-            <td><div className="rowActions"><button className="smallBtn" type="button" onClick={() => void openReview(agent)}>{status === 'Under Review' || status === 'KYC Pending' ? 'Open / Review' : 'Open Details'}</button><button className="smallBtn" type="button" onClick={() => edit(agent)}>Edit</button>{status === 'Active' && <button className="smallBtn secondary" type="button" disabled={busy} onClick={() => void toggle(agent)}>Deactivate</button>}{status === 'Deactivated' && <button className="smallBtn secondary" type="button" disabled={busy} onClick={() => void toggle(agent)}>Reactivate</button>}</div></td>
+            <td><div className="rowActions"><a className="smallBtn" href={`/rainwood/admin/agent-mappings?agentId=${encodeURIComponent(agent.id)}`}>Manage Mappings</a><button className="smallBtn" type="button" onClick={() => void openReview(agent)}>{status === 'Under Review' || status === 'KYC Pending' ? 'Open / Review' : 'Open Details'}</button><button className="smallBtn" type="button" onClick={() => edit(agent)}>Edit</button>{status === 'Active' && <button className="smallBtn secondary" type="button" disabled={busy} onClick={() => void toggle(agent)}>Deactivate</button>}{status === 'Deactivated' && <button className="smallBtn secondary" type="button" disabled={busy} onClick={() => void toggle(agent)}>Reactivate</button>}</div></td>
           </tr>;
         })}
       </tbody></table></div></section>

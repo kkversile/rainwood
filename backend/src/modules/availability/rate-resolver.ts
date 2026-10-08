@@ -20,7 +20,7 @@ export type RateValue = {
   childWithoutBedAmount?: number;
   taxRatePercent?: number;
   taxPolicy?: 'RATE_DAY_PERCENTAGE' | 'CALCULATED_AT_BOOKING';
-  category?: 'A' | 'B' | 'C' | 'D' | 'E';
+  category?: 'RACK' | 'A' | 'B' | 'C' | 'D' | 'E';
   assignmentId?: string;
   rateBandId?: string;
   childWithBedAmount?: number;
@@ -36,11 +36,12 @@ export type AgentSlabContext = {
 export type AgentCategoryContext = {
   agentId: string;
   hotelId: string;
-  category: 'A' | 'B' | 'C' | 'D' | 'E' | null;
-  categoryByDate?: Record<string, 'A' | 'B' | 'C' | 'D' | 'E'>;
-  assignmentByDate?: Record<string, { id: string; category: 'A' | 'B' | 'C' | 'D' | 'E'; validFrom: Date; validTo: Date }>;
+  category: 'RACK' | 'A' | 'B' | 'C' | 'D' | 'E' | null;
+  categoryByDate?: Record<string, 'RACK' | 'A' | 'B' | 'C' | 'D' | 'E'>;
+  assignmentByDate?: Record<string, { id: string; category: 'RACK' | 'A' | 'B' | 'C' | 'D' | 'E'; validFrom: Date; validTo: Date }>;
   bands: Array<{ id: string; ratePlanId: string; validFrom: Date; validTo: Date; categoryAAmount: unknown; categoryBAmount: unknown; categoryCAmount: unknown; categoryDAmount: unknown; categoryEAmount: unknown; active?: boolean }>;
   dailyRates?: Array<{ id: string; ratePlanId: string; category: 'A' | 'B' | 'C' | 'D' | 'E'; date: Date; singleAmount: unknown; doubleAmount: unknown; extraAdultAmount: unknown; childWithBedAmount: unknown; childWithoutBedAmount: unknown; active?: boolean }>;
+  rackRates?: Array<{ id: string; ratePlanId: string; date: Date; amount: unknown; baseAmount: unknown; childAmount: unknown; childWithoutBedAmount: unknown; extraAdultAmount: unknown; occupancyPrices?: unknown; active?: boolean }>;
   supplements: Array<{ mealPlan: string; validFrom: Date; validTo: Date; extraAdultAmount: unknown; childWithBedAmount: unknown; childWithoutBedAmount: unknown; active?: boolean }>;
   complete: boolean;
   coverageError?: boolean;
@@ -60,6 +61,10 @@ export function categoryRateMatches(context: AgentCategoryContext, ratePlanId: s
   return occupiedNights.every((night) => {
     const key = toDateOnly(night);
     const category = context.categoryByDate?.[key] ?? context.category;
+    if (category === 'RACK') {
+      const rack = context.rackRates?.filter((item) => item.ratePlanId === ratePlanId && item.active !== false && toDateOnly(item.date) === key) ?? [];
+      return rack.length === 1 && numberOr((rack[0].occupancyPrices as any)?.double ?? rack[0].baseAmount ?? rack[0].amount, 0) > 0;
+    }
     const daily = context.dailyRates?.filter((item) => item.ratePlanId === ratePlanId && item.category === category && item.active !== false && toDateOnly(item.date) === key) ?? [];
     if (daily.length) return daily.length === 1 && numberOr(daily[0].doubleAmount, 0) > 0;
     const band = context.bands.find((item) => item.ratePlanId === ratePlanId && item.active !== false && new Date(item.validFrom) <= night && new Date(item.validTo) >= night);
@@ -127,6 +132,11 @@ export class RateResolverService {
   categoryResolve(base: any, band: any, context: AgentCategoryContext, plan: any): RateValue {
     const date = new Date(base?.date ?? Date.now());
     const category = context.categoryByDate?.[toDateOnly(date)] ?? context.category;
+    if (category === 'RACK') {
+      const assignment = context.assignmentByDate?.[toDateOnly(date)];
+      const result = this.resolve(base, undefined, 'AGENT_CATEGORY');
+      return { ...result, canonicalPricing: true, category, assignmentId: assignment?.id, rateBandId: undefined, contractRateUnavailable: !base || result.amount <= 0 };
+    }
     const daily = category ? context.dailyRates?.find((item) => item.ratePlanId === plan?.id && item.category === category && item.active !== false && toDateOnly(item.date) === toDateOnly(date)) : undefined;
     const singleAmount = daily ? numberOr(daily.singleAmount, 0) : 0;
     const doubleAmount = daily ? numberOr(daily.doubleAmount, 0) : category && band ? numberOr(band[`category${category}Amount`], 0) : 0;

@@ -11,6 +11,7 @@ type RainwoodDatePickerProps = {
   maxDate?: string;
   placeholder?: string;
   accent?: boolean;
+  dropUp?: boolean;
 };
 
 const monthNames = Array.from({ length: 12 }, (_, month) =>
@@ -35,7 +36,7 @@ function addMonths(date: Date, amount: number) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + amount, 1));
 }
 
-export function RainwoodDatePicker({ label, value, onChange, minDate, maxDate, placeholder = label, accent = false }: RainwoodDatePickerProps) {
+export function RainwoodDatePicker({ label, value, onChange, minDate, maxDate, placeholder = label, accent = false, dropUp = false }: RainwoodDatePickerProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const selectedDate = parseDate(value);
   const minimumDate = parseDate(minDate ?? '');
@@ -84,7 +85,7 @@ export function RainwoodDatePicker({ label, value, onChange, minDate, maxDate, p
       <CalendarDays size={15} aria-hidden="true" />
       <span>{value || placeholder}</span>
     </button>
-    {open && <div className="rainwoodDatePopover" role="dialog" aria-label={`${label} calendar`} onClick={(event) => event.preventDefault()}>
+    {open && <div className={`rainwoodDatePopover${dropUp ? ' dropUp' : ''}`} role="dialog" aria-label={`${label} calendar`}>
       <div className="rainwoodDatePopoverHeader">
         <span>{label}</span>
         <div className="rainwoodDateSelectors">

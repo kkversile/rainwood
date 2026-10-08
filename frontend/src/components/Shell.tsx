@@ -56,6 +56,7 @@ export const legacyAdminLinks = [
   { key: 'creditNotes', href: '/admin/credit-notes', label: 'Credit Notes' },
   { key: 'tds', href: '/admin/tds', label: 'TDS Register' },
   { key: 'agents', href: '/admin/agents', label: 'Agents' },
+  { key: 'agentMappings', href: '/admin/agent-mappings', label: 'Agent Mappings' },
   { key: 'corporates', href: '/admin/corporates', label: 'Corporates' },
   { key: 'inquiries', href: '/admin/inquiries', label: 'Inquiries' },
   { key: 'reservations', href: '/admin/reservations', label: 'Reservations' },
@@ -159,7 +160,7 @@ function GroupedAdminNavigation({ links: allowedLinks, pathname, collapsed, onNa
   const groupMenuRefs = useRef<Record<string, Array<HTMLAnchorElement | null>>>({});
   const groups = buildNavigationGroups(allowedLinks);
   const dashboard = allowedLinks.find((item) => item.key === 'dashboard');
-  const standaloneTopLevel = ['manageHotels', 'rates', 'agents']
+  const standaloneTopLevel = ['manageHotels', 'rates', 'agents', 'agentMappings']
     .map((key) => allowedLinks.find((item) => item.key === key))
     .filter((item): item is AdminLink => Boolean(item));
   const routeGroup = groups.find((group) => group.items.some((item) => isAdminRouteActive(pathname, item.href)))?.key ?? null;

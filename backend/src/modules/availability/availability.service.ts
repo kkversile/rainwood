@@ -28,6 +28,7 @@ export class AvailabilityService {
   async search(query: AvailabilityQueryDto, actor?: PricingActor) {
     const from = parseDateOnly(query.checkIn, 'checkIn');
     const to = parseDateOnly(query.checkOut, 'checkOut');
+    const occupiedTo = addDays(to, -1);
     const normalized = this.normalizeOccupancy(query);
     this.validateStay(from, to, normalized.rooms, normalized.adults, normalized.children, normalized.occupancies);
     const nights = nightsBetween(from, to);
@@ -44,7 +45,7 @@ export class AvailabilityService {
           where: { active: true },
           include: {
             inventory: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } },
-            ratePlans: { where: { active: true, master: { active: true }, ...(agentId ? { OR: [{ assignedAgents: { some: { agentId, active: true } } }, { agentCategoryBands: { some: { active: true, validFrom: { lte: to }, validTo: { gte: from } } } }, ...(agentSlab ? [{ slabRates: { some: { slabId: agentSlab.assignment.slabId, active: true, validFrom: { lte: to }, validTo: { gte: from } } } }] : [])] } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, agentCategoryBands: { where: { active: true, validFrom: { lte: to }, validTo: { gte: from } } }, ...(agentId ? { assignedAgents: { where: { agentId, active: true } } } : {}) } },
+            ratePlans: { where: { active: true, master: { active: true }, ...(agentId ? { OR: [{ assignedAgents: { some: { agentId, active: true } } }, { agentCategoryBands: { some: { active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } } } }, { roomType: { hotel: { agentHotelRateCategoryAssignments: { some: { agentId, active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } } } } } }, ...(agentSlab ? [{ slabRates: { some: { slabId: agentSlab.assignment.slabId, active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } } } }] : [])] } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, agentCategoryBands: { where: { active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } } }, ...(agentId ? { assignedAgents: { where: { agentId, active: true } } } : {}) } },
           },
         },
       },
@@ -64,6 +65,7 @@ export class AvailabilityService {
   async quoteSelection(db: Database, input: Selection, options: { checkInventory?: boolean; agentId?: string; channel?: string; promotionCode?: string; corporateAccountId?: string; actor?: PricingActor } = {}) {
     const from = parseDateOnly(input.checkIn, 'checkIn');
     const to = parseDateOnly(input.checkOut, 'checkOut');
+    const occupiedTo = addDays(to, -1);
     const normalized = this.normalizeOccupancy(input);
     this.validateStay(from, to, normalized.rooms, normalized.adults, normalized.children, normalized.occupancies);
     const agentSlab = options.agentId && this.agentRateSlabs ? await this.agentRateSlabs.context(options.agentId, from, to, db) : null;
@@ -75,7 +77,7 @@ export class AvailabilityService {
       include: {
         hotel: { include: { supplementaryCharges: { where: { active: true, scope: supplementaryScopeFilter(options.agentId), startDate: { lte: to }, endDate: { gte: from } } }, promotions: { where: { active: true }, include: { roomTypes: true, ratePlans: true } }, rateSeasons: { where: { active: true, startDate: { lte: to }, endDate: { gte: from } }, include: { roomTypes: true, ratePlans: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] }, yieldRules: { where: { active: true }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }] } } },
         inventory: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } },
-          ratePlans: { where: { id: input.ratePlanId, active: true, master: { active: true }, ...(options.agentId ? { OR: [{ assignedAgents: { some: { agentId: options.agentId, active: true } } }, { agentCategoryBands: { some: { active: true, validFrom: { lte: to }, validTo: { gte: from } } } }, ...(agentSlab ? [{ slabRates: { some: { slabId: agentSlab.assignment.slabId, active: true, validFrom: { lte: to }, validTo: { gte: from } } } }] : [])] } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, agentCategoryBands: { where: { active: true, validFrom: { lte: to }, validTo: { gte: from } } }, ...(options.agentId ? { assignedAgents: { where: { agentId: options.agentId, active: true } } } : {}) } },
+          ratePlans: { where: { id: input.ratePlanId, active: true, master: { active: true }, ...(options.agentId ? { OR: [{ assignedAgents: { some: { agentId: options.agentId, active: true } } }, { agentCategoryBands: { some: { active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } } } }, { roomType: { hotel: { agentHotelRateCategoryAssignments: { some: { agentId: options.agentId, active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } } } } } }, ...(agentSlab ? [{ slabRates: { some: { slabId: agentSlab.assignment.slabId, active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } } } }] : [])] } : {}) }, include: { rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, agentCategoryBands: { where: { active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } } }, ...(options.agentId ? { assignedAgents: { where: { agentId: options.agentId, active: true } } } : {}) } },
       },
     });
     const plan = room?.ratePlans[0];

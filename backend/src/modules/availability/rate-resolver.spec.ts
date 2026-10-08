@@ -101,4 +101,21 @@ describe('RateResolverService', () => {
     const context: any = { category: 'A', bands: [{ ratePlanId: 'plan-1', validFrom: new Date('2099-01-01'), validTo: new Date('2099-01-10'), active: true }] };
     expect(categoryRateMatches(context, 'plan-1', [new Date('2099-01-10'), new Date('2099-01-11')])).toBe(false);
   });
+
+  it('resolves RACK from the canonical RateDay and never from category A', () => {
+    const context: any = {
+      category: 'RACK', categoryByDate: { '2099-01-10': 'RACK' }, complete: true,
+      bands: [{ ratePlanId: 'plan-1', validFrom: new Date('2099-01-01'), validTo: new Date('2099-01-31'), categoryAAmount: 100, categoryBAmount: 200, categoryCAmount: 300, categoryDAmount: 400, categoryEAmount: 500 }],
+      rackRates: [{ id: 'rack-1', ratePlanId: 'plan-1', date: new Date('2099-01-10'), amount: 5000, baseAmount: 5000, occupancyPrices: { single: 4500, double: 5000 }, childAmount: 250, extraAdultAmount: 600 }], supplements: [],
+    };
+    const result = resolver.byDate({ id: 'plan-1', mealPlan: 'EP' }, 'agent-1', null, context).get({ ...base, date: new Date('2099-01-10'), amount: 5000 });
+    expect(result).toMatchObject({ amount: 5000, priceSource: 'AGENT_CATEGORY', category: 'RACK', canonicalPricing: true, contractRateUnavailable: false });
+    expect(result.amount).not.toBe(100);
+    expect(categoryRateMatches(context, 'plan-1', [new Date('2099-01-10')])).toBe(true);
+  });
+
+  it('rejects a RACK contract when the canonical RateDay is missing or zero', () => {
+    const context: any = { category: 'RACK', categoryByDate: { '2099-01-10': 'RACK' }, rackRates: [], bands: [], supplements: [] };
+    expect(categoryRateMatches(context, 'plan-1', [new Date('2099-01-10')])).toBe(false);
+  });
 });

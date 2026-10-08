@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useContext, useEffect, useRef, useState, createContext, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, HelpCircle, Info, X } from 'lucide-react';
 
 type PromptOptions = {
@@ -48,12 +49,19 @@ export function useDialog() {
 export function AccessibleDialog({ title, eyebrow, onClose, children, actions, className = '' }: { title: string; eyebrow?: string; onClose: () => void; children: React.ReactNode; actions?: React.ReactNode; className?: string }) {
   const dialogRef = useRef<HTMLElement>(null);
   const previousActiveRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const [portalReady, setPortalReady] = useState(false);
   const titleId = useId();
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => { setPortalReady(true); }, []);
   useEffect(() => {
+    if (!portalReady) return undefined;
     previousActiveRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const frame = requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')?.focus());
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') { event.preventDefault(); onClose(); return; }
+      if (event.key === 'Escape') { event.preventDefault(); onCloseRef.current(); return; }
       if (event.key !== 'Tab' || !dialogRef.current) return;
       const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])')).filter((element) => !element.hasAttribute('disabled'));
       if (!focusable.length) return;
@@ -62,9 +70,10 @@ export function AccessibleDialog({ title, eyebrow, onClose, children, actions, c
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
     document.addEventListener('keydown', onKeyDown);
-    return () => { cancelAnimationFrame(frame); document.removeEventListener('keydown', onKeyDown); previousActiveRef.current?.focus(); };
-  }, [onClose]);
-  return <div className="dialogBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className={`dialogCard ${className}`} role="dialog" aria-modal="true" aria-labelledby={titleId}><div className="dialogHeader"><div>{eyebrow && <span className="eyebrow">{eyebrow}</span>}<h2 id={titleId}>{title}</h2></div><button className="iconButton" type="button" aria-label="Close dialog" onClick={onClose}><X size={17} /></button></div>{children}{actions && <div className="dialogActions">{actions}</div>}</section></div>;
+    return () => { cancelAnimationFrame(frame); document.removeEventListener('keydown', onKeyDown); document.body.style.overflow = previousOverflow; previousActiveRef.current?.focus(); };
+  }, [portalReady]);
+  if (!portalReady) return null;
+  return createPortal(<div className="dialogBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onCloseRef.current(); }}><section ref={dialogRef} className={`dialogCard ${className}`} role="dialog" aria-modal="true" aria-labelledby={titleId}><div className="dialogHeader"><div>{eyebrow && <span className="eyebrow">{eyebrow}</span>}<h2 id={titleId}>{title}</h2></div><button className="iconButton" type="button" aria-label="Close dialog" onClick={() => onCloseRef.current()}><X size={17} /></button></div>{children}{actions && <div className="dialogActions">{actions}</div>}</section></div>, document.body);
 }
 
 export function DialogProvider({ children }: { children: React.ReactNode }) {

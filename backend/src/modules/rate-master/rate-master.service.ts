@@ -3,17 +3,27 @@ import { Prisma } from '@prisma/client';
 import { assertActorCanManageHotel, getActorScope, resolveRequestedHotel } from '../../common/role-scope';
 import { addDays, eachNight, parseDateOnly, toDateOnly } from '../../common/dates';
 import { PrismaService } from '../../common/prisma.service';
-import { AgentMappingDto, AgentMappingQueryDto, RateMasterGridQueryDto, RateMasterGridSaveDto, RateMasterQueryDto, RateMasterUpdateDto } from './rate-master.dto';
+import { AgentMappingBulkDto, AgentMappingDto, AgentMappingQueryDto, AgentMappingRenewDto, RateMasterGridQueryDto, RateMasterGridSaveDto, RateMasterQueryDto, RateMasterUpdateDto } from './rate-master.dto';
 import { validateCategoryBandInput, validateNewB2cBaseRate } from './rate-master.validation';
 
 type Db = PrismaService | Prisma.TransactionClient;
-type Category = 'A' | 'B' | 'C' | 'D' | 'E';
+type Category = 'RACK' | 'A' | 'B' | 'C' | 'D' | 'E';
+type CategoryBand = Exclude<Category, 'RACK'>;
 const CANONICAL_MEAL_PLANS = ['EP', 'CP', 'MAP', 'AP'] as const;
 const GRID_BANDS = ['RACK', 'A', 'B', 'C', 'D', 'E'] as const;
 const GRID_FIELDS = ['single', 'double', 'extraAdult', 'childWithBed', 'childWithoutBed'] as const;
 type GridField = (typeof GRID_FIELDS)[number];
 
-const categoryField: Record<Category, string> = { A: 'categoryAAmount', B: 'categoryBAmount', C: 'categoryCAmount', D: 'categoryDAmount', E: 'categoryEAmount' };
+const categoryField: Record<CategoryBand, string> = { A: 'categoryAAmount', B: 'categoryBAmount', C: 'categoryCAmount', D: 'categoryDAmount', E: 'categoryEAmount' };
+
+export function mappingStatus(row: { active: boolean; validFrom: Date; validTo: Date }, now = new Date()) {
+  const today = parseDateOnly(toDateOnly(now), 'today');
+  if (!row.active) return 'INACTIVE' as const;
+  if (row.validFrom > today) return 'UPCOMING' as const;
+  if (row.validTo < today) return 'EXPIRED' as const;
+  if (row.validTo <= addDays(today, 30)) return 'EXPIRING_SOON' as const;
+  return 'ACTIVE' as const;
+}
 
 function date(value: string, field: string) {
   return parseDateOnly(value, field);
@@ -78,7 +88,7 @@ export class RateMasterService {
                 : field === 'childWithBed' ? numberOr(rateDay?.childAmount, 0)
                   : numberOr(rateDay?.childWithoutBedAmount, 0);
         }
-        const category = band as Category;
+        const category = band as CategoryBand;
         const daily = dailyRows.find((row: any) => row.category === category && toDateOnly(row.date) === dateKey);
         if (daily) return numberOr(daily[gridCategoryField(field)], 0);
         const legacy = planBands.find((row: any) => row.validFrom <= night && row.validTo >= night);
@@ -278,13 +288,18 @@ export class RateMasterService {
     const from = query.from ? date(query.from, 'from') : undefined;
     const to = query.to ? date(query.to, 'to') : undefined;
     if (from && to) validBand(from, to);
-    const rows = await (this.prisma as any).agentHotelRateCategoryAssignment.findMany({ where: { agentId, hotelId: query.hotelId, active: true, ...(from && to ? { validFrom: { lte: to }, validTo: { gte: from } } : {}) }, include: { hotel: { select: { id: true, code: true, name: true, city: true } } }, orderBy: [{ hotelId: 'asc' }, { validFrom: 'desc' }] });
+    const hotelFilters = [
+      ...(query.hotelSearch ? [{ name: { contains: query.hotelSearch, mode: 'insensitive' as const } }, { city: { contains: query.hotelSearch, mode: 'insensitive' as const } }, { location: { contains: query.hotelSearch, mode: 'insensitive' as const } }] : []),
+      ...(query.destination ? [{ city: { equals: query.destination, mode: 'insensitive' as const } }, { location: { equals: query.destination, mode: 'insensitive' as const } }] : []),
+    ];
+    const rows = await (this.prisma as any).agentHotelRateCategoryAssignment.findMany({ where: { agentId, ...(query.hotelId ? { hotelId: query.hotelId } : {}), ...(hotelFilters.length ? { hotel: { OR: hotelFilters } } : {}), ...(from && to ? { validFrom: { lte: to }, validTo: { gte: from } } : {}) }, include: { hotel: { select: { id: true, code: true, name: true, city: true, location: true } } }, orderBy: [{ hotelId: 'asc' }, { validFrom: 'desc' }] });
     if (actorId) for (const row of rows) await assertActorCanManageHotel(this.prisma, actorId, row.hotelId);
-    return rows;
+    return rows.map((row: any) => ({ ...row, status: mappingStatus(row) })).filter((row: any) => !query.status || row.status === query.status);
   }
 
   async createMapping(agentId: string, body: AgentMappingDto, actorId: string) {
     const from = date(body.validFrom, 'validFrom'); const to = date(body.validTo, 'validTo'); validBand(from, to);
+    await this.prisma.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT', active: true }, select: { id: true } });
     await assertActorCanManageHotel(this.prisma, actorId, body.hotelId);
     const row = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `agent-category:${agentId}:${body.hotelId}`);
@@ -294,6 +309,28 @@ export class RateMasterService {
     });
     await this.prisma.auditLog.create({ data: { actorUserId: actorId, action: 'AGENT_HOTEL_CATEGORY_ASSIGNED', entityType: 'AgentHotelRateCategoryAssignment', entityId: row.id, after: { agentId, hotelId: body.hotelId, category: body.category, validFrom: toDateOnly(from), validTo: toDateOnly(to) } } });
     return row;
+  }
+
+  async bulkCreateMappings(agentId: string, body: AgentMappingBulkDto, actorId: string) {
+    const from = date(body.validFrom, 'validFrom'); const to = date(body.validTo, 'validTo'); validBand(from, to);
+    await this.prisma.user.findFirstOrThrow({ where: { id: agentId, role: 'AGENT', active: true }, select: { id: true } });
+    const assignments = body.assignments ?? body.hotels ?? [];
+    if (!assignments.length) throw new BadRequestException('At least one hotel assignment is required.');
+    const hotelIds = assignments.map((item) => item.hotelId);
+    if (new Set(hotelIds).size !== hotelIds.length) throw new ConflictException('Each hotel may be assigned only once per bulk operation.');
+    const hotels = await this.prisma.hotel.findMany({ where: { id: { in: hotelIds }, active: true }, select: { id: true } });
+    if (hotels.length !== hotelIds.length) throw new BadRequestException('One or more selected hotels are unavailable.');
+    for (const hotelId of hotelIds) await assertActorCanManageHotel(this.prisma, actorId, hotelId);
+    const rows = await this.prisma.$transaction(async (tx) => {
+      for (const hotelId of [...hotelIds].sort()) await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `agent-category:${agentId}:${hotelId}`);
+      const existing = await tx.agentHotelRateCategoryAssignment.findMany({ where: { agentId, hotelId: { in: hotelIds }, active: true } });
+      const conflict = existing.find((item) => overlaps(new Date(item.validFrom), new Date(item.validTo), from, to));
+      if ((body.active ?? true) && conflict) throw new ConflictException(`An active mapping already overlaps the selected period for hotel ${conflict.hotelId}.`);
+      const created = await Promise.all(assignments.map((item) => tx.agentHotelRateCategoryAssignment.create({ data: { agentId, hotelId: item.hotelId, category: item.category, validFrom: from, validTo: to, active: body.active ?? true, createdById: actorId, updatedById: actorId }, include: { hotel: { select: { id: true, code: true, name: true, city: true } } } })));
+      await Promise.all(created.map((row) => tx.auditLog.create({ data: { actorUserId: actorId, action: 'AGENT_HOTEL_CATEGORY_ASSIGNED_BULK', entityType: 'AgentHotelRateCategoryAssignment', entityId: row.id, after: { agentId, hotelId: row.hotelId, category: row.category, validFrom: toDateOnly(from), validTo: toDateOnly(to) } } })));
+      return created;
+    });
+    return { created: rows.map((row: any) => ({ ...row, status: mappingStatus(row) })) };
   }
 
   async updateMapping(agentId: string, mappingId: string, body: Partial<AgentMappingDto>, actorId: string) {
@@ -311,7 +348,7 @@ export class RateMasterService {
       }
       return tx.agentHotelRateCategoryAssignment.update({ where: { id: mappingId }, data: { hotelId, category: body.category ?? current.category, validFrom: from, validTo: to, active: nextActive, updatedById: actorId }, include: { hotel: true } });
     });
-    await this.prisma.auditLog.create({ data: { actorUserId: actorId, action: 'AGENT_HOTEL_CATEGORY_CHANGED', entityType: 'AgentHotelRateCategoryAssignment', entityId: mappingId, after: { hotelId, category: row.category, validFrom: toDateOnly(from), validTo: toDateOnly(to) } } });
+    await this.prisma.auditLog.create({ data: { actorUserId: actorId, action: 'AGENT_HOTEL_CATEGORY_CHANGED', entityType: 'AgentHotelRateCategoryAssignment', entityId: mappingId, before: { hotelId: current.hotelId, category: current.category, validFrom: toDateOnly(current.validFrom), validTo: toDateOnly(current.validTo), active: current.active }, after: { hotelId, category: row.category, validFrom: toDateOnly(from), validTo: toDateOnly(to), active: row.active } } });
     return row;
   }
 
@@ -321,8 +358,23 @@ export class RateMasterService {
     if (!current) throw new NotFoundException('Agent hotel category mapping not found.');
     await assertActorCanManageHotel(this.prisma, actorId, current.hotelId);
     const row = await db.agentHotelRateCategoryAssignment.update({ where: { id: mappingId }, data: { active: false, updatedById: actorId } });
-    await this.prisma.auditLog.create({ data: { actorUserId: actorId, action: 'AGENT_HOTEL_CATEGORY_REMOVED', entityType: 'AgentHotelRateCategoryAssignment', entityId: mappingId, after: { agentId, hotelId: current.hotelId } } });
+    await this.prisma.auditLog.create({ data: { actorUserId: actorId, action: 'AGENT_HOTEL_CATEGORY_REMOVED', entityType: 'AgentHotelRateCategoryAssignment', entityId: mappingId, before: { agentId, hotelId: current.hotelId, category: current.category, validFrom: toDateOnly(current.validFrom), validTo: toDateOnly(current.validTo), active: current.active }, after: { agentId, hotelId: current.hotelId, active: false } } });
     return row;
+  }
+
+  async renewMapping(agentId: string, mappingId: string, body: AgentMappingRenewDto, actorId: string) {
+    const current = await (this.prisma as any).agentHotelRateCategoryAssignment.findFirst({ where: { id: mappingId, agentId } });
+    if (!current) throw new NotFoundException('Agent hotel category mapping not found.');
+    const from = date(body.validFrom, 'validFrom'); const to = date(body.validTo, 'validTo'); validBand(from, to);
+    await assertActorCanManageHotel(this.prisma, actorId, current.hotelId);
+    const row = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `agent-category:${agentId}:${current.hotelId}`);
+      const conflict = await tx.agentHotelRateCategoryAssignment.findFirst({ where: { agentId, hotelId: current.hotelId, active: true, validFrom: { lte: to }, validTo: { gte: from } } });
+      if (conflict) throw new ConflictException('An active agent hotel category mapping overlaps the renewal period.');
+      return tx.agentHotelRateCategoryAssignment.create({ data: { agentId, hotelId: current.hotelId, category: body.category ?? current.category, validFrom: from, validTo: to, active: true, createdById: actorId, updatedById: actorId }, include: { hotel: { select: { id: true, code: true, name: true, city: true } } } });
+    });
+    await this.prisma.auditLog.create({ data: { actorUserId: actorId, action: 'AGENT_HOTEL_CATEGORY_RENEWED', entityType: 'AgentHotelRateCategoryAssignment', entityId: row.id, before: { renewedFromId: mappingId, previousValidFrom: toDateOnly(current.validFrom), previousValidTo: toDateOnly(current.validTo) }, after: { agentId, hotelId: current.hotelId, category: row.category, validFrom: toDateOnly(from), validTo: toDateOnly(to) } } });
+    return { ...row, status: mappingStatus(row) };
   }
 
   async mappingRates(agentId: string, mappingId: string, query: AgentMappingQueryDto = {}, actorId?: string) {
@@ -332,11 +384,21 @@ export class RateMasterService {
     if (actorId) await assertActorCanManageHotel(this.prisma, actorId, mapping.hotelId);
     const from = query.from ? date(query.from, 'from') : new Date(mapping.validFrom); const to = query.to ? date(query.to, 'to') : new Date(mapping.validTo); validBand(from, to);
     const supplements = await db.mealPlanGuestSupplementBand.findMany({ where: { hotelId: mapping.hotelId, active: true, validFrom: { lte: to }, validTo: { gte: from } }, orderBy: { validFrom: 'asc' } });
-    const rows = await db.ratePlan.findMany({ where: { roomType: { hotelId: mapping.hotelId, active: true }, active: true, master: { active: true, kind: 'CANONICAL_MEAL', mealPlan: { in: [...CANONICAL_MEAL_PLANS] } } }, include: { roomType: { select: { code: true, name: true, hotel: { select: { id: true, name: true } } } }, master: { select: { mealPlan: true, name: true } }, agentCategoryBands: { where: { active: true, validFrom: { lte: to }, validTo: { gte: from } }, orderBy: { validFrom: 'asc' } }, agentCategoryRateDays: { where: { active: true, date: { gte: from, lte: to } }, orderBy: { date: 'asc' } } }, orderBy: [{ roomType: { code: 'asc' } }, { mealPlan: 'asc' }] });
+    const rows = await db.ratePlan.findMany({ where: { roomType: { hotelId: mapping.hotelId, active: true }, active: true, master: { active: true, kind: 'CANONICAL_MEAL', mealPlan: { in: [...CANONICAL_MEAL_PLANS] } } }, include: { roomType: { select: { code: true, name: true, hotel: { select: { id: true, name: true } } } }, master: { select: { mealPlan: true, name: true } }, rates: { where: { date: { gte: from, lte: to } }, orderBy: { date: 'asc' } }, agentCategoryBands: { where: { active: true, validFrom: { lte: to }, validTo: { gte: from } }, orderBy: { validFrom: 'asc' } }, agentCategoryRateDays: { where: { active: true, date: { gte: from, lte: to } }, orderBy: { date: 'asc' } } }, orderBy: [{ roomType: { code: 'asc' } }, { mealPlan: 'asc' }] });
     const results: any[] = [];
     for (const row of rows) {
       const mealPlan = String(row.master.mealPlan).toUpperCase();
       const planSupplements = supplements.filter((item: any) => String(item.mealPlan).toUpperCase() === mealPlan);
+      if (mapping.category === 'RACK') {
+        for (const rate of row.rates) {
+          const prices = rate.occupancyPrices && typeof rate.occupancyPrices === 'object' ? rate.occupancyPrices : {};
+          const contractRate = Number((prices as any).double ?? rate.baseAmount ?? rate.amount ?? 0);
+          const dateKey = toDateOnly(rate.date);
+          if (rate.date < from || rate.date > to) continue;
+          results.push({ hotel: row.roomType.hotel, room: row.roomType, mealPlan, contractRate, singleAmount: Number((prices as any).single ?? 0), doubleAmount: contractRate, extraAdultAmount: Number(rate.extraAdultAmount ?? 0), childWithBedAmount: Number(rate.childAmount ?? 0), childWithoutBedAmount: Number(rate.childWithoutBedAmount ?? 0), category: mapping.category, validFrom: dateKey, validTo: dateKey, categoryBandId: null, categoryRateDayId: null, supplementBandId: null });
+        }
+        continue;
+      }
       const boundaries = new Set<string>([toDateOnly(from), toDateOnly(addDays(to, 1))]);
       for (const band of row.agentCategoryBands) { boundaries.add(toDateOnly(new Date(Math.max(new Date(band.validFrom).getTime(), from.getTime())))); boundaries.add(toDateOnly(addDays(new Date(Math.min(new Date(band.validTo).getTime(), to.getTime())), 1))); }
       for (const daily of row.agentCategoryRateDays) if (daily.category === mapping.category) { boundaries.add(toDateOnly(daily.date)); boundaries.add(toDateOnly(addDays(new Date(daily.date), 1))); }
@@ -357,7 +419,8 @@ export class RateMasterService {
 
   async effectiveRatesForAgent(agentId: string, from: Date, to: Date) {
     const db = this.prisma as any;
-    const mappings = await db.agentHotelRateCategoryAssignment.findMany({ where: { agentId, active: true, validFrom: { lte: to }, validTo: { gte: from } }, include: { hotel: { select: { id: true, code: true, name: true, city: true } } }, orderBy: [{ hotelId: 'asc' }, { validFrom: 'desc' }] });
+    const occupiedTo = addDays(to, -1);
+    const mappings = await db.agentHotelRateCategoryAssignment.findMany({ where: { agentId, active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } }, include: { hotel: { select: { id: true, code: true, name: true, city: true, location: true } } }, orderBy: [{ hotelId: 'asc' }, { validFrom: 'desc' }] });
     if (!mappings.length) return null;
     const nights = eachNight(from, to);
     const results: any[] = [];
@@ -367,9 +430,9 @@ export class RateMasterService {
       const assignmentByDate = new Map(nights.map((night) => [toDateOnly(night), hotelMappings.filter((mapping: any) => new Date(mapping.validFrom) <= night && new Date(mapping.validTo) >= night)]));
       if ([...assignmentByDate.values()].some((items: any[]) => items.length !== 1)) throw new BadRequestException('Contract rate is not available for all selected nights.');
       const supplements = await db.mealPlanGuestSupplementBand.findMany({ where: { hotelId, active: true, validFrom: { lte: to }, validTo: { gte: from } } });
-      const plans = await db.ratePlan.findMany({ where: { active: true, master: { active: true, kind: 'CANONICAL_MEAL', mealPlan: { in: [...CANONICAL_MEAL_PLANS] } }, roomType: { active: true, hotelId } }, include: { roomType: { select: { id: true, code: true, name: true, hotel: { select: { id: true, code: true, name: true, city: true } } } }, rates: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } }, agentCategoryBands: { where: { active: true, validFrom: { lte: to }, validTo: { gte: from } }, orderBy: { validFrom: 'asc' } }, agentCategoryRateDays: { where: { active: true, date: { gte: from, lt: to } }, orderBy: { date: 'asc' } } }, orderBy: [{ roomType: { name: 'asc' } }, { mealPlan: 'asc' }] });
+      const plans = await db.ratePlan.findMany({ where: { active: true, master: { active: true, kind: 'CANONICAL_MEAL', mealPlan: { in: [...CANONICAL_MEAL_PLANS] } }, roomType: { active: true, hotelId } }, include: { roomType: { select: { id: true, code: true, name: true, hotel: { select: { id: true, code: true, name: true, city: true, location: true } } } }, rates: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } }, agentCategoryBands: { where: { active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } }, orderBy: { validFrom: 'asc' } }, agentCategoryRateDays: { where: { active: true, date: { gte: from, lt: to } }, orderBy: { date: 'asc' } } }, orderBy: [{ roomType: { name: 'asc' } }, { mealPlan: 'asc' }] });
       for (const plan of plans) {
-        const resolvedRates = plan.rates.map((rate: any) => { const key = toDateOnly(rate.date); const assignment = assignmentByDate.get(key)?.[0]; const daily = assignment ? plan.agentCategoryRateDays.find((item: any) => item.category === assignment.category && toDateOnly(item.date) === key) : undefined; const band = plan.agentCategoryBands.filter((item: any) => new Date(item.validFrom) <= new Date(rate.date) && new Date(item.validTo) >= new Date(rate.date)); const supplement = supplements.find((item: any) => String(item.mealPlan).toUpperCase() === String(plan.mealPlan).toUpperCase() && new Date(item.validFrom) <= new Date(rate.date) && new Date(item.validTo) >= new Date(rate.date)); if (!assignment || (!daily && band.length !== 1)) return null; const singleAmount = daily ? Number(daily.singleAmount) : 0; const doubleAmount = daily ? Number(daily.doubleAmount) : Number(band[0][`category${assignment.category}Amount`]); const extraAdultAmount = daily ? Number(daily.extraAdultAmount) : Number(supplement?.extraAdultAmount ?? 0); const childWithBedAmount = daily ? Number(daily.childWithBedAmount) : Number(supplement?.childWithBedAmount ?? 0); const childWithoutBedAmount = daily ? Number(daily.childWithoutBedAmount) : Number(supplement?.childWithoutBedAmount ?? 0); return { date: rate.date, validFrom: rate.date, validTo: rate.date, amount: doubleAmount, taxAmount: rate.taxAmount, taxRatePercent: Number(rate.baseAmount ?? rate.amount) > 0 ? Number((Number(rate.taxAmount) / Number(rate.baseAmount ?? rate.amount) * 100).toFixed(4)) : 0, taxPolicy: 'RATE_DAY_PERCENTAGE', extraAdultAmount, childAmount: childWithBedAmount, extraChildWithBedAmount: childWithBedAmount, childWithBedAmount, childWithoutBedAmount, occupancyPrices: { single: singleAmount, double: doubleAmount }, priceSource: 'AGENT_CATEGORY' }; }).filter(Boolean);
+        const resolvedRates = plan.rates.map((rate: any) => { const key = toDateOnly(rate.date); const assignment = assignmentByDate.get(key)?.[0]; const daily = assignment && assignment.category !== 'RACK' ? plan.agentCategoryRateDays.find((item: any) => item.category === assignment.category && toDateOnly(item.date) === key) : undefined; const band = assignment?.category === 'RACK' ? [] : plan.agentCategoryBands.filter((item: any) => new Date(item.validFrom) <= new Date(rate.date) && new Date(item.validTo) >= new Date(rate.date)); const supplement = supplements.find((item: any) => String(item.mealPlan).toUpperCase() === String(plan.mealPlan).toUpperCase() && new Date(item.validFrom) <= new Date(rate.date) && new Date(item.validTo) >= new Date(rate.date)); if (!assignment || (assignment.category !== 'RACK' && !daily && band.length !== 1)) return null; const prices = rate.occupancyPrices && typeof rate.occupancyPrices === 'object' ? rate.occupancyPrices : {}; const singleAmount = assignment.category === 'RACK' ? Number((prices as any).single ?? 0) : daily ? Number(daily.singleAmount) : 0; const doubleAmount = assignment.category === 'RACK' ? Number((prices as any).double ?? rate.baseAmount ?? rate.amount ?? 0) : daily ? Number(daily.doubleAmount) : Number(band[0][`category${assignment.category}Amount`]); const extraAdultAmount = assignment.category === 'RACK' ? Number(rate.extraAdultAmount ?? 0) : daily ? Number(daily.extraAdultAmount) : Number(supplement?.extraAdultAmount ?? 0); const childWithBedAmount = assignment.category === 'RACK' ? Number(rate.childAmount ?? 0) : daily ? Number(daily.childWithBedAmount) : Number(supplement?.childWithBedAmount ?? 0); const childWithoutBedAmount = assignment.category === 'RACK' ? Number(rate.childWithoutBedAmount ?? 0) : daily ? Number(daily.childWithoutBedAmount) : Number(supplement?.childWithoutBedAmount ?? 0); return { date: rate.date, validFrom: rate.date, validTo: rate.date, amount: doubleAmount, taxAmount: rate.taxAmount, taxRatePercent: Number(rate.baseAmount ?? rate.amount) > 0 ? Number((Number(rate.taxAmount) / Number(rate.baseAmount ?? rate.amount) * 100).toFixed(4)) : 0, taxPolicy: 'RATE_DAY_PERCENTAGE', extraAdultAmount, childAmount: childWithBedAmount, extraChildWithBedAmount: childWithBedAmount, childWithBedAmount, childWithoutBedAmount, occupancyPrices: { single: singleAmount, double: doubleAmount }, priceSource: 'AGENT_CATEGORY', category: assignment.category }; }).filter(Boolean);
         if (resolvedRates.length !== nights.length) continue;
         results.push({ id: plan.id, code: plan.code, name: plan.name, mealPlan: plan.mealPlan, description: plan.description, hotel: plan.roomType.hotel, room: { id: plan.roomType.id, code: plan.roomType.code, name: plan.roomType.name }, contract: { source: 'AGENT_CATEGORY', code: 'Mapped rates', name: 'Assigned hotel rates', version: 1, validFrom: toDateOnly(from), validTo: toDateOnly(to) }, rates: resolvedRates });
       }
@@ -379,7 +442,8 @@ export class RateMasterService {
 
   async categoryContext(agentId: string, hotelId: string, from: Date, to: Date, db: Db = this.prisma) {
     const client = db as any;
-    const assignments = await client.agentHotelRateCategoryAssignment.findMany({ where: { agentId, hotelId, active: true, validFrom: { lte: to }, validTo: { gte: from } }, orderBy: [{ validFrom: 'asc' }, { createdAt: 'asc' }] });
+    const occupiedTo = addDays(to, -1);
+    const assignments = await client.agentHotelRateCategoryAssignment.findMany({ where: { agentId, hotelId, active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } }, orderBy: [{ validFrom: 'asc' }, { createdAt: 'asc' }] });
     if (!assignments.length) return null;
     const nights = eachNight(from, to);
     const assignmentForNight = nights.map((night) => assignments.filter((row: any) => new Date(row.validFrom) <= night && new Date(row.validTo) >= night));
@@ -389,10 +453,11 @@ export class RateMasterService {
     const category = assignmentForNight[0]?.[0]?.category as Category | undefined;
     const complete = nights.every((night) => Boolean(categoryByDate[toDateOnly(night)]));
     const overlapsFound = assignmentForNight.some((rows) => rows.length > 1);
-    const bands = await client.agentCategoryRateBand.findMany({ where: { active: true, ratePlan: { roomType: { hotelId } }, validFrom: { lte: to }, validTo: { gte: from } } });
+    const bands = await client.agentCategoryRateBand.findMany({ where: { active: true, ratePlan: { roomType: { hotelId } }, validFrom: { lte: occupiedTo }, validTo: { gte: from } } });
     const dailyRates = await client.agentCategoryRateDay.findMany({ where: { active: true, ratePlan: { roomType: { hotelId } }, date: { gte: from, lte: to } }, orderBy: { date: 'asc' } });
-    const supplements = await client.mealPlanGuestSupplementBand.findMany({ where: { hotelId, active: true, validFrom: { lte: to }, validTo: { gte: from } } });
-    return { agentId, hotelId, category: category ?? null, categoryByDate, assignmentByDate, assignments, bands, dailyRates, supplements, complete, coverageError: !complete || overlapsFound };
+    const rackRates = await client.rateDay.findMany({ where: { ratePlan: { roomType: { hotelId, active: true }, active: true }, date: { gte: from, lt: to } }, orderBy: { date: 'asc' } });
+    const supplements = await client.mealPlanGuestSupplementBand.findMany({ where: { hotelId, active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } } });
+    return { agentId, hotelId, category: category ?? null, categoryByDate, assignmentByDate, assignments, bands, dailyRates, rackRates, supplements, complete, coverageError: !complete || overlapsFound };
   }
 
   private ratePlanView(row: any, supplementBands: any[] = []) {
