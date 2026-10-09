@@ -59,11 +59,12 @@ function parseRange(from?: string, to?: string) {
   return { from: start, to: end };
 }
 
-function addInstructions(workbook: ExcelJS.Workbook, scope: ImportScope, hotel: { code: string; name: string }, from?: string, to?: string) {
+function addInstructions(workbook: ExcelJS.Workbook, scope: ImportScope, hotel: { code: string; name: string }, from?: string, to?: string, room?: { code: string; name: string }) {
   const sheet = workbook.addWorksheet('Instructions');
   sheet.addRow(['RainWood Hotels rate import']);
   sheet.addRow([scope === 'HOTEL' ? 'Hotel room-type rate import' : 'Common room-type rate import']);
   sheet.addRow(['Hotel', `${hotel.name} (${hotel.code})`]);
+  if (room) sheet.addRow(['Room Type', `${room.name} (${room.code})`]);
   if (from && to) sheet.addRow(['Date range', `${from} to ${to}`]);
   sheet.addRow([]);
   sheet.addRow(['Important']);
@@ -116,13 +117,13 @@ function addBlankAmounts(row: ExcelJS.Row) {
 export class HotelRateImportService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private async hotelContext(hotelId: string) {
+  private async hotelContext(hotelId: string, roomTypeId?: string) {
     const hotel = await this.prisma.hotel.findUnique({
       where: { id: hotelId },
       select: {
         id: true, code: true, name: true, active: true,
         rooms: {
-          where: { active: true },
+          where: { active: true, ...(roomTypeId ? { id: roomTypeId } : {}) },
           orderBy: { code: 'asc' },
           select: {
             id: true, code: true, name: true, active: true,
@@ -133,16 +134,17 @@ export class HotelRateImportService {
       },
     });
     if (!hotel || !hotel.active) throw new NotFoundException('Hotel not found.');
+    if (roomTypeId && !hotel.rooms.length) throw new NotFoundException('Room type not found for this hotel.');
     return hotel;
   }
 
-  async template(hotelId: string, requestedScope?: string, from?: string, to?: string) {
+  async template(hotelId: string, requestedScope?: string, from?: string, to?: string, roomTypeId?: string) {
     const scope = parseScope(requestedScope);
-    const hotel = await this.hotelContext(hotelId);
+    const hotel = await this.hotelContext(hotelId, roomTypeId);
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'RainWood Hotels';
     workbook.created = new Date();
-    addInstructions(workbook, scope, hotel, from, to);
+    addInstructions(workbook, scope, hotel, from, to, roomTypeId ? hotel.rooms[0] : undefined);
     if (scope === 'HOTEL') this.addHotelTemplate(workbook, hotel, from, to);
     else this.addCommonTemplate(workbook, hotel, from, to);
     return Buffer.from(await workbook.xlsx.writeBuffer());
@@ -228,11 +230,11 @@ export class HotelRateImportService {
     }
   }
 
-  async importRates(hotelId: string, requestedScope: string | undefined, from?: string, to?: string, file?: Express.Multer.File, actorUserId?: string) {
+  async importRates(hotelId: string, requestedScope: string | undefined, from?: string, to?: string, file?: Express.Multer.File, actorUserId?: string, roomTypeId?: string) {
     const scope = parseScope(requestedScope);
     const range = parseRange(from, to);
     await assertActorCanManageHotel(this.prisma, actorUserId!, hotelId);
-    const hotel = await this.hotelContext(hotelId);
+    const hotel = await this.hotelContext(hotelId, roomTypeId);
     const workbook = await this.workbook(file!);
     const result = scope === 'HOTEL'
       ? await this.importHotelRates(hotel, workbook, range, actorUserId!)

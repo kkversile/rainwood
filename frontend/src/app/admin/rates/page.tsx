@@ -40,6 +40,7 @@ export default function RateMasterPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [roomImportId, setRoomImportId] = useState('');
   const gridRequestRef = useRef(0);
 
   const dirty = useMemo(() => Boolean(draft && original && JSON.stringify(draft) !== JSON.stringify(original)), [draft, original]);
@@ -215,7 +216,7 @@ export default function RateMasterPage() {
     </section>}
     {!validRange && (from || to) && <p className="error" role="alert">Select both dates, with From on or before To, to load stored rates.</p>}
     {loading && <p className="loading" role="status">Loading Rate Master…</p>}
-    {draft && !loading && <RateMasterGrid data={draft} expandedRooms={expandedRooms} expandedPlans={expandedPlans} onToggleRoom={toggleRoom} onTogglePlan={togglePlan} onCellChange={cellChange} onCopyRack={copyRack} onClearPlan={clearPlan} />}
+    {draft && !loading && <RateMasterGrid data={draft} expandedRooms={expandedRooms} expandedPlans={expandedPlans} onToggleRoom={toggleRoom} onTogglePlan={togglePlan} onCellChange={cellChange} onCopyRack={copyRack} onClearPlan={clearPlan} roomImportId={roomImportId} onImportRoom={(roomId) => { setShowImport(false); setRoomImportId((current) => current === roomId ? '' : roomId); }} onCloseRoomImport={() => setRoomImportId('')} onRoomImportSuccess={() => void loadGrid(hotelId, from, to)} />}
     <footer className="rateMasterStatusBar"><span><b>Keyboard:</b> Tab moves through cells · numeric entry</span><span>{dirty ? 'Unsaved changes' : 'All changes saved'}</span></footer>
   </section></AdminLayout>;
 }

@@ -26,13 +26,16 @@ type HotelRateImportFormProps = {
   initialFrom?: string;
   initialTo?: string;
   lockContext?: boolean;
+  fixedScope?: Scope;
+  roomTypeId?: string;
+  roomTypeLabel?: string;
   onImportSuccess?: () => void;
 };
 
-export function HotelRateImportForm({ initialHotelId = '', initialFrom = DEFAULT_FROM, initialTo = DEFAULT_TO, lockContext = false, onImportSuccess }: HotelRateImportFormProps) {
+export function HotelRateImportForm({ initialHotelId = '', initialFrom = DEFAULT_FROM, initialTo = DEFAULT_TO, lockContext = false, fixedScope, roomTypeId, roomTypeLabel, onImportSuccess }: HotelRateImportFormProps) {
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [hotelId, setHotelId] = useState(initialHotelId);
-  const [scope, setScope] = useState<Scope>('HOTEL');
+  const [scope, setScope] = useState<Scope>(fixedScope ?? 'HOTEL');
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
   const [file, setFile] = useState<File | null>(null);
@@ -69,6 +72,7 @@ export function HotelRateImportForm({ initialHotelId = '', initialFrom = DEFAULT
 
   function queryString() {
     const params = new URLSearchParams({ scope, from, to });
+    if (roomTypeId) params.set('roomTypeId', roomTypeId);
     return params.toString();
   }
 
@@ -113,13 +117,14 @@ export function HotelRateImportForm({ initialHotelId = '', initialFrom = DEFAULT
 
   return <div className="rateImportForm hotelRateImportForm" data-testid="hotel-rate-import-form">
     {error && <p className="error rateImportError" role="alert">{error}</p>}
-    <div className="rateImportScope" role="group" aria-label="Rate import scope">
+    {!fixedScope && <div className="rateImportScope" role="group" aria-label="Rate import scope">
       <button type="button" className={scope === 'HOTEL' ? 'active' : ''} onClick={() => changeScope('HOTEL')} disabled={busy}>Hotel room types</button>
       <button type="button" className={scope === 'COMMON' ? 'active' : ''} onClick={() => changeScope('COMMON')} disabled={busy}>Common room types</button>
-    </div>
-    <p className="mutedText rateImportNote">{scope === 'HOTEL' ? 'Import rates for every active room type and assigned rate plan in the selected hotel.' : 'Map this hotel’s room types to common room types, then apply one rate set to every room mapped to the same common type.'}</p>
+    </div>}
+    <p className="mutedText rateImportNote">{scope === 'HOTEL' ? (roomTypeId ? 'Import rates for every assigned rate plan in this room type.' : 'Import rates for every active room type and assigned rate plan in the selected hotel.') : 'Map this hotel’s room types to common room types, then apply one rate set to every room mapped to the same common type.'}</p>
     {lockContext ? <div className="rateImportContext">
       <div className="rateImportLockedField"><span>Hotel</span><b>{selectedHotel ? `${selectedHotel.name} (${selectedHotel.code})` : 'Select a hotel in Rate Master'}</b></div>
+      {roomTypeLabel && <div className="rateImportLockedField"><span>Room type</span><b>{roomTypeLabel}</b></div>}
       <div className="rateImportLockedField"><span>Import date range</span><b>{from || '—'} → {to || '—'}</b></div>
     </div> : <>
       <div className="rateImportContext">

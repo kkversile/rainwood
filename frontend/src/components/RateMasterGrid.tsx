@@ -1,5 +1,7 @@
 'use client';
 
+import { HotelRateImportForm } from './HotelRateImportForm';
+
 export const GRID_FIELDS = ['single', 'double', 'extraAdult', 'childWithBed', 'childWithoutBed'] as const;
 export const CANONICAL_PLAN_ORDER = ['EP', 'CP', 'MAP', 'AP'] as const;
 export type GridField = (typeof GRID_FIELDS)[number];
@@ -43,6 +45,10 @@ type Props = {
   onCellChange: (ratePlanId: string, band: GridBand, field: GridField, value: string) => void;
   onCopyRack: (ratePlanId: string) => void;
   onClearPlan: (ratePlanId: string) => void;
+  roomImportId: string;
+  onImportRoom: (roomId: string) => void;
+  onCloseRoomImport: () => void;
+  onRoomImportSuccess: () => void;
 };
 
 function rowFor(plan: GridPlan, band: GridBand) {
@@ -58,7 +64,7 @@ function rateInputValue(value: unknown): string {
   return Number.isFinite(numericValue) && numericValue >= 0 ? String(numericValue) : '0';
 }
 
-export function RateMasterGrid({ data, expandedRooms, expandedPlans, onToggleRoom, onTogglePlan, onCellChange, onCopyRack, onClearPlan }: Props) {
+export function RateMasterGrid({ data, expandedRooms, expandedPlans, onToggleRoom, onTogglePlan, onCellChange, onCopyRack, onClearPlan, roomImportId, onImportRoom, onCloseRoomImport, onRoomImportSuccess }: Props) {
   if (!data.rooms.length) return <p className="empty rateGridEmpty">Select a hotel to load the Rate Master grid.</p>;
   return <div className="rateMasterGrid" data-testid="rate-master-grid">
     {data.rooms.map((room) => {
@@ -66,8 +72,12 @@ export function RateMasterGrid({ data, expandedRooms, expandedPlans, onToggleRoo
       return <section className="rateGridRoom" key={room.id}>
         <header className="rateGridRoomHeader">
           <div><span className="rateGridCode">{room.code}</span><h2>{room.name}</h2><span className="rateGridPlanCount">{room.plans.length} canonical plans</span></div>
-          <button className="smallBtn secondary" type="button" onClick={() => onToggleRoom(room.id)}>{roomExpanded ? 'Collapse room' : 'Expand room'}</button>
+          <div className="rateGridRoomActions"><button className="smallBtn secondary" type="button" onClick={() => onImportRoom(room.id)}>Import Rates</button><button className="smallBtn secondary" type="button" onClick={() => onToggleRoom(room.id)}>{roomExpanded ? 'Collapse room' : 'Expand room'}</button></div>
         </header>
+        {roomImportId === room.id && <section className="rateGridRoomImport" aria-label={`Import rates for ${room.name}`}>
+          <div className="rateGridRoomImportHeader"><div><span>Room-type Excel import</span><h3>{room.name} — import rates</h3><p>This import is limited to this hotel and room type, including all assigned rate plans.</p></div><button className="textButton" type="button" onClick={onCloseRoomImport}>Close</button></div>
+          <HotelRateImportForm key={`${data.hotel?.id ?? ''}:${room.id}:${data.from ?? ''}:${data.to ?? ''}`} initialHotelId={data.hotel?.id ?? ''} initialFrom={data.from ?? ''} initialTo={data.to ?? ''} lockContext fixedScope="HOTEL" roomTypeId={room.id} roomTypeLabel={`${room.name} (${room.code})`} onImportSuccess={onRoomImportSuccess} />
+        </section>}
         {roomExpanded && <div className="rateGridPlans">
           {[...room.plans].sort((left, right) => CANONICAL_PLAN_ORDER.indexOf(left.mealPlan as (typeof CANONICAL_PLAN_ORDER)[number]) - CANONICAL_PLAN_ORDER.indexOf(right.mealPlan as (typeof CANONICAL_PLAN_ORDER)[number])).map((plan) => {
             const key = planKey(room.id, plan.ratePlanId);

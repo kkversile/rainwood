@@ -328,14 +328,14 @@ export class HotelsController {
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
   @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   @Header('Content-Disposition', 'attachment; filename="rainwood-rate-master-import.xlsx"')
-  async hotelRateImportTemplate(@Param('hotelId') hotelId: string, @Query('scope') scope?: string, @Query('from') from?: string, @Query('to') to?: string) { return new StreamableFile(await this.rateImport.template(hotelId, scope, from, to)); }
+  async hotelRateImportTemplate(@Param('hotelId') hotelId: string, @Query('scope') scope?: string, @Query('from') from?: string, @Query('to') to?: string, @Query('roomTypeId') roomTypeId?: string) { return new StreamableFile(await this.rateImport.template(hotelId, scope, from, to, roomTypeId)); }
 
   @Post(':hotelId/rates/import')
   @RequireFeature('rates')
   @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
-  importHotelRates(@Param('hotelId') hotelId: string, @Query('scope') scope: string | undefined, @Query('from') from: string | undefined, @Query('to') to: string | undefined, @UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) { return this.rateImport.importRates(hotelId, scope, from, to, file, user.id); }
+  importHotelRates(@Param('hotelId') hotelId: string, @Query('scope') scope: string | undefined, @Query('from') from: string | undefined, @Query('to') to: string | undefined, @Query('roomTypeId') roomTypeId: string | undefined, @UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) { return this.rateImport.importRates(hotelId, scope, from, to, file, user.id, roomTypeId); }
 
   @Post(':hotelId/amenities')
   @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
