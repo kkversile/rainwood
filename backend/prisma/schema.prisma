@@ -855,6 +855,18 @@ model Hotel {
   @@index([active, slug])
 }
 
+model CommonRoomType {
+  id        String     @id @default(cuid())
+  code      String     @unique
+  name      String
+  active    Boolean    @default(true)
+  roomTypes RoomType[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([active, code])
+}
+
 model FunctionSpace {
   id                  String            @id @default(cuid())
   hotelId             String
@@ -1227,6 +1239,8 @@ model RoomType {
   id                      String                    @id @default(cuid())
   hotelId                 String
   hotel                   Hotel                     @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  commonRoomTypeId        String?
+  commonRoomType           CommonRoomType?           @relation(fields: [commonRoomTypeId], references: [id], onDelete: SetNull)
   code                    String
   name                    String
   roomTypeTitle           String?
@@ -1267,6 +1281,7 @@ model RoomType {
   @@unique([hotelId, code])
   @@unique([hotelId, axisRoomId])
   @@index([hotelId, active])
+  @@index([commonRoomTypeId, active])
 }
 
 model RoomImage {

@@ -11,11 +11,12 @@ import { ActiveAgentGuard } from '../../common/active-agent.guard';
 import { HotelScopeGuard } from './hotel-scope.guard';
 import { FeatureGuard } from '../features/feature.guard';
 import { RequireFeature } from '../features/require-feature.decorator';
+import { HotelRateImportService } from './hotel-rate-import.service';
 
 @Controller('hotels')
 @UseGuards(HotelScopeGuard)
 export class HotelsController {
-  constructor(private readonly service: HotelsService) {}
+  constructor(private readonly service: HotelsService, private readonly rateImport: HotelRateImportService) {}
 
   @Get()
   @UseGuards(OptionalJwtAuthGuard, ActiveAgentGuard)
@@ -320,6 +321,21 @@ export class HotelsController {
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
   importRatePlanRates(@Param('hotelId') hotelId: string, @Param('masterId') masterId: string, @UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) { return this.service.importBaseRates(hotelId, masterId, file, user.id); }
+
+  @Get(':hotelId/rates/import-template.xlsx')
+  @RequireFeature('rateImport')
+  @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="rainwood-rate-master-import.xlsx"')
+  async hotelRateImportTemplate(@Param('hotelId') hotelId: string, @Query('scope') scope?: string, @Query('from') from?: string, @Query('to') to?: string) { return new StreamableFile(await this.rateImport.template(hotelId, scope, from, to)); }
+
+  @Post(':hotelId/rates/import')
+  @RequireFeature('rateImport')
+  @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  importHotelRates(@Param('hotelId') hotelId: string, @Query('scope') scope: string | undefined, @Query('from') from: string | undefined, @Query('to') to: string | undefined, @UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) { return this.rateImport.importRates(hotelId, scope, from, to, file, user.id); }
 
   @Post(':hotelId/amenities')
   @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
