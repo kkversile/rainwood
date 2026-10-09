@@ -11,7 +11,6 @@ import { sha256 } from '../../common/security';
 import { serializable } from '../../common/transactions';
 import { assertReservationTransition } from './reservation-state';
 import { RateResolverService } from '../availability/rate-resolver';
-import { AgentRateSlabsService } from '../agent-rate-slabs/agent-rate-slabs.service';
 import { RateMasterService } from '../rate-master/rate-master.service';
 import { AvailabilityService } from '../availability/availability.service';
 import { calculateAgentBookingPaymentTerms, calculateReservationPaymentSchedule } from '../../common/agent-payment-terms';
@@ -33,7 +32,7 @@ const checkoutInclude = {
 
 @Injectable()
 export class ReservationsService {
-  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, @Optional() private readonly agentRateSlabs?: AgentRateSlabsService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService, @Optional() private readonly availability?: AvailabilityService, @Optional() private readonly cashierShifts?: CashierShiftsService, @Optional() private readonly groups?: GroupsService, @Optional() private readonly rateMaster?: RateMasterService) {}
+  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService, @Optional() private readonly availability?: AvailabilityService, @Optional() private readonly cashierShifts?: CashierShiftsService, @Optional() private readonly groups?: GroupsService, @Optional() private readonly rateMaster?: RateMasterService) {}
 
   private operationalRoles = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'];
 
@@ -418,23 +417,6 @@ export class ReservationsService {
     const take = end ? 371 : 31;
     const categoryRates = this.rateMaster ? await this.rateMaster.effectiveRatesForAgent(userId, start, end ?? new Date(start.getTime() + 30 * 86_400_000)) : null;
     if (categoryRates) return categoryRates.rates;
-    const slabContext = this.agentRateSlabs ? await this.agentRateSlabs.context(userId, start, end ?? new Date(start.getTime() + 30 * 86_400_000)) : null;
-    if (slabContext) {
-      if (!slabContext.fullAssignmentCoverage && end) throw new BadRequestException('Contract rate is not available for all selected nights.');
-      const visibleThrough = end ?? slabContext.assignment.slab.validTo;
-      const slabRates = await this.p.agentRateSlabRate.findMany({ where: { slabId: slabContext.assignment.slabId, active: true, validFrom: { lte: visibleThrough }, validTo: { gte: start } }, include: { ratePlan: { include: { roomType: { include: { hotel: { select: { name: true, city: true } } } }, rates: { where: dateFilter, orderBy: { date: 'asc' } } } } }, orderBy: [{ ratePlan: { name: 'asc' } }, { validFrom: 'asc' }] });
-      const grouped = new Map<string, any>();
-      const contract = { source: 'AGENT_SLAB', code: slabContext.assignment.slab.code, name: slabContext.assignment.slab.name, version: slabContext.assignment.slab.version, validFrom: toDateOnly(slabContext.assignment.validFrom), validTo: toDateOnly(slabContext.assignment.validTo), assignmentValidFrom: toDateOnly(slabContext.assignment.validFrom), assignmentValidTo: toDateOnly(slabContext.assignment.validTo) };
-      for (const item of slabRates) {
-        const plan = item.ratePlan;
-        const row = grouped.get(plan.id) ?? { id: plan.id, code: plan.code, name: plan.name, mealPlan: plan.mealPlan, description: plan.description, hotel: plan.roomType.hotel, room: { id: plan.roomType.id, name: plan.roomType.name, code: plan.roomType.code }, contract, rates: [] };
-        const baseRate = plan.rates.find((rate) => toDateOnly(rate.date) >= toDateOnly(item.validFrom) && toDateOnly(rate.date) <= toDateOnly(item.validTo)) ?? plan.rates[0];
-        const taxRatePercent = this.rateResolver.taxRatePercent(baseRate);
-        row.rates.push({ date: item.validFrom, validFrom: item.validFrom, validTo: item.validTo, amount: item.amount, taxAmount: null, taxRatePercent, taxPolicy: 'CALCULATED_AT_BOOKING', extraAdultAmount: item.extraAdultAmount, childAmount: item.extraChildWithBedAmount, extraChildWithBedAmount: item.extraChildWithBedAmount, childWithoutBedAmount: item.childWithoutBedAmount, occupancyPrices: item.occupancyPrices });
-        grouped.set(plan.id, row);
-      }
-      return [...grouped.values()];
-    }
     const assignments = await this.p.agentRatePlan.findMany({ where: { agentId: userId, active: true, ratePlan: { active: true, master: { active: true } } }, orderBy: { ratePlan: { name: 'asc' } }, include: { ratePlan: { include: { roomType: { include: { hotel: { select: { name: true, city: true } } } }, rates: { where: dateFilter, orderBy: { date: 'asc' }, take } } } } });
     return assignments.map((assignment) => ({ source: 'LEGACY_AGENT_RATE_PLAN', id: assignment.ratePlan.id, code: assignment.ratePlan.code, name: assignment.ratePlan.name, mealPlan: assignment.ratePlan.mealPlan, description: assignment.ratePlan.description, hotel: assignment.ratePlan.roomType.hotel, room: { id: assignment.ratePlan.roomType.id, name: assignment.ratePlan.roomType.name, code: assignment.ratePlan.roomType.code }, rates: assignment.ratePlan.rates.map((rate) => ({ ...this.rateResolver.byDate({ assignedAgents: [assignment] }, userId).get(rate), date: rate.date })) }));
   }

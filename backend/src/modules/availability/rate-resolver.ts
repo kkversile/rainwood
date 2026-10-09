@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { toDateOnly } from '../../common/dates';
 
 export type RateValue = {
@@ -9,12 +9,8 @@ export type RateValue = {
   childAmount: number;
   extraAdultAmount: number;
   occupancyPrices: Record<string, number>;
-  priceSource: 'RATE_PLAN' | 'LEGACY_AGENT_RATE_PLAN' | 'AGENT_SLAB' | 'AGENT_CATEGORY';
+  priceSource: 'RATE_PLAN' | 'LEGACY_AGENT_RATE_PLAN' | 'AGENT_CATEGORY';
   agentRatePlanId?: string;
-  slabId?: string;
-  slabCode?: string;
-  slabVersion?: number;
-  slabRateId?: string;
   contractRateUnavailable?: boolean;
   extraChildWithBedAmount?: number;
   childWithoutBedAmount?: number;
@@ -25,12 +21,6 @@ export type RateValue = {
   rateBandId?: string;
   childWithBedAmount?: number;
   canonicalPricing?: boolean;
-};
-
-export type AgentSlabContext = {
-  assignment: { slabId: string; slab: { id: string; code: string; version: number } };
-  rates: Array<{ id: string; slabId: string; ratePlanId: string; validFrom: Date; validTo: Date; amount: unknown; extraAdultAmount: unknown; extraChildWithBedAmount: unknown; childWithoutBedAmount: unknown; occupancyPrices?: unknown; active?: boolean }>;
-  fullAssignmentCoverage?: boolean;
 };
 
 export type AgentCategoryContext = {
@@ -48,14 +38,6 @@ export type AgentCategoryContext = {
 };
 
 export const CONTRACT_RATE_ERROR = 'Contract rate is not available for all selected nights.';
-
-export function slabRateMatches(context: AgentSlabContext, ratePlanId: string, occupiedNights: Date[]) {
-  return occupiedNights.every((night) => context.rates.filter((item) => item.ratePlanId === ratePlanId && item.active !== false && toDateOnly(item.validFrom) <= toDateOnly(night) && toDateOnly(item.validTo) >= toDateOnly(night)).length === 1);
-}
-
-export function assertSlabCoverage(context: AgentSlabContext | null | undefined, ratePlanId: string, occupiedNights: Date[]) {
-  if (context && !slabRateMatches(context, ratePlanId, occupiedNights)) throw new BadRequestException(CONTRACT_RATE_ERROR);
-}
 
 export function categoryRateMatches(context: AgentCategoryContext, ratePlanId: string, occupiedNights: Date[]) {
   return occupiedNights.every((night) => {
@@ -85,8 +67,8 @@ function occupancyMap(value: unknown) {
 
 /**
  * RateDay.taxAmount is a persisted fixed tax snapshot for that dated public
- * rate. Agent slabs are contracted amounts before statutory tax, so retain the
- * authoritative RateDay policy by deriving its effective percentage and
+ * rate. Category rates are contracted amounts before statutory tax, so retain
+ * the authoritative RateDay policy by deriving its effective percentage and
  * applying that percentage to the contracted amount.
  */
 function effectiveTaxRatePercent(base: any) {
@@ -121,14 +103,6 @@ export class RateResolverService {
     return result;
   }
 
-  slabResolve(base: any, slabRate: any, context: AgentSlabContext): RateValue {
-    if (!slabRate) return { ...this.resolve(base, undefined, 'AGENT_SLAB'), amount: 0, baseAmount: 0, contractRateUnavailable: true, slabId: context.assignment.slab.id, slabCode: context.assignment.slab.code, slabVersion: context.assignment.slab.version };
-    const taxRatePercent = effectiveTaxRatePercent(base);
-    const contractAmount = numberOr(slabRate.amount, 0);
-    const result = this.resolve({ ...base, amount: contractAmount, baseAmount: contractAmount, overrideAmount: null, taxAmount: Number((contractAmount * taxRatePercent / 100).toFixed(2)), extraAdultAmount: slabRate.extraAdultAmount, childAmount: slabRate.extraChildWithBedAmount, occupancyPrices: slabRate.occupancyPrices }, undefined, 'AGENT_SLAB');
-    return { ...result, taxRatePercent, taxPolicy: 'RATE_DAY_PERCENTAGE', slabId: context.assignment.slab.id, slabCode: context.assignment.slab.code, slabVersion: context.assignment.slab.version, slabRateId: slabRate.id, extraChildWithBedAmount: numberOr(slabRate.extraChildWithBedAmount, 0), childWithoutBedAmount: numberOr(slabRate.childWithoutBedAmount, 0) };
-  }
-
   categoryResolve(base: any, band: any, context: AgentCategoryContext, plan: any): RateValue {
     const date = new Date(base?.date ?? Date.now());
     const category = context.categoryByDate?.[toDateOnly(date)] ?? context.category;
@@ -147,30 +121,18 @@ export class RateResolverService {
     const childWithoutBedAmount = daily ? numberOr(daily.childWithoutBedAmount, 0) : numberOr(supplement?.childWithoutBedAmount, 0);
     const result = this.resolve({ ...base, amount: doubleAmount, baseAmount: doubleAmount, overrideAmount: null, taxAmount: Number((doubleAmount * taxRatePercent / 100).toFixed(2)), extraAdultAmount, childAmount: childWithBedAmount, childWithBedAmount, childWithoutBedAmount, occupancyPrices: { single: singleAmount, double: doubleAmount } }, undefined, 'AGENT_CATEGORY');
     const assignment = context.assignmentByDate?.[toDateOnly(date)];
-    return { ...result, taxRatePercent, taxPolicy: 'RATE_DAY_PERCENTAGE', extraChildWithBedAmount: childWithBedAmount, childWithBedAmount, childWithoutBedAmount, canonicalPricing: true, category: category ?? undefined, assignmentId: assignment?.id, rateBandId: daily?.id ?? band?.id, slabId: undefined, slabCode: undefined, slabVersion: undefined, slabRateId: undefined, contractRateUnavailable: (!daily && !band) || !category || doubleAmount <= 0 };
+    return { ...result, taxRatePercent, taxPolicy: 'RATE_DAY_PERCENTAGE', extraChildWithBedAmount: childWithBedAmount, childWithBedAmount, childWithoutBedAmount, canonicalPricing: true, category: category ?? undefined, assignmentId: assignment?.id, rateBandId: daily?.id ?? band?.id, contractRateUnavailable: (!daily && !band) || !category || doubleAmount <= 0 };
   }
 
   private categoryForDate(context: AgentCategoryContext, value: Date) {
     return context.categoryByDate?.[toDateOnly(value)] ?? context.category;
   }
 
-  byDate(plan: any, agentId?: string, slabContext?: AgentSlabContext | null, categoryContext?: AgentCategoryContext | null) {
+  byDate(plan: any, agentId?: string, categoryContext?: AgentCategoryContext | null) {
     const assignment = agentId ? plan?.assignedAgents?.find((item: any) => item.agentId === agentId && item.active !== false) : undefined;
     return {
       assignment,
       get: (base: any) => {
-        if (slabContext?.assignment) {
-          // A hotel/category contract is more specific than an agent-wide slab.
-          // Keep the slab as a fallback for hotels without a category mapping.
-          if (categoryContext && this.categoryForDate(categoryContext, new Date(base?.date ?? Date.now()))) {
-            const date = new Date(base?.date ?? Date.now());
-            const band = categoryContext.bands.find((item) => item.ratePlanId === plan?.id && new Date(item.validFrom) <= date && new Date(item.validTo) >= date && item.active !== false);
-            return this.categoryResolve(base, band, categoryContext, plan);
-          }
-          const date = new Date(base?.date ?? Date.now());
-          const slabRate = slabContext.rates.find((item) => item.ratePlanId === plan?.id && new Date(item.validFrom) <= date && new Date(item.validTo) >= date && item.active !== false);
-          return this.slabResolve(base, slabRate, slabContext);
-        }
         if (categoryContext && this.categoryForDate(categoryContext, new Date(base?.date ?? Date.now()))) {
           const date = new Date(base?.date ?? Date.now());
           const band = categoryContext.bands.find((item) => item.ratePlanId === plan?.id && new Date(item.validFrom) <= date && new Date(item.validTo) >= date && item.active !== false);

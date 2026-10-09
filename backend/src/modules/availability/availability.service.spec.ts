@@ -116,24 +116,6 @@ describe('availability restrictions and pricing', () => {
     expect(supplementaryScopeFilter()).toBe('ALL');
   });
 
-  it('prices child-with-bed and child-without-bed separately for a slab', () => {
-    const calculate = (service as any).calculate.bind(service);
-    const slabPlan = { ...plan, rates: plan.rates.map((rate) => ({ ...rate, amount: 6000, taxAmount: 720 })) };
-    const slab = { assignment: { slabId: 'slab-1', slab: { id: 'slab-1', code: 'SLAB-B', version: 1 } }, rates: plan.rates.map((rate) => ({ id: `slab-${rate.date.toISOString()}`, slabId: 'slab-1', ratePlanId: 'plan', validFrom: rate.date, validTo: rate.date, amount: 6000, extraAdultAmount: 1500, extraChildWithBedAmount: 1000, childWithoutBedAmount: 800, active: true })) };
-    const option = calculate({ ...room, maxAdults: 3, maxChildren: 2, maxOccupancy: 4 }, slabPlan, { rooms: 1, adults: 2, children: 2, childrenWithBed: 1, childrenWithoutBed: 1 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2, 'agent-1', [], [], 'AGENT', undefined, 'UTC', [], [], undefined, slab);
-    expect(option.available).toBe(true);
-    expect(option.priceBreakdown[0].rooms[0]).toEqual(expect.objectContaining({ childrenWithBed: 1, childrenWithoutBed: 1, supplementAmount: 1800 }));
-    expect(option.total).toBe(17040);
-  });
-
-  it('rejects a slab option when a selected plan has a missing occupied night', () => {
-    const calculate = (service as any).calculate.bind(service);
-    const slab = { assignment: { slabId: 'slab-1', slab: { id: 'slab-1', code: 'SLAB-B', version: 1 } }, rates: [{ id: 'slab-1', slabId: 'slab-1', ratePlanId: 'plan', validFrom: new Date('2099-01-10'), validTo: new Date('2099-01-10'), amount: 6000, extraAdultAmount: 0, extraChildWithBedAmount: 0, childWithoutBedAmount: 0, active: true }] };
-    const option = calculate(room, plan, { rooms: 1, adults: 2, children: 0 }, new Date('2099-01-10T00:00:00Z'), new Date('2099-01-12T00:00:00Z'), 2, 'agent-1', [], [], 'AGENT', undefined, 'UTC', [], [], undefined, slab);
-    expect(option.available).toBe(false);
-    expect(option.priceBreakdown[1].rooms[0].contractRateUnavailable).toBe(true);
-  });
-
   it('applies one targeted season then yield per night after the season', () => {
     const calculate = (service as any).calculate.bind(service);
     const seasonalRoom = { ...room, inventory: [{ ...room.inventory[0], available: 2, sold: 1 }, { ...room.inventory[1], available: 2, sold: 1 }] };

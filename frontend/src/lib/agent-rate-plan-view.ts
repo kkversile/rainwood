@@ -1,5 +1,5 @@
 export type AssignedRatePlanView = {
-  source?: 'AGENT_SLAB' | 'LEGACY_AGENT_RATE_PLAN';
+  source?: 'AGENT_CATEGORY' | 'LEGACY_AGENT_RATE_PLAN';
   id: string;
   code: string;
   name: string;
@@ -7,7 +7,7 @@ export type AssignedRatePlanView = {
   hotel: { name: string; city: string };
   room: { name: string; code: string };
   contract?: {
-    source: 'AGENT_SLAB';
+    source: 'AGENT_CATEGORY';
     code: string;
     name: string;
     version: number;

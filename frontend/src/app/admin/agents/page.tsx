@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { AdminLayout } from '../../../components/Shell';
-import { useAdminProfile } from '../../../components/AdminData';
 import { apiFileBlob, apiRequest } from '../../../lib/api';
 import { hasUsableDocumentFile } from '../../../lib/booking-pricing';
 import {
@@ -51,7 +50,6 @@ type Agent = {
   agentDocuments?: AgentDocument[];
   assignedRatePlans?: Mapping[];
   categoryMappings?: CategoryMapping[];
-  agentRateSlabAssignments?: { id: string; active: boolean; validFrom: string; validTo: string; slab: { code: string; name: string; version: number } }[];
 };
 type AgentDetail = Agent & {
   contactPerson?: string | null;
@@ -65,7 +63,6 @@ type AgentDetail = Agent & {
   additionalInformation?: string | null;
   agentDocuments: AgentDocument[];
 };
-type Slab = { id: string; code: string; name: string; version: number; validFrom: string; validTo: string; status: string; active: boolean };
 
 const blank = { name: '', email: '', password: '' };
 
@@ -90,8 +87,6 @@ function agentEmail(email: string) {
   return <span className="agentEmail"><span>{email.slice(0, at)}</span><span className="agentEmailDomain">@{email.slice(at + 1)}</span></span>;
 }
 export default function AgentsPage() {
-  const { profile } = useAdminProfile();
-  const canManageSlabs = profile?.role === 'SUPER_ADMIN' || profile?.role === 'CORPORATE_ADMIN';
   const [agents, setAgents] = useState<Agent[]>([]);
   const [form, setForm] = useState(blank);
   const [formMilestones, setFormMilestones] = useState<MilestoneDraft[]>(defaultMilestones());
@@ -101,11 +96,6 @@ export default function AgentsPage() {
   const [editingPaymentAgentId, setEditingPaymentAgentId] = useState<string | null>(null);
   const [termsMilestones, setTermsMilestones] = useState<MilestoneDraft[]>(defaultMilestones());
   const [remarks, setRemarks] = useState<Record<string, string>>({});
-  const [slabAssignmentAgent, setSlabAssignmentAgent] = useState<Agent | null>(null);
-  const [slabs, setSlabs] = useState<Slab[]>([]);
-  const [selectedSlabId, setSelectedSlabId] = useState('');
-  const [slabValidFrom, setSlabValidFrom] = useState('');
-  const [slabValidTo, setSlabValidTo] = useState('');
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -269,50 +259,6 @@ export default function AgentsPage() {
       setError(reason instanceof Error ? reason.message : 'Could not download document');
     }
   }
-  function openAssignments(agent: Agent) {
-    setSlabAssignmentAgent(agent);
-    const activeAssignment = agent.agentRateSlabAssignments?.find((item) => item.active);
-    setSelectedSlabId(activeAssignment?.slab ? '' : '');
-    setSlabValidFrom(activeAssignment?.validFrom.slice(0, 10) ?? '');
-    setSlabValidTo(activeAssignment?.validTo.slice(0, 10) ?? '');
-    setError('');
-    void apiRequest<Slab[]>('/agent-rate-slabs')
-      .then((items) => setSlabs(items.filter((item) => item.active && item.status === 'PUBLISHED')))
-      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load published rate slabs'));
-  }
-  const selectedSlab = slabs.find((item) => item.id === selectedSlabId);
-  async function saveSlabAssignments() {
-    if (!slabAssignmentAgent || !selectedSlabId || !slabValidFrom || !slabValidTo) return;
-    setBusy(true);
-    setError('');
-    try {
-      const savedAssignment = await apiRequest<NonNullable<Agent['agentRateSlabAssignments']>[number]>(`/agents/${slabAssignmentAgent.id}/rate-slab`, {
-        method: 'POST',
-        body: JSON.stringify({ slabId: selectedSlabId, validFrom: slabValidFrom, validTo: slabValidTo }),
-      });
-      const assignments = await apiRequest<NonNullable<Agent['agentRateSlabAssignments']>>(`/agents/${slabAssignmentAgent.id}/rate-slab`);
-      setSlabAssignmentAgent({ ...slabAssignmentAgent, agentRateSlabAssignments: assignments });
-      setAgents((current) => current.map((item) => item.id === slabAssignmentAgent.id ? { ...item, agentRateSlabAssignments: assignments } : item));
-      setMessage(`Rate slab ${savedAssignment.slab.code} assigned to ${slabAssignmentAgent.name}.`);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not assign rate slab');
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function removeSlabAssignment(assignmentId: string, slabName: string) {
-    if (!slabAssignmentAgent || !window.confirm(`Remove ${slabName} from this agent?`)) return;
-    setBusy(true);
-    try {
-      await apiRequest(`/agents/${slabAssignmentAgent.id}/rate-slab/${assignmentId}/remove`, { method: 'POST' });
-      const assignments = await apiRequest<NonNullable<Agent['agentRateSlabAssignments']>>(`/agents/${slabAssignmentAgent.id}/rate-slab`);
-      setSlabAssignmentAgent({ ...slabAssignmentAgent, agentRateSlabAssignments: assignments });
-      setAgents((current) => current.map((item) => item.id === slabAssignmentAgent.id ? { ...item, agentRateSlabAssignments: assignments } : item));
-      setMessage(`Rate slab removed from ${slabAssignmentAgent.name}.`);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not remove rate slab assignment');
-    } finally { setBusy(false); }
-  }
   const kycReady = Boolean(review?.agentDocuments.length && review.agentDocuments.every((document) => document.status === 'APPROVED'));
 
   return <AdminLayout title="Agents">
@@ -342,13 +288,12 @@ export default function AgentsPage() {
             <td><b>{agent.name}</b><small>{agent.companyName || ''}</small><small>{activeCategoryMappingCount(categoryMappings)} active hotel contract{activeCategoryMappingCount(categoryMappings) === 1 ? '' : 's'}</small></td>
             <td className="agentEmailCell">{agentEmail(agent.email)}</td>
             <td className="agentPaymentTermsCell">{isEditingTerms ? <CompactPaymentTermsEditor value={termsMilestones} onChange={setTermsMilestones} onCancel={cancelTerms} onSave={() => void saveInlineTerms()} busy={busy} /> : <div className="agentPaymentTermsDisplay"><div className="agentMilestoneBadges agentPaymentMilestones">{agent.paymentMilestones?.length ? agent.paymentMilestones.map((item, index) => <span className="status" title={item.dueType === 'DAYS_BEFORE_CHECKIN' ? String(Number(item.daysBeforeCheckIn ?? 0)) + ' days before check-in' : 'Due when the booking is made'} key={item.dueType + '-' + String(item.daysBeforeCheckIn) + '-' + String(index)}>{milestoneLabel(item)}</span>) : <span>{agentHasTerms(agent) ? String(Number(agent.bookingPaymentPercent ?? 0)) + '% legacy' : 'Unassigned'}</span>}</div><button className="paymentTermsEditIcon" type="button" aria-label={'Edit payment terms for ' + agent.name} onClick={() => openTerms(agent)}>Edit</button></div>}</td>
-              <td><div className="agentMilestoneBadges agentRatePlanSummary">{categoryMappings.length ? <>{categoryMappings.slice(0, 3).map((item) => <span className="status ok" key={item.id}>{item.hotel.name} → {item.category}<small>{item.validFrom.slice(0, 10)} → {item.validTo.slice(0, 10)}</small></span>)}{categoryMappings.length > 3 && <span className="status">+{categoryMappings.length - 3} more</span>}<a className="paymentTermsEditIcon" href={`/rainwood/admin/agent-mappings?agentId=${encodeURIComponent(agent.id)}`}>Rate Mapping</a></> : <>{agent.agentRateSlabAssignments?.filter((item) => item.active).map((item) => <span className="status ok" key={item.id}>{item.slab.code} · {item.slab.name}<small>Legacy slab · {item.validFrom.slice(0, 10)} → {item.validTo.slice(0, 10)}</small></span>)}{!agent.agentRateSlabAssignments?.some((item) => item.active) && summary.map((item) => <span className="status" key={item}>{item}</span>)}{!summary.length && !agent.agentRateSlabAssignments?.some((item) => item.active) && <span>Not assigned</span>}{canManageSlabs && <button className="paymentTermsEditIcon" type="button" aria-label={'Open legacy pricing migration for ' + agent.name} onClick={() => openAssignments(agent)}>Legacy pricing</button>}</>}</div>{categoryMappings.length ? <small className="mutedText">Pricing source: Hotel Category Mapping</small> : agent.agentRateSlabAssignments?.some((item) => item.active) ? <small className="mutedText">Pricing source: Legacy Agent Rate Slab · migration fallback</small> : mappings.length ? <small className="mutedText">Pricing source: Legacy Agent Rate Plan · view only · migration fallback</small> : null}</td>
+              <td><div className="agentMilestoneBadges agentRatePlanSummary">{categoryMappings.length ? <>{categoryMappings.slice(0, 3).map((item) => <span className="status ok" key={item.id}>{item.hotel.name} → {item.category}<small>{item.validFrom.slice(0, 10)} → {item.validTo.slice(0, 10)}</small></span>)}{categoryMappings.length > 3 && <span className="status">+{categoryMappings.length - 3} more</span>}<a className="paymentTermsEditIcon" href={`/rainwood/admin/agent-mappings?agentId=${encodeURIComponent(agent.id)}`}>Rate Mapping</a></> : <>{summary.map((item) => <span className="status" key={item}>{item}</span>)}{!summary.length && <span>Not assigned</span>}</>}</div>{categoryMappings.length ? <small className="mutedText">Pricing source: Hotel Category Mapping</small> : mappings.length ? <small className="mutedText">Pricing source: Legacy Agent Rate Plan · view only</small> : <small className="mutedText">No category mapping configured</small>}</td>
             <td><span className={'status ' + (status === 'Active' ? 'ok' : status === 'Under Review' || status === 'KYC Pending' ? 'warn' : 'muted')}>{status}</span></td>
             <td><div className="rowActions"><a className="smallBtn" href={`/rainwood/admin/agent-mappings?agentId=${encodeURIComponent(agent.id)}`}>Manage Mappings</a><button className="smallBtn" type="button" onClick={() => void openReview(agent)}>{status === 'Under Review' || status === 'KYC Pending' ? 'Open / Review' : 'Open Details'}</button><button className="smallBtn" type="button" onClick={() => edit(agent)}>Edit</button>{status === 'Active' && <button className="smallBtn secondary" type="button" disabled={busy} onClick={() => void toggle(agent)}>Deactivate</button>}{status === 'Deactivated' && <button className="smallBtn secondary" type="button" disabled={busy} onClick={() => void toggle(agent)}>Reactivate</button>}</div></td>
           </tr>;
         })}
       </tbody></table></div></section>
     </section>
-    {slabAssignmentAgent && <div className="agentRateModalBackdrop"><section className="panel agentRateEditor agentRateModal" role="dialog" aria-modal="true" aria-label="Agent rate slab assignment"><div className="rangeSectionHeader"><div><span>Commercial configuration</span><h2>Rate Slab Assignment - {slabAssignmentAgent.companyName || slabAssignmentAgent.name}</h2></div><button className="smallBtn" type="button" onClick={() => setSlabAssignmentAgent(null)}>Close</button></div>{slabAssignmentAgent.agentRateSlabAssignments?.filter((item) => item.active).map((item) => <div className="currentAssignmentList" key={item.id}><b>{item.slab.code} · {item.slab.name}</b><p className="mutedText">Version {item.slab.version} · {item.validFrom.slice(0, 10)} → {item.validTo.slice(0, 10)} · Pricing source: Agent Rate Slab</p>{canManageSlabs && <button className="smallBtn secondary" type="button" disabled={busy} onClick={() => void removeSlabAssignment(item.id, item.slab.name)}>Remove assignment</button>}</div>)}{!slabAssignmentAgent.agentRateSlabAssignments?.some((item) => item.active) && <div className="notice"><b>Pricing source: Legacy Agent Rate Plan</b><p>This is migration fallback data. Legacy commercial editing is view-only here; assign a published slab to move this agent to the canonical contract workflow.</p>{(slabAssignmentAgent.assignedRatePlans?.length ?? 0) > 0 && <p>Legacy mappings: {(slabAssignmentAgent.assignedRatePlans ?? []).map((item) => `${item.ratePlan.roomType.hotel.name} · ${item.ratePlan.master.code}`).join(', ')}</p>}</div>}{canManageSlabs && <form className="formGrid" onSubmit={(event) => { event.preventDefault(); void saveSlabAssignments(); }}><label>Published rate slab<select required value={selectedSlabId} onChange={(event) => { setSelectedSlabId(event.target.value); const slab = slabs.find((item) => item.id === event.target.value); if (slab) { setSlabValidFrom(slab.validFrom.slice(0, 10)); setSlabValidTo(slab.validTo.slice(0, 10)); } }}><option value="">Select a published slab</option>{slabs.map((slab) => <option key={slab.id} value={slab.id}>{slab.code} · {slab.name} · v{slab.version}</option>)}</select></label><label>Assignment from<input type="date" required value={slabValidFrom} onChange={(event) => setSlabValidFrom(event.target.value)} /></label><label>Assignment to<input type="date" required value={slabValidTo} onChange={(event) => setSlabValidTo(event.target.value)} /></label><div className="rowActions"><button className="btn" disabled={busy || !selectedSlab}>{busy ? 'Saving...' : 'Assign published slab'}</button></div></form>}{!canManageSlabs && <p className="mutedText">Property ADMIN access is read-only for agent slab assignments.</p>}</section></div>}
   </AdminLayout>;
 }

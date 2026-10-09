@@ -40,7 +40,7 @@ import { OperationsLogbookModule } from './modules/operations-logbook/operations
 import { GroupsModule } from './modules/groups/groups.module';
 import { BanquetsModule } from './modules/banquets/banquets.module';
 import { FeaturesModule } from './modules/features/features.module';
-import { AgentRateSlabsModule } from './modules/agent-rate-slabs/agent-rate-slabs.module';
+import { AgentCategoryRatesModule } from './modules/agent-rate-slabs/agent-rate-slabs.module';
 import { RateMasterModule } from './modules/rate-master/rate-master.module';
 
 @Module({
@@ -85,7 +85,7 @@ import { RateMasterModule } from './modules/rate-master/rate-master.module';
     GroupsModule,
     BanquetsModule,
     FeaturesModule,
-    AgentRateSlabsModule,
+    AgentCategoryRatesModule,
     RateMasterModule,
   ],
 })
