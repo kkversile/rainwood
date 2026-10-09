@@ -1298,8 +1298,3 @@
 .rateGridRoomImportHeader span{color:#345675;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
 .rateGridRoomImportHeader h3{margin:3px 0 0;color:var(--navy);font-size:15px}
 .rateGridRoomImportHeader p{margin:4px 0 0;color:var(--muted);font-size:11px}
-.rateMasterImportPanel{margin-top:12px;padding:14px 16px;border:1px solid #b9dfe2;border-radius:12px;background:#fff;box-shadow:0 8px 22px rgba(7,80,100,.06)}
-.rateMasterImportHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e1eff0}
-.rateMasterImportHeader span{color:#345675;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
-.rateMasterImportHeader h2{margin:3px 0 0;color:var(--navy);font-size:16px}
-.rateMasterImportHeader p{margin:4px 0 0;color:var(--muted);font-size:11px}
