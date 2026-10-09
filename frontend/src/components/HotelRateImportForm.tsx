@@ -21,12 +21,20 @@ type ImportResult = {
 const DEFAULT_FROM = '2030-01-01';
 const DEFAULT_TO = '2030-01-30';
 
-export function HotelRateImportForm({ initialHotelId = '' }: { initialHotelId?: string }) {
+type HotelRateImportFormProps = {
+  initialHotelId?: string;
+  initialFrom?: string;
+  initialTo?: string;
+  lockContext?: boolean;
+  onImportSuccess?: () => void;
+};
+
+export function HotelRateImportForm({ initialHotelId = '', initialFrom = DEFAULT_FROM, initialTo = DEFAULT_TO, lockContext = false, onImportSuccess }: HotelRateImportFormProps) {
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [hotelId, setHotelId] = useState(initialHotelId);
   const [scope, setScope] = useState<Scope>('HOTEL');
-  const [from, setFrom] = useState(DEFAULT_FROM);
-  const [to, setTo] = useState(DEFAULT_TO);
+  const [from, setFrom] = useState(initialFrom);
+  const [to, setTo] = useState(initialTo);
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState('');
@@ -92,6 +100,7 @@ export function HotelRateImportForm({ initialHotelId = '' }: { initialHotelId?: 
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (imported.errors.length) setError('Import could not be completed. No rates were saved.');
+      else onImportSuccess?.();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not import rates');
     } finally {
@@ -109,14 +118,19 @@ export function HotelRateImportForm({ initialHotelId = '' }: { initialHotelId?: 
       <button type="button" className={scope === 'COMMON' ? 'active' : ''} onClick={() => changeScope('COMMON')} disabled={busy}>Common room types</button>
     </div>
     <p className="mutedText rateImportNote">{scope === 'HOTEL' ? 'Import rates for every active room type and assigned rate plan in the selected hotel.' : 'Map this hotel’s room types to common room types, then apply one rate set to every room mapped to the same common type.'}</p>
-    <div className="rateImportContext">
-      <label>Hotel<select aria-label="Hotel" value={hotelId} onChange={(event) => { setHotelId(event.target.value); reset(); }} disabled={busy}><option value="">Select hotel</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name} ({hotel.code})</option>)}</select></label>
-      <div className="rateImportLockedField"><span>Import scope</span><b>{scope === 'HOTEL' ? 'Hotel room types' : 'Common room types'}</b></div>
-    </div>
-    <div className="rateImportContext">
-      <label>From<RainwoodDatePicker label="From date" value={from} onChange={(value) => { setFrom(value); reset(); }} /></label>
-      <label>To<RainwoodDatePicker label="To date" value={to} minDate={from} onChange={(value) => { setTo(value); reset(); }} /></label>
-    </div>
+    {lockContext ? <div className="rateImportContext">
+      <div className="rateImportLockedField"><span>Hotel</span><b>{selectedHotel ? `${selectedHotel.name} (${selectedHotel.code})` : 'Select a hotel in Rate Master'}</b></div>
+      <div className="rateImportLockedField"><span>Import date range</span><b>{from || '—'} → {to || '—'}</b></div>
+    </div> : <>
+      <div className="rateImportContext">
+        <label>Hotel<select aria-label="Hotel" value={hotelId} onChange={(event) => { setHotelId(event.target.value); reset(); }} disabled={busy}><option value="">Select hotel</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name} ({hotel.code})</option>)}</select></label>
+        <div className="rateImportLockedField"><span>Import scope</span><b>{scope === 'HOTEL' ? 'Hotel room types' : 'Common room types'}</b></div>
+      </div>
+      <div className="rateImportContext">
+        <label>From<RainwoodDatePicker label="From date" value={from} onChange={(value) => { setFrom(value); reset(); }} /></label>
+        <label>To<RainwoodDatePicker label="To date" value={to} minDate={from} onChange={(value) => { setTo(value); reset(); }} /></label>
+      </div>
+    </>}
     {!isValidRange && <p className="error" role="alert">Select a valid date range.</p>}
     {selectedHotel && <div className="rateImportAssignedRooms"><span>Workbook target</span><p>{selectedHotel.name} ({selectedHotel.code})</p><small>{scope === 'HOTEL' ? 'The sample workbook contains stable room-type and rate-plan IDs for this hotel.' : 'The common-room workbook contains a mapping sheet for this hotel and a shared rate sheet.'}</small></div>}
     <div className="rateImportFilePicker">

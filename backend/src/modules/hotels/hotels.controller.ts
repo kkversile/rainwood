@@ -323,7 +323,7 @@ export class HotelsController {
   importRatePlanRates(@Param('hotelId') hotelId: string, @Param('masterId') masterId: string, @UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) { return this.service.importBaseRates(hotelId, masterId, file, user.id); }
 
   @Get(':hotelId/rates/import-template.xlsx')
-  @RequireFeature('rateImport')
+  @RequireFeature('rates')
   @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
   @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -331,7 +331,7 @@ export class HotelsController {
   async hotelRateImportTemplate(@Param('hotelId') hotelId: string, @Query('scope') scope?: string, @Query('from') from?: string, @Query('to') to?: string) { return new StreamableFile(await this.rateImport.template(hotelId, scope, from, to)); }
 
   @Post(':hotelId/rates/import')
-  @RequireFeature('rateImport')
+  @RequireFeature('rates')
   @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
