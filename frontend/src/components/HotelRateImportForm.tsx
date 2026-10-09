@@ -117,6 +117,7 @@ export function HotelRateImportForm({ initialHotelId = '', initialFrom = DEFAULT
 
   return <div className="rateImportForm hotelRateImportForm" data-testid="hotel-rate-import-form">
     {error && <p className="error rateImportError" role="alert">{error}</p>}
+    {fixedScope && <div className="rateImportFixedScope"><span>Import scope</span><b>{fixedScope === 'HOTEL' ? 'Hotel room types' : 'Common room types'}</b></div>}
     {!fixedScope && <div className="rateImportScope" role="group" aria-label="Rate import scope">
       <button type="button" className={scope === 'HOTEL' ? 'active' : ''} onClick={() => changeScope('HOTEL')} disabled={busy}>Hotel room types</button>
       <button type="button" className={scope === 'COMMON' ? 'active' : ''} onClick={() => changeScope('COMMON')} disabled={busy}>Common room types</button>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AdminLayout } from '../../../components/Shell';
 import { GRID_FIELDS, GridBand, GridField, RateMasterGrid, RateMasterGridData } from '../../../components/RateMasterGrid';
+import { HotelRateImportForm } from '../../../components/HotelRateImportForm';
 import { RainwoodDatePicker } from '../../../components/RainwoodDatePicker';
 import { apiRequest } from '../../../lib/api';
 import { addHotelDays, todayInHotelTimezone } from '../../../lib/hotel-date-time';
@@ -38,6 +39,7 @@ export default function RateMasterPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [showImport, setShowImport] = useState(false);
   const [roomImportId, setRoomImportId] = useState('');
   const gridRequestRef = useRef(0);
 
@@ -206,8 +208,12 @@ export default function RateMasterPage() {
       <span className="rateMasterArrow" aria-hidden="true">→</span>
       <label>To<RainwoodDatePicker label="To date" value={to} minDate={from || todayInHotelTimezone()} onChange={(value) => changeDate('to', value)} /></label>
       <button className="smallBtn secondary" type="button" disabled={!validRange || loading} onClick={() => void loadGrid(hotelId, from, to)}>Load rates</button>
-      <div className="rateMasterToolbarActions"><button className="smallBtn secondary" type="button" disabled={!dirty} onClick={revert}>Revert Unsaved</button><button className="smallBtn" type="button" disabled={saveDisabled} onClick={() => void save()}>{saving ? 'Saving…' : 'Save Rates'}</button></div>
+      <div className="rateMasterToolbarActions"><button className="smallBtn secondary" type="button" onClick={() => setShowImport((value) => !value)}>{showImport ? 'Hide Excel Import' : 'Import Excel Rates'}</button><button className="smallBtn secondary" type="button" disabled={!dirty} onClick={revert}>Revert Unsaved</button><button className="smallBtn" type="button" disabled={saveDisabled} onClick={() => void save()}>{saving ? 'Saving…' : 'Save Rates'}</button></div>
     </section>
+    {showImport && <section className="rateMasterImportPanel" aria-label="Excel rate import">
+      <div className="rateMasterImportHeader"><div><span>Excel rate import</span><h2>Import hotel room-type rates</h2><p>Use one workbook for all room types and rate plans in the selected hotel.</p></div><button className="textButton" type="button" onClick={() => setShowImport(false)}>Close</button></div>
+      <HotelRateImportForm key={`${hotelId}:${from}:${to}`} initialHotelId={hotelId} initialFrom={from} initialTo={to} lockContext fixedScope="HOTEL" onImportSuccess={() => void loadGrid(hotelId, from, to)} />
+    </section>}
     {!validRange && (from || to) && <p className="error" role="alert">Select both dates, with From on or before To, to load stored rates.</p>}
     {loading && <p className="loading" role="status">Loading Rate Master…</p>}
     {draft && !loading && <RateMasterGrid data={draft} expandedRooms={expandedRooms} expandedPlans={expandedPlans} onToggleRoom={toggleRoom} onTogglePlan={togglePlan} onCellChange={cellChange} onCopyRack={copyRack} onClearPlan={clearPlan} roomImportId={roomImportId} onImportRoom={(roomId) => setRoomImportId((current) => current === roomId ? '' : roomId)} onCloseRoomImport={() => setRoomImportId('')} onRoomImportSuccess={() => void loadGrid(hotelId, from, to)} />}
