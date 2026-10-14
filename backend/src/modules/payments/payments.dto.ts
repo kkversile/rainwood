@@ -26,6 +26,25 @@ export class VerifyPaymentDto {
   note?: string;
 }
 
+export class RazorpayVerifyPaymentDto {
+  @IsString()
+  razorpay_payment_id!: string;
+
+  @IsString()
+  razorpay_order_id!: string;
+
+  @IsString()
+  razorpay_signature!: string;
+}
+
+export class PaymentOrderDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  amount?: number;
+}
+
 export class MockCompletionDto {
   @IsOptional()
   @IsIn(['SUCCESS', 'FAILED'])

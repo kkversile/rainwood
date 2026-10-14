@@ -1,13 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import PDFDocument from 'pdfkit';
-import nodemailer from 'nodemailer';
 import { PrismaService } from '../../common/prisma.service';
+import { MailService } from '../../common/mail.service';
 import { FilesService } from '../files/files.service';
 
 @Injectable()
 export class VouchersService {
-  constructor(private p: PrismaService, private f: FilesService, private c: ConfigService) {}
+  constructor(private p: PrismaService, private f: FilesService, private mail: MailService) {}
 
   async generate(reservationId: string) {
     const reservation = await this.p.reservation.findUnique({ where: { id: reservationId }, include: { hotel: true, lines: { include: { roomType: true, ratePlan: true, nights: true } }, payments: true, vouchers: { orderBy: { version: 'desc' }, take: 1 } } });
@@ -59,9 +58,7 @@ export class VouchersService {
   async email(voucherId: string) {
     const voucher = await this.p.voucher.findUnique({ where: { id: voucherId }, include: { file: true, reservation: true } });
     if (!voucher) throw new NotFoundException('Voucher not found');
-    if (this.c.get('SMTP_MODE', 'log') === 'log') return this.p.voucher.update({ where: { id: voucherId }, data: { emailedAt: new Date() } });
-    const transport = nodemailer.createTransport({ host: this.c.getOrThrow('SMTP_HOST'), port: Number(this.c.get('SMTP_PORT', 587)), secure: Number(this.c.get('SMTP_PORT', 587)) === 465, auth: this.c.get('SMTP_USER') ? { user: this.c.get('SMTP_USER'), pass: this.c.get('SMTP_PASSWORD') } : undefined });
-    await transport.sendMail({ from: this.c.getOrThrow('SMTP_FROM'), to: voucher.reservation.email, subject: `RainWood reservation ${voucher.reservation.reference}`, text: 'Your RainWood confirmation voucher is attached.', attachments: [{ filename: voucher.file.originalName, content: await this.f.get(voucher.fileId).then((result) => result.buffer) }] });
+    await this.mail.send({ to: voucher.reservation.email, subject: `RainWood reservation ${voucher.reservation.reference}`, text: 'Your RainWood confirmation voucher is attached.', attachments: [{ filename: voucher.file.originalName, content: await this.f.get(voucher.fileId).then((result) => result.buffer) }] });
     return this.p.voucher.update({ where: { id: voucherId }, data: { emailedAt: new Date() } });
   }
 

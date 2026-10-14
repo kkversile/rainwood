@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
-import { AgentRegisterDto, LoginDto, LogoutDto, RefreshDto } from './auth.dto';
+import { AgentRegisterDto, LoginDto, LogoutDto, RefreshDto, ResendAgentEmailDto, VerifyAgentEmailDto } from './auth.dto';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { CurrentUser } from '../../common/current-user.decorator';
 
@@ -24,6 +24,12 @@ export class AuthController {
   async registerAgent(@Body() body: AgentRegisterDto) {
     return this.s.registerAgent(body, body.email, body.password);
   }
+
+  @Post('agent/register/verify-email')
+  verifyAgentEmail(@Body() body: VerifyAgentEmailDto) { return this.s.verifyAgentEmail(body.email, body.code); }
+
+  @Post('agent/register/resend-code')
+  resendAgentEmail(@Body() body: ResendAgentEmailDto) { return this.s.resendAgentEmailVerification(body.email); }
 
   @Post('refresh')
   async refresh(@Body() body: RefreshDto, @Req() request: Request, @Res({ passthrough: true }) response: Response) {

@@ -2,7 +2,7 @@
 
 import { Fragment, createContext, FormEvent, useContext, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { apiRequest, setAccessToken } from '../lib/api';
+import { apiFileBlob, apiRequest, setAccessToken } from '../lib/api';
 import { todayInHotelTimezone } from '../lib/hotel-date-time';
 import { useDialog } from './ReactDialog';
 import { ReservationPaymentSchedule, type PaymentSchedule } from './ReservationPaymentSchedule';
@@ -190,11 +190,31 @@ export function ReservationPagination() {
   return <nav className="reservationPagination" aria-label="Reservation pagination"><span>{state.total} result{state.total === 1 ? '' : 's'}</span><button className="smallBtn secondary" type="button" disabled={page <= 1} onClick={() => go(page - 1)}>Previous</button><strong>Page {state.page} of {Math.max(1, state.pages)}</strong><button className="smallBtn secondary" type="button" disabled={page >= state.pages} onClick={() => go(page + 1)}>Next</button></nav>;
 }
 
+type PaymentReviewRow = { id: string; amount: number | string; mode: string; verified: boolean; reference?: string | null; proofFile?: { id: string; originalName: string } | null; reservation: { reference: string; guestName?: string; hotel?: { name: string } } };
+type WalletRechargeReviewRow = { id: string; amount: number | string; currency: string; createdAt: string; mode: string; reference?: string | null; proofFileId?: string | null; agent: { id: string; name: string; email: string } };
+
 export function PaymentsData() {
-  const { data, error } = useData<{ items: { id: string; amount: number | string; mode: string; verified: boolean; reservation: { reference: string } }[]; totals: { verified: number; pending: number } }>('/reports/payments');
+  const [reload, setReload] = useState(0);
+  const [busy, setBusy] = useState('');
+  const [actionError, setActionError] = useState('');
+  const { data, error } = useData<{ items: { id: string; amount: number | string; mode: string; verified: boolean; reference?: string | null; proofFile?: { id: string; originalName: string } | null; reservation: { reference: string; guestName?: string; hotel?: { name: string } } }[]; totals: { verified: number; pending: number } }>('/reports/payments?limit=200', reload);
+  const { data: walletData, error: walletError } = useData<WalletRechargeReviewRow[]>('/payments/wallet-recharge/offline', reload);
   if (error) return <p className="error">{error}</p>;
+  if (walletError) return <p className="error">{walletError}</p>;
   if (!data) return <p className="loading">Loading payments - </p>;
-  return <><div className="metrics"><div><b>INR {data.totals.verified.toFixed(2)}</b><span>Verified</span></div><div><b>INR {data.totals.pending.toFixed(2)}</b><span>Pending verification</span></div></div><section className="panel"><div className="tableScroll"><table><thead><tr><th>Booking</th><th>Mode</th><th>Amount</th><th>Status</th></tr></thead><tbody>{data.items.map((row) => <tr key={row.id}><td>{row.reservation.reference}</td><td>{row.mode}</td><td>INR {Number(row.amount).toFixed(2)}</td><td><span className={`status ${row.verified ? 'ok' : 'warn'}`}>{row.verified ? 'Verified' : 'Pending'}</span></td></tr>)}{!data.items.length && <tr><td colSpan={4}><p className="empty">No payments recorded yet.</p></td></tr>}</tbody></table></div></section></>;
+  async function openProof(fileId: string) {
+    setBusy(`view:${fileId}`); setActionError('');
+    try { const url = URL.createObjectURL(await apiFileBlob(`/files/${encodeURIComponent(fileId)}`)); const popup = window.open(url, '_blank', 'noopener,noreferrer'); if (!popup) window.location.href = url; window.setTimeout(() => URL.revokeObjectURL(url), 60_000); } catch (reason) { setActionError(reason instanceof Error ? reason.message : 'Could not open payment proof.'); } finally { setBusy(''); }
+  }
+  async function approve(row: PaymentReviewRow) {
+    setBusy(`approve:${row.id}`); setActionError('');
+    try { await apiRequest(`/payments/${encodeURIComponent(row.reservation.reference)}/manual/${encodeURIComponent(row.id)}/verify`, { method: 'POST', body: JSON.stringify({}) }); setReload((value) => value + 1); } catch (reason) { setActionError(reason instanceof Error ? reason.message : 'Could not approve payment.'); } finally { setBusy(''); }
+  }
+  async function approveWallet(row: WalletRechargeReviewRow) {
+    setBusy(`approve-wallet:${row.id}`); setActionError('');
+    try { await apiRequest(`/payments/wallet-recharge/offline/${encodeURIComponent(row.id)}/verify`, { method: 'POST' }); setReload((value) => value + 1); } catch (reason) { setActionError(reason instanceof Error ? reason.message : 'Could not approve wallet recharge.'); } finally { setBusy(''); }
+  }
+  return <><div className="metrics"><div><b>INR {Number(data.totals.verified).toFixed(2)}</b><span>Verified</span></div><div><b>INR {Number(data.totals.pending).toFixed(2)}</b><span>Pending verification</span></div><div><b>{walletData?.length ?? '—'}</b><span>Wallet proofs pending</span></div></div>{actionError && <p className="error" role="alert">{actionError}</p>}<section className="panel"><div className="rangeSectionHeader"><div><h2>Offline payment review</h2><p className="mutedText">Approve agent-submitted UPI, bank transfer, and cheque proofs after checking the attached document.</p></div></div><div className="tableScroll"><table><thead><tr><th>Booking</th><th>Guest / hotel</th><th>Mode</th><th>Reference</th><th>Amount</th><th>Status</th><th>Proof</th><th>Action</th></tr></thead><tbody>{data.items.map((row) => <tr key={row.id}><td><b>{row.reservation.reference}</b></td><td>{row.reservation.guestName ?? '—'}<br /><span className="mutedText">{row.reservation.hotel?.name ?? '—'}</span></td><td>{row.mode}</td><td>{row.reference || '—'}</td><td>INR {Number(row.amount).toFixed(2)}</td><td><span className={`status ${row.verified ? 'ok' : 'warn'}`}>{row.verified ? 'Approved' : 'Pending approval'}</span></td><td>{row.proofFile ? <button className="smallBtn secondary" type="button" disabled={busy === `view:${row.proofFile.id}`} onClick={() => void openProof(row.proofFile!.id)}>{busy === `view:${row.proofFile.id}` ? 'Opening...' : 'View proof'}</button> : '—'}</td><td>{row.verified ? '—' : <button className="smallBtn" type="button" disabled={busy === `approve:${row.id}`} onClick={() => void approve(row)}>{busy === `approve:${row.id}` ? 'Approving...' : 'Approve payment'}</button>}</td></tr>)}{!data.items.length && <tr><td colSpan={8}><p className="empty">No payments recorded yet.</p></td></tr>}</tbody></table></div></section><section className="panel"><div className="rangeSectionHeader"><div><h2>Offline wallet recharge review</h2><p className="mutedText">Approve wallet top-up proofs before adding funds to the agent balance.</p></div></div>{!walletData ? <p className="loading">Loading wallet proofs...</p> : <div className="tableScroll"><table><thead><tr><th>Agent</th><th>Mode</th><th>Reference</th><th>Amount</th><th>Submitted</th><th>Proof</th><th>Action</th></tr></thead><tbody>{walletData.map((row) => <tr key={row.id}><td><b>{row.agent.name}</b><br /><span className="mutedText">{row.agent.email}</span></td><td>{row.mode}</td><td>{row.reference || '—'}</td><td>{row.currency} {Number(row.amount).toFixed(2)}</td><td>{new Date(row.createdAt).toLocaleString()}</td><td>{row.proofFileId ? <button className="smallBtn secondary" type="button" disabled={busy === `view:${row.proofFileId}`} onClick={() => void openProof(row.proofFileId!)}>{busy === `view:${row.proofFileId}` ? 'Opening...' : 'View proof'}</button> : '—'}</td><td><button className="smallBtn" type="button" disabled={busy === `approve-wallet:${row.id}`} onClick={() => void approveWallet(row)}>{busy === `approve-wallet:${row.id}` ? 'Approving...' : 'Approve recharge'}</button></td></tr>)}{!walletData.length && <tr><td colSpan={7}><p className="empty">No wallet recharge proofs are awaiting approval.</p></td></tr>}</tbody></table></div>}</section></>;
 }
 
 export function JobsData() {

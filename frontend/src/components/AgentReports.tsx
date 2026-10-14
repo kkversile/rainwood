@@ -15,7 +15,10 @@ type Wallet = {
   currency: string;
   balance: number | string;
   transactions: WalletTransaction[];
+  pendingOfflineRecharges?: { id: string; amount: number | string; currency: string; createdAt: string }[];
 };
+
+type OfflinePaymentMode = 'UPI' | 'BANK_TRANSFER' | 'CHEQUE';
 
 type WalletTransaction = {
   id: string;
@@ -157,6 +160,10 @@ export function AgentWalletReport({ mode = 'wallet' }: { mode?: 'wallet' | 'adva
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'GATEWAY' | 'OFFLINE'>('GATEWAY');
+  const [offlineMode, setOfflineMode] = useState<OfflinePaymentMode>('UPI');
+  const [offlineReference, setOfflineReference] = useState('');
+  const [offlineProof, setOfflineProof] = useState<File | null>(null);
 
   async function load() {
     try { setWallet(await apiRequest<Wallet>('/wallet')); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load wallet'); }
@@ -166,6 +173,17 @@ export function AgentWalletReport({ mode = 'wallet' }: { mode?: 'wallet' | 'adva
   async function recharge(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError(''); setMessage('');
     try {
+      if (paymentMethod === 'OFFLINE') {
+        if (!offlineProof) throw new Error('Upload the payment screenshot or proof before submitting.');
+        const fileBody = new FormData();
+        fileBody.append('file', offlineProof);
+        const stored = await apiRequest<{ id: string }>('/files/payment-proof', { method: 'POST', body: fileBody });
+        await apiRequest('/wallet/recharge/offline', { method: 'POST', body: JSON.stringify({ amount: Number(amount), mode: offlineMode, reference: offlineReference.trim() || undefined, proofFileId: stored.id }) });
+        await load();
+        setMessage(`Wallet recharge of INR ${Number(amount).toFixed(2)} was submitted for admin approval.`);
+        setOfflineProof(null); setOfflineReference('');
+        return;
+      }
       const attempt = await apiRequest<{ id: string; provider: string; providerOrderId: string; amount: number | string; currency: string }>('/wallet/recharge/order', { method: 'POST', headers: { 'idempotency-key': `agent-wallet:${Date.now()}:${Math.random().toString(36).slice(2)}` }, body: JSON.stringify({ amount: Number(amount) }) });
       if (attempt.provider === 'MOCK') {
         await apiRequest('/wallet/recharge/mock-complete', { method: 'POST', body: JSON.stringify({ attemptId: attempt.id, status: 'SUCCESS' }) });
@@ -174,18 +192,13 @@ export function AgentWalletReport({ mode = 'wallet' }: { mode?: 'wallet' | 'adva
         const key = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
         if (!key) throw new Error('Razorpay public key is not configured');
         await loadRazorpayCheckout();
-        const waitForWebhook = async () => {
-          for (let index = 0; index < 15; index += 1) {
-            const status = await apiRequest<{ status: string }>(`/wallet/recharge/attempts/${encodeURIComponent(attempt.id)}`);
-            if (status.status === 'SUCCESS') { await load(); setMessage(`Wallet recharge of INR ${Number(amount).toFixed(2)} was verified.`); return; }
-            if (status.status === 'FAILED') throw new Error('Razorpay payment failed or was rejected');
-            await new Promise((resolve) => window.setTimeout(resolve, 2000));
-          }
-          setMessage('Razorpay payment completed. Wallet credit is pending webhook verification.');
-        };
         const Razorpay = window.Razorpay;
         if (!Razorpay) throw new Error('Razorpay Checkout is unavailable');
-        const checkout = new Razorpay({ key, amount: Math.round(Number(attempt.amount) * 100), currency: attempt.currency, name: 'RainWood Hotels', description: 'Agent wallet recharge', order_id: attempt.providerOrderId, handler: () => { void waitForWebhook().catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not verify recharge')); }, modal: { ondismiss: () => setMessage('Razorpay checkout closed. No wallet credit was made.') } });
+        const checkout = new Razorpay({ key, amount: Math.round(Number(attempt.amount) * 100), currency: attempt.currency, name: 'RainWood Hotels', description: 'Agent wallet recharge', order_id: attempt.providerOrderId, handler: (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
+          void apiRequest('/wallet/recharge/verify', { method: 'POST', body: JSON.stringify(response) })
+            .then(async () => { await load(); setMessage(`Wallet recharge of INR ${Number(amount).toFixed(2)} was verified.`); })
+            .catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not verify recharge'));
+        }, modal: { ondismiss: () => setMessage('Razorpay checkout closed. No wallet credit was made.') } });
         checkout.open();
       } else throw new Error('This payment provider does not have a checkout flow configured');
     }
@@ -204,7 +217,7 @@ export function AgentWalletReport({ mode = 'wallet' }: { mode?: 'wallet' | 'adva
   if (!wallet) return <><ErrorOrLoading error={error} loading /><p className="loading">{error ? '' : 'Loading wallet...'}</p></>;
   return <>
     <div className="metrics agentReportMetrics"><article><span>Available balance</span><strong>{money(wallet.balance)}</strong></article><article><span>Credits in view</span><strong>{money(credits)}</strong></article><article><span>Debits in view</span><strong>{money(debits)}</strong></article></div>
-    {mode !== 'transactions' && <section className="formCard walletRecharge agentReportCard"><h2>{heading === 'Payment advances' ? 'Add payment advance' : 'Recharge wallet'}</h2><p className="mutedText">Record an advance for future agent bookings. The balance is used when a wallet booking is confirmed.</p>{error && <p className="error" role="alert">{error}</p>}{message && <p className="notice" role="status">{message}</p>}<form onSubmit={recharge}><div className="two"><label>Amount (INR)<input type="number" min="1" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required /></label><div className="walletFormAction"><button className="btn" disabled={busy}>{busy ? 'Adding...' : 'Add money'}</button></div></div></form></section>}
+    {mode !== 'transactions' && <section className="formCard walletRecharge agentReportCard"><h2>{heading === 'Payment advances' ? 'Add payment advance' : 'Recharge wallet'}</h2><p className="mutedText">Record an advance for future agent bookings. Razorpay payments credit automatically; offline payments are credited after admin approval.</p>{error && <p className="error" role="alert">{error}</p>}{message && <p className="notice" role="status">{message}</p>}{Boolean(wallet.pendingOfflineRecharges?.length) && <p className="notice" role="status">{wallet.pendingOfflineRecharges!.length} offline wallet recharge{wallet.pendingOfflineRecharges!.length === 1 ? '' : 's'} awaiting admin approval.</p>}<form onSubmit={recharge}><fieldset className="agentPaymentChoice"><legend>Payment method</legend><label><input type="radio" name="wallet-payment-method" checked={paymentMethod === 'GATEWAY'} onChange={() => setPaymentMethod('GATEWAY')} /> Pay Online (Razorpay)</label><label><input type="radio" name="wallet-payment-method" checked={paymentMethod === 'OFFLINE'} onChange={() => setPaymentMethod('OFFLINE')} /> Offline payment</label></fieldset><div className="two"><label>Amount (INR)<input type="number" min="1" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required /></label><div className="walletFormAction"><button className="btn" disabled={busy}>{busy ? 'Submitting...' : paymentMethod === 'OFFLINE' ? 'Submit for approval' : 'Add money with Razorpay'}</button></div></div>{paymentMethod === 'OFFLINE' && <div className="agentOfflinePayment"><p>Pay by UPI, bank transfer, or cheque and upload the proof. Your wallet is credited only after admin verification.</p><div className="agentGuestGrid agentGuestGridTwo"><label>Payment mode<select value={offlineMode} onChange={(event) => setOfflineMode(event.target.value as OfflinePaymentMode)}><option value="UPI">UPI</option><option value="BANK_TRANSFER">Bank transfer</option><option value="CHEQUE">Cheque</option></select></label><label>Transaction / cheque reference<input value={offlineReference} onChange={(event) => setOfflineReference(event.target.value)} placeholder="Optional reference" /></label></div><label>Payment screenshot or proof *<input type="file" accept="image/png,image/jpeg,application/pdf" required onChange={(event) => setOfflineProof(event.target.files?.[0] ?? null)} /><small>PNG, JPEG, or PDF up to 5 MB.</small></label></div>}</form></section>}
     <section className="panel agentReportCard"><div className="agentReportToolbar"><div><span className="agentReportKicker">{heading}</span><h2>{mode === 'transactions' ? 'Wallet transaction history' : 'Advance ledger'}</h2></div><div className="agentReportActions"><button className="smallBtn" type="button" onClick={() => downloadCsv('rainwood-wallet-transactions.csv', ['Date', 'Type', 'Reference', 'Amount', 'Balance After'], transactions.map((transaction) => [transaction.createdAt, transaction.type, transaction.reference || '', transaction.amount, transaction.balanceAfter]))}>Download as Excel</button></div></div><div className="agentReportFilters"><label>From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><label>To<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label><label>Type<select value={type} onChange={(event) => setType(event.target.value)}><option value="">All transactions</option><option value="RECHARGE">Recharge</option><option value="BOOKING_DEBIT">Booking debit</option><option value="BOOKING_REFUND">Booking refund</option></select></label></div>{!transactions.length ? <p className="empty">No wallet transactions found for the selected criteria.</p> : <div className="tableScroll"><table><thead><tr><th>Date</th><th>Type</th><th>Reference</th><th>Amount</th><th>Balance after</th></tr></thead><tbody>{transactions.map((transaction) => <tr key={transaction.id}><td>{new Date(transaction.createdAt).toLocaleString()}</td><td><span className={`status ${Number(transaction.amount) >= 0 ? 'ok' : 'warn'}`}>{transaction.type.replaceAll('_', ' ')}</span></td><td>{transaction.reference || ' - '}</td><td className={Number(transaction.amount) >= 0 ? 'walletCredit' : 'walletDebit'}>{Number(transaction.amount) >= 0 ? '+' : ''} {money(transaction.amount)}</td><td>{money(transaction.balanceAfter)}</td></tr>)}</tbody></table></div>}</section>
   </>;
 }

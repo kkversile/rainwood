@@ -20,6 +20,7 @@ import { assertActorCanManageHotel, getActorScope } from '../../common/role-scop
 import { calculateSettlementTotals } from './settlement-totals';
 import { CashierShiftsService } from '../cashier-shifts/cashier-shifts.service';
 import { GroupsService } from '../groups/groups.service';
+import { MailService } from '../../common/mail.service';
 
 const checkoutInclude = {
   hotel: { select: { id: true, name: true, timezoneName: true } },
@@ -32,9 +33,19 @@ const checkoutInclude = {
 
 @Injectable()
 export class ReservationsService {
-  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService, @Optional() private readonly availability?: AvailabilityService, @Optional() private readonly cashierShifts?: CashierShiftsService, @Optional() private readonly groups?: GroupsService, @Optional() private readonly rateMaster?: RateMasterService) {}
+  constructor(private p: PrismaService, private holds: HoldsService, private audit: AuditService, private readonly rateResolver: RateResolverService, private readonly housekeeping?: HousekeepingService, private readonly guests?: GuestsService, @Optional() private readonly availability?: AvailabilityService, @Optional() private readonly cashierShifts?: CashierShiftsService, @Optional() private readonly groups?: GroupsService, @Optional() private readonly rateMaster?: RateMasterService, @Optional() private readonly mail?: MailService) {}
 
   private operationalRoles = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'];
+
+  private async queueReservationEmail(reference: string, subject: string, text: string, suffix: string) {
+    if (!this.mail) return;
+    const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { id: true, email: true, createdBy: { select: { email: true, role: true } } } });
+    if (!reservation) return;
+    const jobs = [];
+    if (reservation.email) jobs.push(this.mail.queue({ to: reservation.email, subject, text }, `reservation:${reservation.id}:${suffix}:guest`, 'Reservation', reservation.id));
+    if (reservation.createdBy?.role === 'AGENT' && reservation.createdBy.email && reservation.createdBy.email !== reservation.email) jobs.push(this.mail.queue({ to: reservation.createdBy.email, subject, text }, `reservation:${reservation.id}:${suffix}:agent`, 'Reservation', reservation.id));
+    await Promise.all(jobs);
+  }
 
   private assertOperationalRole(role?: string) {
     if (!this.operationalRoles.includes(role ?? '')) throw new ForbiddenException('Front-office permission is required for this action.');
@@ -202,7 +213,7 @@ export class ReservationsService {
   async recordCheckoutPayment(reference: string, body: CheckoutPaymentDto, user: { id: string; role?: string }) {
     this.assertOperationalRole(user.role);
     await this.assertReservationScope(reference, user.id);
-    return serializable(this.p, async (tx) => {
+    const reservation = await serializable(this.p, async (tx) => {
       const reservation = await tx.reservation.findUnique({ where: { reference }, include: { folioCharges: { where: { status: 'POSTED' }, select: { totalAmount: true } }, payments: { where: { verified: true }, select: { amount: true } } } });
       if (!reservation) throw new NotFoundException('Reservation not found');
       if (reservation.stayStatus !== StayStatus.CHECKED_IN) throw new ConflictException('Checkout payments can only be recorded for a checked-in stay.');
@@ -219,6 +230,8 @@ export class ReservationsService {
       await tx.auditLog.create({ data: { actorUserId: user.id, action: 'PAYMENT_RECORDED', entityType: 'Payment', entityId: payment.id, after: { reference, reservationId: reservation.id, amount: body.amount, mode: body.mode, context: 'CHECKOUT' } } });
       return payment;
     });
+    await this.queueReservationEmail(reference, `RainWood payment receipt - ${reference}`, `A payment of INR ${Number(reservation.amount).toFixed(2)} was recorded for reservation ${reference}.`, `checkout-payment:${reservation.id}`);
+    return reservation;
   }
 
   async finalFolio(reference: string, userId?: string) {
@@ -267,7 +280,7 @@ export class ReservationsService {
     const holdPreview = await this.p.inventoryHold.findUnique({ where: { tokenHash: sha256(token) }, select: { hotelId: true } });
     if (!holdPreview) throw new BadRequestException('Hold expired or invalid');
     const guestResolution = this.guests ? await this.guests.resolveForReservation({ hotelId: holdPreview.hotelId, guestName: body.guestName, mobile: body.mobile, email: body.email }) : { guestProfileId: null, conflict: false };
-    return serializable(this.p, async (tx) => {
+    const reservation = await serializable(this.p, async (tx) => {
       const hold = await tx.inventoryHold.findUnique({ where: { tokenHash: sha256(token) }, include: { lines: { include: { nights: true } } } });
       if (!hold) throw new BadRequestException('Hold expired or invalid');
       const authorizedAdmin = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'].includes(user?.role ?? '');
@@ -294,6 +307,9 @@ export class ReservationsService {
       const bookingTotal = pricingLines.reduce((sum, line) => sum + Number(line.quotedTotal), 0);
       const bookingCreatedAt = new Date();
       const walletBooking = user?.role === 'AGENT';
+      const offlineBooking = walletBooking && body.offlinePayment === true;
+      const onlineBooking = walletBooking && body.onlinePayment === true;
+      if (offlineBooking && onlineBooking) throw new BadRequestException('Choose either online payment or offline payment.');
       const agent = walletBooking ? await tx.user.findFirst({ where: { id: user.id, role: 'AGENT', active: true }, select: { id: true, agentPaymentPolicy: true, bookingPaymentPercent: true, paymentMilestones: { orderBy: { sortOrder: 'asc' } } } }) : null;
       if (walletBooking && !agent) throw new ForbiddenException('The agent account is not available for booking');
       const paymentTerms = walletBooking ? calculateAgentBookingPaymentTerms(bookingTotal, agent!, hold.lines[0].checkIn, bookingCreatedAt) : null;
@@ -302,7 +318,7 @@ export class ReservationsService {
         agentRatePlanId: Array.isArray(line.quotedBreakdown) ? (line.quotedBreakdown as any[]).find((night) => night.agentRatePlanId)?.agentRatePlanId ?? null : null,
       }));
       let walletDebit: { walletId: string; balanceAfter: any } | undefined;
-      if (walletBooking && paymentTerms && paymentTerms.requiredAtBooking > 0) {
+      if (walletBooking && !offlineBooking && !onlineBooking && paymentTerms && paymentTerms.requiredAtBooking > 0) {
         const wallet = await tx.agentWallet.findUnique({ where: { agentId: user.id } });
         if (!wallet || Number(wallet.balance) < paymentTerms.requiredAtBooking) throw new BadRequestException(`Insufficient wallet balance. Required INR ${paymentTerms.requiredAtBooking.toFixed(2)}.`);
         const updatedWallet = await tx.agentWallet.update({ where: { id: wallet.id }, data: { balance: { decrement: paymentTerms.requiredAtBooking } } });
@@ -315,8 +331,8 @@ export class ReservationsService {
           hotelId,
           source: body.source ?? 'WEBSITE',
           sourceName: body.sourceName ?? (user ? 'Agent booking' : undefined),
-          status: walletBooking ? 'CONFIRMED' : 'PENDING_PAYMENT',
-          paymentStatus: walletBooking ? agentPaymentStatus : 'UNPAID',
+          status: walletDebit ? 'CONFIRMED' : 'PENDING_PAYMENT',
+          paymentStatus: walletDebit ? agentPaymentStatus : 'UNPAID',
           syncStatus: 'PENDING',
           guestName: body.guestName,
           guestProfileId: guestResolution.guestProfileId ?? undefined,
@@ -330,8 +346,8 @@ export class ReservationsService {
           checkOut: pricingLines[0].checkOut,
           totalAmount: pricingLines.reduce((sum, line) => sum + Number(line.quotedTotal), 0),
           taxAmount: pricingLines.reduce((sum, line) => sum + Number(line.quotedTax), 0),
-          advanceAmount: walletBooking ? paymentTerms!.requiredAtBooking : 0,
-          balanceAmount: walletBooking ? paymentTerms!.balanceAtBooking : bookingTotal,
+          advanceAmount: walletDebit ? paymentTerms!.requiredAtBooking : 0,
+          balanceAmount: walletDebit ? paymentTerms!.balanceAtBooking : bookingTotal,
           priceSnapshot: pricingLines.map((line, index) => ({ roomTypeId: line.roomTypeId, ratePlanId: line.ratePlanId, agentRatePlanId: lineSnapshots[index].agentRatePlanId, agentPricing: Array.isArray(line.quotedBreakdown) ? (line.quotedBreakdown as any[]).find((night) => night.agentPricing)?.agentPricing ?? null : null, priceSource: selectedCorporateAccountId ? 'CORPORATE' : (Array.isArray(line.quotedBreakdown) ? (line.quotedBreakdown as any[]).find((night) => night.priceSource)?.priceSource ?? 'RATE_PLAN' : 'RATE_PLAN'), total: Number(line.quotedTotal), tax: Number(line.quotedTax), breakdown: line.quotedBreakdown })),
           policySnapshot: { policySource: 'hold', capturedAt: new Date().toISOString(), freeCancellationHours: 48, firstNightPenalty: true },
           paymentTermsSnapshot: paymentTerms ? { agentId: agent!.id, policy: paymentTerms.policy, percentage: paymentTerms.percentage, bookingTotal, requiredAtBooking: paymentTerms.requiredAtBooking, balanceAtBooking: paymentTerms.balanceAtBooking, milestones: paymentTerms.milestones, capturedAt: bookingCreatedAt.toISOString() } : undefined,
@@ -375,6 +391,8 @@ export class ReservationsService {
       await tx.auditLog.create({ data: { actorUserId: user?.id, action: 'RESERVATION_CREATED', entityType: 'Reservation', entityId: reservation.id, after: { reference: reservation.reference, source: reservation.source } } });
       return reservation;
     });
+    await this.queueReservationEmail(reservation.reference, reservation.status === 'CONFIRMED' ? `RainWood booking confirmed - ${reservation.reference}` : `RainWood booking received - ${reservation.reference}`, reservation.status === 'CONFIRMED' ? `Your RainWood reservation ${reservation.reference} is confirmed.` : `Your RainWood reservation ${reservation.reference} was received and is awaiting payment approval.`, 'created');
+    return reservation;
   }
 
   async list(query: ReservationListQueryDto, userId?: string) {
@@ -407,7 +425,7 @@ export class ReservationsService {
     return rows.map(({ payments, ...row }) => ({ ...row, paymentSchedule: this.paymentSchedule(row.paymentTermsSnapshot, payments.filter((payment) => payment.verified).reduce((sum, payment) => sum + Number(payment.amount), 0)) }));
   }
 
-  async listRatePlansForUser(userId: string, from?: string, to?: string) {
+  async listRatePlansForUser(userId: string, from?: string, to?: string, view?: 'rate-book') {
     const today = new Date(); today.setUTCHours(0, 0, 0, 0);
     const start = from ? parseDateOnly(from, 'from') : today;
     const end = to ? parseDateOnly(to, 'to') : undefined;
@@ -415,10 +433,30 @@ export class ReservationsService {
     if (end && end.getTime() - start.getTime() > 370 * 86_400_000) throw new BadRequestException('Rate plan date ranges cannot exceed 371 days');
     const dateFilter = { date: { gte: start, ...(end ? { lte: end } : {}) } };
     const take = end ? 371 : 31;
-    const categoryRates = this.rateMaster ? await this.rateMaster.effectiveRatesForAgent(userId, start, end ?? new Date(start.getTime() + 30 * 86_400_000)) : null;
-    if (categoryRates) return categoryRates.rates;
+    const categoryEnd = end ? new Date(end.getTime() + 86_400_000) : new Date(start.getTime() + 30 * 86_400_000);
+    const categoryRates = this.rateMaster ? await this.rateMaster.effectiveRatesForAgent(userId, start, categoryEnd, { strict: view !== 'rate-book' }) : null;
+    if (categoryRates) return view === 'rate-book' ? categoryRates : categoryRates.rates;
     const assignments = await this.p.agentRatePlan.findMany({ where: { agentId: userId, active: true, ratePlan: { active: true, master: { active: true } } }, orderBy: { ratePlan: { name: 'asc' } }, include: { ratePlan: { include: { roomType: { include: { hotel: { select: { name: true, city: true } } } }, rates: { where: dateFilter, orderBy: { date: 'asc' }, take } } } } });
-    return assignments.map((assignment) => ({ source: 'LEGACY_AGENT_RATE_PLAN', id: assignment.ratePlan.id, code: assignment.ratePlan.code, name: assignment.ratePlan.name, mealPlan: assignment.ratePlan.mealPlan, description: assignment.ratePlan.description, hotel: assignment.ratePlan.roomType.hotel, room: { id: assignment.ratePlan.roomType.id, name: assignment.ratePlan.roomType.name, code: assignment.ratePlan.roomType.code }, rates: assignment.ratePlan.rates.map((rate) => ({ ...this.rateResolver.byDate({ assignedAgents: [assignment] }, userId).get(rate), date: rate.date })) }));
+    const legacyRates = assignments.map((assignment) => ({ source: 'LEGACY_AGENT_RATE_PLAN', id: assignment.ratePlan.id, code: assignment.ratePlan.code, name: assignment.ratePlan.name, mealPlan: assignment.ratePlan.mealPlan, description: assignment.ratePlan.description, hotel: assignment.ratePlan.roomType.hotel, room: { id: assignment.ratePlan.roomType.id, name: assignment.ratePlan.roomType.name, code: assignment.ratePlan.roomType.code }, rates: assignment.ratePlan.rates.map((rate) => ({ ...this.rateResolver.byDate({ assignedAgents: [assignment] }, userId).get(rate), date: rate.date })) }));
+    if (view === 'rate-book') {
+      const grouped = new Map<string, { hotel: { name: string; city: string }; dates: Set<string> }>();
+      for (const plan of legacyRates) {
+        const key = `${plan.hotel.name}:${plan.hotel.city}`;
+        const current = grouped.get(key) ?? { hotel: plan.hotel, dates: new Set<string>() };
+        for (const rate of plan.rates) current.dates.add(new Date(rate.date).toISOString().slice(0, 10));
+        grouped.set(key, current);
+      }
+      const requestedEnd = end ?? new Date(start.getTime() + 29 * 86_400_000);
+      const totalDays = Math.max(1, Math.floor((requestedEnd.getTime() - start.getTime()) / 86_400_000) + 1);
+      return {
+        source: 'LEGACY_AGENT_RATE_PLAN',
+        mappings: [],
+        requestedRange: { from: start.toISOString().slice(0, 10), to: requestedEnd.toISOString().slice(0, 10) },
+        coverage: [...grouped.values()].map((item) => ({ hotel: item.hotel, status: item.dates.size >= totalDays ? 'VALID' : item.dates.size ? 'PARTIAL' : 'UNAVAILABLE', coveredDates: item.dates.size, totalDates: totalDays })),
+        rates: legacyRates,
+      };
+    }
+    return legacyRates;
   }
 
   async get(reference: string, full = false, viewerRole?: string, userId?: string) {
@@ -676,7 +714,9 @@ export class ReservationsService {
       await tx.auditLog.create({ data: { actorUserId: user.id, action: 'RESERVATION_MILESTONE_PAYMENT', entityType: 'Reservation', entityId: reservation.id, after: { agentId: reservation.createdById, reservationId: reservation.id, amount: dueAmount, milestones: schedule.milestones.filter((item) => item.dueNow && item.outstandingAmount > 0.005).map((item) => ({ dueAt: item.dueAt, amount: item.outstandingAmount })) } } });
       return reservation.reference;
     });
-    return this.get(reference);
+    const reservation = await this.get(reference);
+    await this.queueReservationEmail(reference, `RainWood payment received - ${reference}`, `A wallet milestone payment was received for reservation ${reference}.`, `milestone:${idempotencyKey || 'latest'}`);
+    return reservation;
   }
 
   async cancel(reference: string, body: CancellationDto, user: { id: string }) {
@@ -722,6 +762,7 @@ export class ReservationsService {
       return cancellation;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     await this.groups?.syncLifecycleForReservation(user.id, reference);
+    await this.queueReservationEmail(reference, `RainWood booking cancelled - ${reference}`, `Reservation ${reference} has been cancelled. Any applicable refund will follow the recorded cancellation policy.`, 'cancelled');
     return result;
   }
 
@@ -730,7 +771,7 @@ export class ReservationsService {
     const current = await this.p.reservation.findUnique({ where: { reference }, select: { id: true } });
     if (!current) throw new NotFoundException('Reservation not found');
     if (body.type === 'INVENTORY' || body.type === 'PRICE') throw new BadRequestException('Inventory or price changes require a replacement hold workflow');
-    return this.p.$transaction(async (tx) => {
+    const result = await this.p.$transaction(async (tx) => {
       const reservation = await tx.reservation.findUnique({ where: { id: current.id } });
       if (!reservation || ['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(reservation.status)) throw new BadRequestException('Reservation cannot be modified');
       const idempotencyKey = body.idempotencyKey ?? `modify:${reservation.id}:${reservation.version + 1}`;
@@ -755,6 +796,8 @@ export class ReservationsService {
       await tx.auditLog.create({ data: { actorUserId: user.id, action: 'RESERVATION_MODIFIED', entityType: 'Reservation', entityId: reservation.id, before: { version: reservation.version }, after: { version: nextVersion, changes } } });
       return { reservation: updated, modification };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    await this.queueReservationEmail(reference, `RainWood booking updated - ${reference}`, `Reservation ${reference} was updated. Please sign in to review the latest booking details.`, `modified:${(result as any).modification?.toVersion ?? (result as any).toVersion ?? 'latest'}`);
+    return result;
   }
 
   async setReconfirmation(reference: string, reconfirmed: boolean, user: { id: string }) {

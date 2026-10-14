@@ -417,27 +417,36 @@ export class RateMasterService {
     return results;
   }
 
-  async effectiveRatesForAgent(agentId: string, from: Date, to: Date) {
+  async effectiveRatesForAgent(agentId: string, from: Date, to: Date, options: { strict?: boolean } = {}) {
+    const strict = options.strict !== false;
     const db = this.prisma as any;
     const occupiedTo = addDays(to, -1);
     const mappings = await db.agentHotelRateCategoryAssignment.findMany({ where: { agentId, active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } }, include: { hotel: { select: { id: true, code: true, name: true, city: true, location: true } } }, orderBy: [{ hotelId: 'asc' }, { validFrom: 'desc' }] });
     if (!mappings.length) return null;
     const nights = eachNight(from, to);
     const results: any[] = [];
+    const coverage: any[] = [];
     const hotelIds = [...new Set(mappings.map((mapping: any) => mapping.hotelId))];
     for (const hotelId of hotelIds) {
       const hotelMappings = mappings.filter((mapping: any) => mapping.hotelId === hotelId);
       const assignmentByDate = new Map(nights.map((night) => [toDateOnly(night), hotelMappings.filter((mapping: any) => new Date(mapping.validFrom) <= night && new Date(mapping.validTo) >= night)]));
-      if ([...assignmentByDate.values()].some((items: any[]) => items.length !== 1)) throw new BadRequestException('Contract rate is not available for all selected nights.');
+      const mappingGapDates = nights.filter((night) => (assignmentByDate.get(toDateOnly(night)) ?? []).length === 0).map(toDateOnly);
+      const mappingOverlapDates = nights.filter((night) => (assignmentByDate.get(toDateOnly(night)) ?? []).length > 1).map(toDateOnly);
+      if (strict && (mappingGapDates.length || mappingOverlapDates.length)) throw new BadRequestException('Contract rate is not available for all selected nights.');
       const supplements = await db.mealPlanGuestSupplementBand.findMany({ where: { hotelId, active: true, validFrom: { lte: to }, validTo: { gte: from } } });
       const plans = await db.ratePlan.findMany({ where: { active: true, master: { active: true, kind: 'CANONICAL_MEAL', mealPlan: { in: [...CANONICAL_MEAL_PLANS] } }, roomType: { active: true, hotelId } }, include: { roomType: { select: { id: true, code: true, name: true, hotel: { select: { id: true, code: true, name: true, city: true, location: true } } } }, rates: { where: { date: { gte: from, lt: to } }, orderBy: { date: 'asc' } }, agentCategoryBands: { where: { active: true, validFrom: { lte: occupiedTo }, validTo: { gte: from } }, orderBy: { validFrom: 'asc' } }, agentCategoryRateDays: { where: { active: true, date: { gte: from, lt: to } }, orderBy: { date: 'asc' } } }, orderBy: [{ roomType: { name: 'asc' } }, { mealPlan: 'asc' }] });
       for (const plan of plans) {
         const resolvedRates = plan.rates.map((rate: any) => { const key = toDateOnly(rate.date); const assignment = assignmentByDate.get(key)?.[0]; const daily = assignment && assignment.category !== 'RACK' ? plan.agentCategoryRateDays.find((item: any) => item.category === assignment.category && toDateOnly(item.date) === key) : undefined; const band = assignment?.category === 'RACK' ? [] : plan.agentCategoryBands.filter((item: any) => new Date(item.validFrom) <= new Date(rate.date) && new Date(item.validTo) >= new Date(rate.date)); const supplement = supplements.find((item: any) => String(item.mealPlan).toUpperCase() === String(plan.mealPlan).toUpperCase() && new Date(item.validFrom) <= new Date(rate.date) && new Date(item.validTo) >= new Date(rate.date)); if (!assignment || (assignment.category !== 'RACK' && !daily && band.length !== 1)) return null; const prices = rate.occupancyPrices && typeof rate.occupancyPrices === 'object' ? rate.occupancyPrices : {}; const singleAmount = assignment.category === 'RACK' ? Number((prices as any).single ?? 0) : daily ? Number(daily.singleAmount) : 0; const doubleAmount = assignment.category === 'RACK' ? Number((prices as any).double ?? rate.baseAmount ?? rate.amount ?? 0) : daily ? Number(daily.doubleAmount) : Number(band[0][`category${assignment.category}Amount`]); const extraAdultAmount = assignment.category === 'RACK' ? Number(rate.extraAdultAmount ?? 0) : daily ? Number(daily.extraAdultAmount) : Number(supplement?.extraAdultAmount ?? 0); const childWithBedAmount = assignment.category === 'RACK' ? Number(rate.childAmount ?? 0) : daily ? Number(daily.childWithBedAmount) : Number(supplement?.childWithBedAmount ?? 0); const childWithoutBedAmount = assignment.category === 'RACK' ? Number(rate.childWithoutBedAmount ?? 0) : daily ? Number(daily.childWithoutBedAmount) : Number(supplement?.childWithoutBedAmount ?? 0); return { date: rate.date, validFrom: rate.date, validTo: rate.date, amount: doubleAmount, taxAmount: rate.taxAmount, taxRatePercent: Number(rate.baseAmount ?? rate.amount) > 0 ? Number((Number(rate.taxAmount) / Number(rate.baseAmount ?? rate.amount) * 100).toFixed(4)) : 0, taxPolicy: 'RATE_DAY_PERCENTAGE', extraAdultAmount, childAmount: childWithBedAmount, extraChildWithBedAmount: childWithBedAmount, childWithBedAmount, childWithoutBedAmount, occupancyPrices: { single: singleAmount, double: doubleAmount }, priceSource: 'AGENT_CATEGORY', category: assignment.category }; }).filter(Boolean);
-        if (resolvedRates.length !== nights.length) continue;
-        results.push({ id: plan.id, code: plan.code, name: plan.name, mealPlan: plan.mealPlan, description: plan.description, hotel: plan.roomType.hotel, room: { id: plan.roomType.id, code: plan.roomType.code, name: plan.roomType.name }, contract: { source: 'AGENT_CATEGORY', code: 'Mapped rates', name: 'Assigned hotel rates', version: 1, validFrom: toDateOnly(from), validTo: toDateOnly(to) }, rates: resolvedRates });
+        if (strict && resolvedRates.length !== nights.length) continue;
+        if (resolvedRates.length) results.push({ id: plan.id, code: plan.code, name: plan.name, mealPlan: plan.mealPlan, description: plan.description, hotel: plan.roomType.hotel, room: { id: plan.roomType.id, code: plan.roomType.code, name: plan.roomType.name }, contract: { source: 'AGENT_CATEGORY', code: 'Mapped rates', name: 'Assigned hotel rates', version: 1, validFrom: toDateOnly(from), validTo: toDateOnly(to) }, rates: resolvedRates });
       }
+      const hotelPlans = results.filter((item) => item.hotel.id === hotelId);
+      const coveredDates = new Set(hotelPlans.flatMap((item) => item.rates.map((rate: any) => toDateOnly(rate.date))));
+      const missingDates = nights.map(toDateOnly).filter((date) => !coveredDates.has(date));
+      const issueDates = [...new Set([...mappingGapDates, ...mappingOverlapDates, ...missingDates])].sort();
+      coverage.push({ hotel: hotelMappings[0].hotel, status: hotelPlans.length === 0 ? 'UNAVAILABLE' : issueDates.length ? 'PARTIAL' : 'VALID', coveredDates: coveredDates.size, totalDates: nights.length, coveredFrom: coveredDates.size ? [...coveredDates].sort()[0] : null, coveredTo: coveredDates.size ? [...coveredDates].sort().at(-1) : null, missingDates: issueDates });
     }
-    return { source: 'AGENT_CATEGORY', mappings: mappings.map((mapping: any) => ({ id: mapping.id, hotelId: mapping.hotelId, hotel: mapping.hotel, validFrom: toDateOnly(mapping.validFrom), validTo: toDateOnly(mapping.validTo) })), rates: results };
+    return { source: 'AGENT_CATEGORY', mappings: mappings.map((mapping: any) => ({ id: mapping.id, hotelId: mapping.hotelId, hotel: mapping.hotel, validFrom: toDateOnly(mapping.validFrom), validTo: toDateOnly(mapping.validTo) })), requestedRange: { from: toDateOnly(from), to: toDateOnly(addDays(to, -1)) }, coverage, rates: results };
   }
 
   async categoryContext(agentId: string, hotelId: string, from: Date, to: Date, db: Db = this.prisma) {

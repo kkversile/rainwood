@@ -112,7 +112,7 @@ async function main() {
   ];
   const agentUsers = [] as { id: string; email: string }[];
   for (const item of seededAgents) {
-    const agentUser = await prisma.user.upsert({ where: { email: item.email }, update: { name: item.name, passwordHash: agentPasswordHash, role: 'AGENT', active: true, agentPaymentPolicy: 'PERCENTAGE', bookingPaymentPercent: 100 }, create: { email: item.email, name: item.name, passwordHash: agentPasswordHash, role: 'AGENT', active: true, agentPaymentPolicy: 'PERCENTAGE', bookingPaymentPercent: 100 } });
+    const agentUser = await prisma.user.upsert({ where: { email: item.email }, update: { name: item.name, passwordHash: agentPasswordHash, role: 'AGENT', active: true, emailVerifiedAt: new Date(), agentPaymentPolicy: 'PERCENTAGE', bookingPaymentPercent: 100 }, create: { email: item.email, name: item.name, passwordHash: agentPasswordHash, role: 'AGENT', active: true, emailVerifiedAt: new Date(), agentPaymentPolicy: 'PERCENTAGE', bookingPaymentPercent: 100 } });
     agentUsers.push({ id: agentUser.id, email: agentUser.email });
     await prisma.agentWallet.upsert({ where: { agentId: agentUser.id }, update: {}, create: { agentId: agentUser.id, balance: 0 } });
   }

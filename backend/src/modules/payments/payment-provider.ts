@@ -1,5 +1,7 @@
 import { createHmac, randomUUID } from 'crypto';
+import { BadRequestException, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import Razorpay from 'razorpay';
 import { hmac, safeEqual } from '../../common/security';
 
 export interface NormalizedPaymentEvent {
@@ -45,10 +47,25 @@ export class RazorpayGateway implements PaymentGateway {
   constructor(private readonly config: ConfigService) {}
 
   async createOrder(input: { amount: number; currency: string; reference: string }) {
-    const auth = Buffer.from(`${this.config.getOrThrow('RAZORPAY_KEY_ID')}:${this.config.getOrThrow('RAZORPAY_KEY_SECRET')}`).toString('base64');
-    const response = await fetch('https://api.razorpay.com/v1/orders', { method: 'POST', headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: Math.round(input.amount * 100), currency: input.currency, receipt: input.reference, notes: { reservationReference: input.reference } }) });
-    if (!response.ok) throw new Error(`Razorpay order creation failed with ${response.status}`);
-    return response.json() as Promise<Record<string, unknown>>;
+    const amountPaise = Math.round(Number(input.amount) * 100);
+    if (!Number.isFinite(amountPaise) || amountPaise < 100) throw new BadRequestException('Razorpay orders must be at least 100 paise');
+
+    const razorpay = new Razorpay({
+      key_id: this.config.getOrThrow('RAZORPAY_KEY_ID'),
+      key_secret: this.config.getOrThrow('RAZORPAY_KEY_SECRET'),
+    });
+    try {
+      return await razorpay.orders.create({ amount: amountPaise, currency: input.currency, receipt: input.reference }) as unknown as Record<string, unknown>;
+    } catch (error: any) {
+      const status = Number(error?.statusCode ?? error?.status ?? error?.error?.code);
+      if (status === 401 || status === 403) throw new UnauthorizedException('Razorpay authentication failed');
+      throw new InternalServerErrorException('Razorpay order creation failed');
+    }
+  }
+
+  verifyPaymentSignature(orderId: string, paymentId: string, signature: string) {
+    const expected = createHmac('sha256', this.config.getOrThrow('RAZORPAY_KEY_SECRET')).update(`${orderId}|${paymentId}`).digest('hex');
+    return safeEqual(signature, expected);
   }
 
   verify(raw: Buffer, headers: Record<string, string | string[] | undefined>) {

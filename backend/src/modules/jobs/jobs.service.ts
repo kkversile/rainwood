@@ -6,6 +6,8 @@ import { PrismaService } from '../../common/prisma.service';
 import { AxisRoomsService } from '../axisrooms/axisrooms.service';
 import { VouchersService } from '../vouchers/vouchers.service';
 import { HoldsService } from '../holds/holds.service';
+import { MailService } from '../../common/mail.service';
+import { FilesService } from '../files/files.service';
 
 @Injectable()
 export class JobsService implements OnModuleInit, OnModuleDestroy {
@@ -14,7 +16,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
   private running = false;
 
-  constructor(private p: PrismaService, private c: ConfigService, private axis: AxisRoomsService, private vouchers: VouchersService, private holds: HoldsService) {}
+  constructor(private p: PrismaService, private c: ConfigService, private axis: AxisRoomsService, private vouchers: VouchersService, private holds: HoldsService, private mail: MailService, private files: FilesService) {}
 
   onModuleInit() {
     if (this.c.get('WORKER_ENABLED', 'true') === 'false') return;
@@ -46,12 +48,22 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
         await this.p.reservation.update({ where: { id: job.aggregateId }, data: { syncStatus: 'SYNCED' } });
       } else if (job.type === 'GENERATE_VOUCHER') {
         result = await this.vouchers.generate(job.aggregateId);
+        await this.p.outboxJob.upsert({ where: { idempotencyKey: `voucher-email:${result.id}` }, create: { type: 'SEND_VOUCHER_EMAIL', aggregateType: 'Voucher', aggregateId: result.id, idempotencyKey: `voucher-email:${result.id}`, payload: { voucherId: result.id } }, update: {} });
       } else if (job.type === 'SEND_VOUCHER_EMAIL') {
         result = await this.vouchers.email(job.aggregateId);
+      } else if (job.type === 'SEND_EMAIL') {
+        const payload = job.payload as any;
+        const attachmentFileIds = Array.isArray(payload.attachmentFileIds) ? payload.attachmentFileIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0) : [];
+        const attachments = await Promise.all(attachmentFileIds.map(async (fileId: string) => {
+          const stored = await this.files.get(fileId);
+          return { filename: stored.file.originalName, content: stored.buffer, contentType: stored.file.mimeType };
+        }));
+        const { attachmentFileIds: _attachmentFileIds, ...message } = payload;
+        result = await this.mail.send({ ...message, attachments });
       } else {
         throw new Error(`Unknown outbox job type ${job.type}`);
       }
-      await this.p.outboxJob.update({ where: { id: job.id }, data: { status: 'SUCCEEDED', completedAt: new Date(), lockedAt: null, lockedBy: null } });
+      await this.p.outboxJob.update({ where: { id: job.id }, data: { status: 'SUCCEEDED', completedAt: new Date(), lockedAt: null, lockedBy: null, lastError: null } });
       return result;
     } catch (error: any) {
       const attempts = Number(job.attempts);

@@ -27,8 +27,10 @@ test('agent category pricing is used by My Rates and availability quote', async 
   await page.getByRole('button', { name: 'Book now' }).first().click();
   const rail = page.locator('aside[aria-label="Booking criteria"]');
   await expect(rail).toBeVisible();
-  await rail.getByLabel('Check-in').fill('2026-10-14');
-  await rail.getByLabel('Check-out').fill('2026-10-15');
+  await rail.getByRole('button', { name: 'Check-in' }).click();
+  await rail.getByRole('button', { name: '2026-10-14', exact: true }).click();
+  await rail.getByRole('button', { name: 'Check-out' }).click();
+  await rail.getByRole('button', { name: '2026-10-15', exact: true }).click();
   await rail.getByLabel('Adults').fill('2');
   const responsePromise = page.waitForResponse((response) => response.url().includes('/availability/search') && response.request().method() === 'GET' && response.status() === 200);
   await rail.getByRole('button', { name: 'Book', exact: true }).click();

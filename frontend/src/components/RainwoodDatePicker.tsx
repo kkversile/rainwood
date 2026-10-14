@@ -10,6 +10,7 @@ type RainwoodDatePickerProps = {
   minDate?: string;
   maxDate?: string;
   placeholder?: string;
+  displayLabel?: string;
   accent?: boolean;
   dropUp?: boolean;
 };
@@ -36,7 +37,7 @@ function addMonths(date: Date, amount: number) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + amount, 1));
 }
 
-export function RainwoodDatePicker({ label, value, onChange, minDate, maxDate, placeholder = label, accent = false, dropUp = false }: RainwoodDatePickerProps) {
+export function RainwoodDatePicker({ label, value, onChange, minDate, maxDate, placeholder = label, displayLabel = label, accent = false, dropUp = false }: RainwoodDatePickerProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const selectedDate = parseDate(value);
   const minimumDate = parseDate(minDate ?? '');
@@ -87,7 +88,7 @@ export function RainwoodDatePicker({ label, value, onChange, minDate, maxDate, p
     </button>
     {open && <div className={`rainwoodDatePopover${dropUp ? ' dropUp' : ''}`} role="dialog" aria-label={`${label} calendar`}>
       <div className="rainwoodDatePopoverHeader">
-        <span>{label}</span>
+        <span>{displayLabel}</span>
         <div className="rainwoodDateSelectors">
           <select aria-label={`${label} Month`} value={visibleMonth.getUTCMonth()} onChange={(event) => setVisibleMonth(new Date(Date.UTC(visibleMonth.getUTCFullYear(), Number(event.target.value), 1)))}>
             {monthNames.map((month, index) => <option key={month} value={index}>{month}</option>)}
@@ -108,7 +109,7 @@ export function RainwoodDatePicker({ label, value, onChange, minDate, maxDate, p
         const isCurrentMonth = day.getUTCMonth() === visibleMonth.getUTCMonth();
         const isSelected = dateValue === value;
         const isDisabled = Boolean((minimumDate && day < minimumDate) || (maximumDate && day > maximumDate));
-        return <button type="button" key={dateValue} className={`${isCurrentMonth ? '' : 'outsideMonth '}${isSelected ? 'selectedDay' : ''}`} disabled={isDisabled} onClick={() => { setOpen(false); setVisibleMonth(monthStart(day)); onChange(dateValue); }}>{day.getUTCDate()}</button>;
+        return <button type="button" key={dateValue} aria-label={dateValue} className={`${isCurrentMonth ? '' : 'outsideMonth '}${isSelected ? 'selectedDay' : ''}`} disabled={isDisabled} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setVisibleMonth(monthStart(day)); onChange(dateValue); setOpen(false); window.setTimeout(() => setOpen(false), 0); }}>{day.getUTCDate()}</button>;
       })}</div>
     </div>}
   </div>;

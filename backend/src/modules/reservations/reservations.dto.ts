@@ -47,6 +47,14 @@ export class CreateReservationDto {
   @IsOptional()
   @IsString()
   internalRemark?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  offlinePayment?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  onlinePayment?: boolean;
 }
 
 export class ManualReservationDto extends CreateReservationDto {
@@ -160,6 +168,10 @@ export class RatePlanListQueryDto {
   @IsOptional()
   @IsDateString()
   to?: string;
+
+  @IsOptional()
+  @IsIn(['rate-book'])
+  view?: 'rate-book';
 }
 
 export class PayDueMilestonesDto {

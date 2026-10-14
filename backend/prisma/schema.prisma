@@ -621,12 +621,14 @@ model User {
   staffHotelId                     String?
   staffHotel                       Hotel?                      @relation("StaffHotel", fields: [staffHotelId], references: [id], onDelete: SetNull)
   active                           Boolean                     @default(true)
+  emailVerifiedAt                 DateTime?
   agentPaymentPolicy               AgentPaymentPolicy?
   bookingPaymentPercent            Decimal?                    @db.Decimal(5, 2)
   tokenVersion                     Int                         @default(0)
   failedLoginCount                 Int                         @default(0)
   lockedUntil                      DateTime?
   refreshTokens                    RefreshToken[]
+  emailVerificationCodes           EmailVerificationCode[]
   auditLogs                        AuditLog[]                  @relation("AuditActor")
   featureSettingsUpdated           FeatureSetting[]            @relation("FeatureSettingUpdatedBy")
   featureOverridesUpdated          HotelFeatureOverride[]      @relation("HotelFeatureOverrideUpdatedBy")
@@ -764,6 +766,20 @@ model RefreshToken {
   @@index([userId, familyId])
   @@index([expiresAt])
   @@index([familyId, revokedAt])
+}
+
+model EmailVerificationCode {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 model Hotel {

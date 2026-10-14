@@ -1,6 +1,6 @@
-import { Body, Controller, Headers, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
-import { ManualPaymentDto, MockCompletionDto, VerifyPaymentDto } from './payments.dto';
+import { ManualPaymentDto, MockCompletionDto, PaymentOrderDto, RazorpayVerifyPaymentDto, VerifyPaymentDto } from './payments.dto';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { RolesGuard } from '../../common/roles.guard';
 import { Roles } from '../../common/roles.decorator';
@@ -14,15 +14,36 @@ import { RequireFeature } from '../features/require-feature.decorator';
 export class PaymentsController {
   constructor(private s: PaymentsService) {}
 
+  @Get('wallet-recharge/offline')
+  @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+  @RequireFeature('payments')
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'ACCOUNTS')
+  offlineWalletRecharges() { return this.s.listOfflineWalletRecharges(); }
+
+  @Post('wallet-recharge/offline/:attemptId/verify')
+  @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
+  @RequireFeature('payments')
+  @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'ACCOUNTS')
+  verifyOfflineWalletRecharge(@Param('attemptId') attemptId: string, @CurrentUser() user: any) { return this.s.verifyOfflineWalletRecharge(attemptId, user.id); }
+
   @Post(':reference/order')
   @UseGuards(OptionalJwtAuthGuard, ActiveAgentGuard)
-  order(@Param('reference') reference: string, @Headers('idempotency-key') key: string) { return this.s.createOrder(reference, key); }
+  order(@Param('reference') reference: string, @Headers('idempotency-key') key: string, @Body() body?: PaymentOrderDto) { return this.s.createOrder(reference, key, body?.amount); }
+
+  @Post(':reference/verify')
+  @UseGuards(OptionalJwtAuthGuard, ActiveAgentGuard)
+  verifyCheckout(@Param('reference') reference: string, @Body() body: RazorpayVerifyPaymentDto) { return this.s.verifyCheckoutPayment(reference, body); }
 
   @Post(':reference/manual')
   @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
   @RequireFeature('payments')
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION')
   manual(@Param('reference') reference: string, @Body() body: ManualPaymentDto, @CurrentUser() user: any) { return this.s.manual(reference, body, user.id); }
+
+  @Post(':reference/offline')
+  @UseGuards(JwtAuthGuard, ActiveAgentGuard, RolesGuard)
+  @Roles('AGENT' as any)
+  offline(@Param('reference') reference: string, @Body() body: ManualPaymentDto, @CurrentUser() user: any) { return this.s.submitOffline(reference, body, user.id); }
 
   @Post(':reference/manual/:paymentId/verify')
   @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)

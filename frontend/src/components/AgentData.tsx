@@ -32,14 +32,18 @@ export function AgentWorkspace({ title, children }: { title: string; children: (
   useEffect(() => {
     let mounted = true;
     setUser(null);
-    apiRequest<{ accessToken: string; user: { role: string } }>('/auth/refresh', { method: 'POST' })
-      .then(async (session) => {
-        if (session.user.role !== 'AGENT') {
-          router.replace('/agent/login');
-          return;
-        }
+    const loadProfile = async () => {
+      try {
+        return await apiRequest<AgentProfileAccess>('/agents/me/profile');
+      } catch {
+        const session = await apiRequest<{ accessToken: string; user: { role: string } }>('/auth/refresh', { method: 'POST' });
+        if (session.user.role !== 'AGENT') throw new Error('NOT_AGENT');
         setAccessToken(session.accessToken, session.user.role);
-        const profile = await apiRequest<AgentProfileAccess>('/agents/me/profile');
+        return apiRequest<AgentProfileAccess>('/agents/me/profile');
+      }
+    };
+    loadProfile()
+      .then(async (profile) => {
         if (!mounted) return;
         if (profile.onboardingStatus === 'DEACTIVATED') {
           clearAccessToken();

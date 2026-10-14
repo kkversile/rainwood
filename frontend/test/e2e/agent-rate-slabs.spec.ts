@@ -99,8 +99,10 @@ test('admin publishes a two-band slab and the agent can read the contract bands'
   await page.getByRole('button', { name: 'Book now' }).first().click();
   const rail = page.locator('aside[aria-label="Booking criteria"]');
   await expect(rail).toBeVisible();
-  await rail.getByLabel('Check-in').fill('2026-10-14');
-  await rail.getByLabel('Check-out').fill('2026-10-15');
+  await rail.getByRole('button', { name: 'Check-in' }).click();
+  await rail.getByRole('button', { name: '2026-10-14', exact: true }).click();
+  await rail.getByRole('button', { name: 'Check-out' }).click();
+  await rail.getByRole('button', { name: '2026-10-15', exact: true }).click();
   await rail.getByLabel('Adults').fill('2');
   await rail.getByLabel('Children with bed').fill('1');
   await rail.getByLabel('Children without bed').fill('1');

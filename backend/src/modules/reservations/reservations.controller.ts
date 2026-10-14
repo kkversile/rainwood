@@ -45,7 +45,7 @@ export class ReservationsController {
   @Get('mine/rate-plans')
   @UseGuards(JwtAuthGuard, ActiveAgentGuard, RolesGuard)
   @Roles('AGENT' as any)
-  mineRatePlans(@CurrentUser() user: any, @Query() query: RatePlanListQueryDto) { return this.s.listRatePlansForUser(user.id, query.from, query.to); }
+  mineRatePlans(@CurrentUser() user: any, @Query() query: RatePlanListQueryDto) { return this.s.listRatePlansForUser(user.id, query.from, query.to, query.view); }
 
   @Get('in-house')
   @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)

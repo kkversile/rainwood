@@ -32,6 +32,7 @@ export function aggregatePriceBreakdown(option: Pick<AvailabilityOption, 'priceB
 export function agentPaymentConfirmation(reservation: Pick<ReservationSummary, 'advanceAmount' | 'balanceAmount' | 'totalAmount' | 'paymentStatus' | 'paymentTermsSnapshot'>): string {
   const advance = Number(reservation.advanceAmount);
   const balance = Number(reservation.balanceAmount);
+  if (reservation.paymentStatus === 'PENDING') return `Offline payment proof submitted for admin approval. The booking will be confirmed after the payment is verified.`;
   if (!reservation.paymentTermsSnapshot) return balance <= 0 ? `Payment of INR ${advance.toFixed(2)} was received. The booking is fully paid.` : `INR ${advance.toFixed(2)} was received. INR ${balance.toFixed(2)} remains payable.`;
   if (reservation.paymentTermsSnapshot.policy === 'CREDIT') return `Booking confirmed on credit. INR ${balance.toFixed(2)} remains outstanding according to the saved payment schedule.`;
   if (advance === 0 && balance > 0 && reservation.paymentStatus === 'UNPAID') return `Booking confirmed with no wallet debit today. INR ${balance.toFixed(2)} remains payable according to the saved payment schedule.`;

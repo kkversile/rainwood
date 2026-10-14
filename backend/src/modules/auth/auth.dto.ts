@@ -29,6 +29,20 @@ export class AgentRegisterDto {
   password!: string;
 }
 
+export class VerifyAgentEmailDto {
+  @IsEmail()
+  email!: string;
+
+  @IsString()
+  @Matches(/^\d{6}$/)
+  code!: string;
+}
+
+export class ResendAgentEmailDto {
+  @IsEmail()
+  email!: string;
+}
+
 export class RefreshDto {
   @IsOptional()
   @IsString()
