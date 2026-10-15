@@ -39,3 +39,17 @@ test('expired protected sessions clear auth state and redirect to login', async 
     else delete (globalThis as { window?: unknown }).window;
   }
 });
+
+test('login errors preserve the account-specific message instead of saying the session expired', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ message: 'Your agent account is deactivated. Please contact support.' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+
+  try {
+    await assert.rejects(
+      apiRequest('/auth/login', { method: 'POST', body: JSON.stringify({ email: 'agent@example.com', password: 'wrong-password' }) }),
+      /agent account is deactivated/i,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

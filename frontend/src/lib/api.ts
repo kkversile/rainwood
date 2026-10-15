@@ -48,7 +48,7 @@ async function readBody(response: Response) {
   try { return JSON.parse(text); } catch { return { message: text }; }
 }
 
-export function friendlyApiError(status: number, body: any) {
+export function friendlyApiError(status: number, body: any, path = '') {
   const raw = Array.isArray(body?.message)
     ? body.message.join(', ')
     : typeof body?.message === 'object' && body.message
@@ -56,7 +56,10 @@ export function friendlyApiError(status: number, body: any) {
       : body?.message;
   const message = String(raw ?? '').replace(/^(BadRequest|Conflict|Forbidden|NotFound)Exception:\s*/i, '').trim();
   if (/active_assignment_exists|room already occupied|room_assignment_conflict/i.test(message)) return 'This room is already occupied. Choose another available room.';
-  if (status === 401) return 'Your session has expired. Sign in again to continue.';
+  if (status === 401) {
+    if (path.startsWith('/auth/login')) return message || 'The email or password is incorrect.';
+    return 'Your session has expired. Sign in again to continue.';
+  }
   if (status === 403) return 'You do not have permission to perform this action.';
   if (status === 404) return 'The requested record could not be found. Refresh and try again.';
   if (status === 409) return 'This record conflicts with another operation. Refresh and try again.';
@@ -84,7 +87,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, retry 
   if (response.status === 401 && !path.startsWith('/auth/')) redirectToLoginAfterUnauthorized();
   const body = await readBody(response);
   if (!response.ok) {
-    throw new Error(friendlyApiError(response.status, body));
+    throw new Error(friendlyApiError(response.status, body, path));
   }
   return body as T;
 }
