@@ -39,6 +39,15 @@ export type FrontDeskException = {
   urgency: 'attention' | 'info';
 };
 
+export function frontDeskOutstanding(reference: string, bookingBalance: number | string, inHouse: Array<{ reference: string; totalOutstanding: number | string }>) {
+  return Number(inHouse.find((row) => row.reference === reference)?.totalOutstanding ?? bookingBalance);
+}
+
+export function folioPaymentBadge(outstanding: number | null, unavailable = false) {
+  if (outstanding === null) return { value: unavailable ? 'FOLIO_UNAVAILABLE' : 'LOADING_FOLIO', tone: 'warn' as const };
+  return outstanding > 0.005 ? { value: 'BALANCE_DUE', tone: 'warn' as const } : { value: 'PAID', tone: 'ok' as const };
+}
+
 export function categorizeFrontDeskExceptions(rows: Array<{ reference: string; guestName: string; stayStatus?: string | null; status?: string | null; reconfirmed?: boolean; balance?: number | string | null; assignedRooms?: Array<{ status?: string | null }> }>): FrontDeskException[] {
   const result: FrontDeskException[] = [];
   for (const row of rows) {
