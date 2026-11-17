@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PaymentMode, PaymentProvider, Prisma, UserRole } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
@@ -9,6 +9,7 @@ import { ManualPaymentDto, MockCompletionDto, RazorpayVerifyPaymentDto } from '.
 import { CashierShiftsService } from '../cashier-shifts/cashier-shifts.service';
 import { getActorScope } from '../../common/role-scope';
 import { MailService } from '../../common/mail.service';
+import { serializable } from '../../common/transactions';
 
 @Injectable()
 export class PaymentsService {
@@ -271,15 +272,31 @@ export class PaymentsService {
     const reservation = await this.p.reservation.findUnique({ where: { reference } });
     if (!reservation) throw new NotFoundException('Reservation not found');
     if (!actor.isGlobal && actor.role !== UserRole.ACCOUNTS && actor.hotelId !== reservation.hotelId) throw new ForbiddenException('You cannot record a payment for another hotel.');
-    if (body.amount > Number(reservation.balanceAmount)) throw new BadRequestException('Payment exceeds balance due');
-    const payment = await this.p.$transaction(async (tx) => {
+    const replay = <T extends { reservationId: string; amount: Prisma.Decimal; mode: PaymentMode; reference: string | null; proofFileId: string | null }>(payment: T): T => {
+      if (payment.reservationId !== reservation.id || Number(payment.amount) !== body.amount || payment.mode !== body.mode || (payment.reference ?? '') !== (body.reference?.trim() ?? '') || (payment.proofFileId ?? '') !== (body.proofFileId ?? '')) throw new ConflictException('This payment retry key was already used for a different payment.');
+      return payment;
+    };
+    const record = async () => serializable(this.p, async (tx) => {
+      if (body.idempotencyKey) {
+        const existing = await tx.payment.findUnique({ where: { idempotencyKey: body.idempotencyKey } });
+        if (existing) return { payment: replay(existing), created: false };
+      }
+      if (reservation.stayStatus === 'CHECKED_OUT') throw new ConflictException('Finalized stays cannot receive new booking payments.');
+      if (body.amount > Number(reservation.balanceAmount)) throw new BadRequestException('Payment exceeds balance due');
       const openShift = this.cashierShifts ? await this.cashierShifts.findOpenForHotel(tx, reservation.hotelId) : null;
       if (body.mode === PaymentMode.CASH && !openShift) throw new BadRequestException('Open a cashier shift before recording cash payments.');
-      const created = await tx.payment.create({ data: { reservationId: reservation.id, amount: body.amount, mode: body.mode, provider: 'MANUAL', reference: body.reference, proofFileId: body.proofFileId, cashierShiftId: openShift?.id, verified: false } });
+      const created = await tx.payment.create({ data: { reservationId: reservation.id, amount: body.amount, mode: body.mode, provider: 'MANUAL', reference: body.reference?.trim(), proofFileId: body.proofFileId, idempotencyKey: body.idempotencyKey, cashierShiftId: openShift?.id, verified: false } });
       await tx.reservation.update({ where: { id: reservation.id }, data: { paymentStatus: 'PENDING' } });
-      return created;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-    await this.audit.log({ actorUserId: userId, action: 'PAYMENT_RECORDED', entityType: 'Payment', entityId: payment.id, after: { amount: body.amount, mode: body.mode, cashierShiftId: payment.cashierShiftId } });
+      return { payment: created, created: true };
+    });
+    const result = await record().catch(async (error: unknown) => {
+      if ((error as { code?: string })?.code !== 'P2002' || !body.idempotencyKey) throw error;
+      const existing = await this.p.payment.findUnique({ where: { idempotencyKey: body.idempotencyKey } });
+      if (!existing) throw error;
+      return { payment: replay(existing), created: false };
+    });
+    const payment = result.payment;
+    if (result.created) await this.audit.log({ actorUserId: userId, action: 'PAYMENT_RECORDED', entityType: 'Payment', entityId: payment.id, after: { amount: body.amount, mode: body.mode, cashierShiftId: payment.cashierShiftId } });
     return payment;
   }
 

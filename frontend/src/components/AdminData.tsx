@@ -4,6 +4,7 @@ import { Fragment, createContext, FormEvent, useContext, useEffect, useRef, useS
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { apiFileBlob, apiRequest, setAccessToken } from '../lib/api';
 import { todayInHotelTimezone } from '../lib/hotel-date-time';
+import { normalizeReservationHold, type ReservationHold } from '../lib/reservation-quote';
 import { useDialog } from './ReactDialog';
 import { ReservationPaymentSchedule, type PaymentSchedule } from './ReservationPaymentSchedule';
 
@@ -61,7 +62,7 @@ type ReservationHotel = { id: string; name: string; rooms: { id: string; name: s
 type ReservationDetail = { reference: string; status: string; paymentStatus: string; syncStatus: string; guestName: string; email: string; mobile: string; address?: string | null; gstin?: string | null; source: string; sourceName?: string | null; checkIn: string; checkOut: string; totalAmount: number | string; taxAmount: number | string; advanceAmount: number | string; balanceAmount: number | string; specialRequest?: string | null; billingInstruction?: string | null; internalRemark?: string | null; hotel: { name: string }; lines: { roomType: { name: string }; ratePlan: { name: string }; checkIn: string; checkOut: string; rooms: number; adults: number; children: number; nightlyRate: number | string; taxAmount: number | string; lineTotal: number | string }[]; payments: { amount: number | string; mode: string; verified: boolean; reference?: string | null }[]; paymentSchedule?: PaymentSchedule | null };
 type ReservationForm = { hotelId: string; roomTypeId: string; ratePlanId: string; guestName: string; email: string; mobile: string; address: string; gstin: string; checkIn: string; checkOut: string; rooms: number; adults: number; children: number; source: string; sourceName: string; specialRequest: string; billingInstruction: string; internalRemark: string };
 const blankReservation: ReservationForm = { hotelId: '', roomTypeId: '', ratePlanId: '', guestName: '', email: '', mobile: '', address: '', gstin: '', checkIn: '', checkOut: '', rooms: 1, adults: 2, children: 0, source: 'DIRECT', sourceName: '', specialRequest: '', billingInstruction: '', internalRemark: '' };
-type ReservationQuote = { key: string; token: string; expiresAt: string; quotedTotal: number | string; quotedTax?: number | string; quotedBreakdown?: unknown; lines?: unknown[] };
+type ReservationQuote = ReturnType<typeof normalizeReservationHold> & { key: string };
 
 function reservationQuoteKey(form: ReservationForm) {
   return [form.hotelId, form.roomTypeId, form.ratePlanId, form.checkIn, form.checkOut, form.rooms, form.adults, form.children].join('|');
@@ -148,8 +149,8 @@ export function ReservationData() {
     setForm(effectiveForm);
     setBusy(true); setFormError(''); setQuote(null);
     try {
-      const hold = await apiRequest<ReservationQuote>('/holds', { method: 'POST', body: JSON.stringify({ hotelId: effectiveHotelId, roomTypeId: effectiveRoomTypeId, ratePlanId: effectiveRatePlanId, checkIn: form.checkIn, checkOut: form.checkOut, rooms: Number(form.rooms), adults: Number(form.adults), children: Number(form.children), guestEmail: form.email }) });
-      setQuote({ ...hold, key: reservationQuoteKey(effectiveForm) });
+      const hold = await apiRequest<ReservationHold>('/holds', { method: 'POST', body: JSON.stringify({ hotelId: effectiveHotelId, roomTypeId: effectiveRoomTypeId, ratePlanId: effectiveRatePlanId, checkIn: form.checkIn, checkOut: form.checkOut, rooms: Number(form.rooms), adults: Number(form.adults), children: Number(form.children), guestEmail: form.email }) });
+      setQuote({ ...normalizeReservationHold(hold), key: reservationQuoteKey(effectiveForm) });
     } catch (reason) { setFormError(reason instanceof Error ? reason.message : 'Could not check availability and price'); }
     finally { setBusy(false); }
   }
