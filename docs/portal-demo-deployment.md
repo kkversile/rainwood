@@ -15,11 +15,16 @@ Optionally set `SEED_PORTAL_HOTEL_CODE` (default `RW-KODAI`).
 
 This seed requires the selected hotel to exist and be active. It creates missing
 demo admin, agent and department accounts plus three demo service items. Existing
-accounts must already have the expected roles, hotel scopes and passwords. It
-fails instead of resetting credentials or reactivating accounts.
+accounts must already have the expected roles and hotel scopes. Passwords are
+preserved by default. On an authorized demo site, add `--sync-demo-passwords` to
+align only these six fixed demo identities with the configured prefills. Changed
+credentials invalidate older sessions. Inactive accounts are not reactivated.
 
-Existing service items, rates, inventory, reservations, payments and settlement
-snapshots are preserved. The existing service-demo stay is checked before and
+The seed also adds a dirty demo room and task, a complimentary checked-in demo
+service guest, and a hotel-wide maintenance ticket. Demo room types and rate plans
+are inactive with no public inventory. Subsequent runs preserve their progress.
+Existing service items, public rates, inventory, reservations, payments and settlement
+snapshots are preserved. The existing local service-demo stay is checked before and
 after the seed to ensure its room, checkout and final-folio states are unchanged.
 The full `prisma:seed` command updates pricing and inventory and should not be used
 to deploy these portal improvements onto an already populated database.
