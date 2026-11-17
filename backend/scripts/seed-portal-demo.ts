@@ -57,11 +57,15 @@ async function main() {
       for (const item of items) await tx.serviceItem.upsert({ where: { hotelId_code: { hotelId: hotel.id, code: item.code } }, create: { hotelId: hotel.id, ...item, description: 'Dedicated demo service item', active: true }, update: {} });
       const agent = await tx.user.findUniqueOrThrow({ where: { email: 'agent@rainwood.demo' } });
       await tx.agentWallet.upsert({ where: { agentId: agent.id }, create: { agentId: agent.id, balance: 0 }, update: {} });
-      if (missing.some((spec) => spec.role === UserRole.AGENT)) {
-        const plan = await tx.ratePlan.findFirst({ where: { active: true, roomType: { hotelId: hotel.id, active: true }, master: { active: true, code: 'A' } }, orderBy: { id: 'asc' } });
-        if (plan) await tx.agentRatePlan.create({ data: { agentId: agent.id, ratePlanId: plan.id, active: true } });
-      }
       const admin = await tx.user.findUniqueOrThrow({ where: { email: 'admin@rainwood.demo' } });
+      const today = getHotelOperationalDate(hotel.timezoneName);
+      const mapping = await tx.agentHotelRateCategoryAssignment.findFirst({ where: { agentId: agent.id, hotelId: hotel.id, active: true, validTo: { gte: today } } });
+      if (!mapping) {
+        const coverage = await tx.rateDay.aggregate({ where: { date: { gte: today }, ratePlan: { active: true, master: { active: true, kind: 'CANONICAL_MEAL' }, roomType: { hotelId: hotel.id, active: true } } }, _min: { date: true }, _max: { date: true } });
+        assert.ok(coverage._min.date && coverage._max.date, 'Publish canonical room rates before creating demo agent access.');
+        const created = await tx.agentHotelRateCategoryAssignment.create({ data: { agentId: agent.id, hotelId: hotel.id, category: 'RACK', validFrom: coverage._min.date, validTo: coverage._max.date, createdById: admin.id } });
+        await tx.auditLog.create({ data: { actorUserId: admin.id, action: 'DEMO_AGENT_ACCESS_CREATED', entityType: 'AgentHotelRateCategoryAssignment', entityId: created.id, after: { agentId: agent.id, hotelId: hotel.id, category: 'RACK', demo: true } } });
+      }
       const roomType = await tx.roomType.upsert({ where: { hotelId_code: { hotelId: hotel.id, code: 'DEMO-PORTAL' } }, create: { hotelId: hotel.id, code: 'DEMO-PORTAL', name: 'Portal Demo Room - Not for sale', active: false, roomsAvailable: 0, maxAdults: 1, maxChildren: 0, maxOccupancy: 1 }, update: {} });
       const master = await tx.ratePlanMaster.upsert({ where: { hotelId_code: { hotelId: hotel.id, code: 'DEMO-PORTAL' } }, create: { hotelId: hotel.id, code: 'DEMO-PORTAL', name: 'Portal Demo Complimentary Stay', mealPlan: 'EP', active: false }, update: {} });
       const plan = await tx.ratePlan.upsert({ where: { roomTypeId_masterId: { roomTypeId: roomType.id, masterId: master.id } }, create: { roomTypeId: roomType.id, masterId: master.id, code: 'DEMO-PORTAL', name: 'Demo complimentary rate', mealPlan: 'EP', active: false }, update: {} });

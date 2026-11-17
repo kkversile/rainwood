@@ -18,6 +18,12 @@ test('confirmation wording follows immutable reservation payment values', () => 
   assert.match(agentPaymentConfirmation({ advanceAmount: 0, balanceAmount: 20000, totalAmount: 20000, paymentStatus: 'UNPAID', paymentTermsSnapshot: { policy: 'CREDIT' } }), /confirmed on credit/);
 });
 
+test('approved offline payments do not claim a wallet deduction', () => {
+  const wording = agentPaymentConfirmation({ advanceAmount: 6160, balanceAmount: 0, totalAmount: 6160, paymentStatus: 'PAID', paymentTermsSnapshot: { policy: 'PERCENTAGE', percentage: 100 } });
+  assert.match(wording, /6160.00 was received.*fully paid/);
+  assert.doesNotMatch(wording, /wallet/);
+});
+
 test('agent status labels distinguish pending and deactivated', () => {
   assert.equal(agentStatusLabel(false, null), 'KYC Pending');
   assert.equal(agentStatusLabel(false, null, true), 'Under Review');

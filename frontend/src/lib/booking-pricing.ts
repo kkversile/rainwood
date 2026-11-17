@@ -36,8 +36,8 @@ export function agentPaymentConfirmation(reservation: Pick<ReservationSummary, '
   if (!reservation.paymentTermsSnapshot) return balance <= 0 ? `Payment of INR ${advance.toFixed(2)} was received. The booking is fully paid.` : `INR ${advance.toFixed(2)} was received. INR ${balance.toFixed(2)} remains payable.`;
   if (reservation.paymentTermsSnapshot.policy === 'CREDIT') return `Booking confirmed on credit. INR ${balance.toFixed(2)} remains outstanding according to the saved payment schedule.`;
   if (advance === 0 && balance > 0 && reservation.paymentStatus === 'UNPAID') return `Booking confirmed with no wallet debit today. INR ${balance.toFixed(2)} remains payable according to the saved payment schedule.`;
-  if (balance <= 0) return `INR ${advance.toFixed(2)} was deducted from your agent wallet. The booking is fully paid.`;
-  return `INR ${advance.toFixed(2)} was deducted from your agent wallet. INR ${balance.toFixed(2)} remains payable according to the saved payment schedule.`;
+  if (balance <= 0) return `INR ${advance.toFixed(2)} was received. The booking is fully paid.`;
+  return `INR ${advance.toFixed(2)} was received. INR ${balance.toFixed(2)} remains payable according to the saved payment schedule.`;
 }
 
 export function dueNowForAgentBooking(total: number, checkIn: string, milestones: PaymentMilestoneView[] | undefined, createdAt = new Date()) {

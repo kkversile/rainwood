@@ -20,6 +20,11 @@ preserved by default. On an authorized demo site, add `--sync-demo-passwords` to
 align only these six fixed demo identities with the configured prefills. Changed
 credentials invalidate older sessions. Inactive accounts are not reactivated.
 
+The demo agent needs a dated hotel category assignment for booking. When none
+is active or upcoming, the seed grants RACK access over existing published
+canonical rate dates. Existing category assignments and published prices are
+preserved; a legacy plan link alone does not grant booking access.
+
 The seed also adds a dirty demo room and task, a complimentary checked-in demo
 service guest, and a hotel-wide maintenance ticket. Demo room types and rate plans
 are inactive with no public inventory. Subsequent runs preserve their progress.

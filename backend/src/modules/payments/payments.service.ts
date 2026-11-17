@@ -307,20 +307,32 @@ export class PaymentsService {
       throw new BadRequestException('Offline payment must use UPI, bank transfer, or cheque.');
     }
     if (!body.proofFileId) throw new BadRequestException('A payment screenshot or proof document is required.');
-    const reservation = await this.p.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, email: true, guestName: true, createdById: true, balanceAmount: true, status: true } });
-    if (!reservation) throw new NotFoundException('Reservation not found');
-    if (reservation.createdById !== userId) throw new ForbiddenException('You can only submit payment for your own booking.');
-    if (['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(reservation.status)) throw new BadRequestException('Reservation is not payable');
-    if (body.amount > Number(reservation.balanceAmount)) throw new BadRequestException('Payment exceeds balance due');
     const proof = await this.p.storedFile.findFirst({ where: { id: body.proofFileId, kind: 'PAYMENT_PROOF', createdById: userId }, select: { id: true } });
     if (!proof) throw new BadRequestException('The payment proof is invalid or no longer available.');
-    const payment = await this.p.$transaction(async (tx) => {
+    const key = body.idempotencyKey ?? `offline:${reference}:${proof.id}`;
+    const record = () => serializable(this.p, async (tx) => {
+      const reservation = await tx.reservation.findUnique({ where: { reference }, select: { id: true, reference: true, email: true, guestName: true, createdById: true, balanceAmount: true, status: true, stayStatus: true } });
+      if (!reservation) throw new NotFoundException('Reservation not found');
+      if (reservation.createdById !== userId) throw new ForbiddenException('You can only submit payment for your own booking.');
+      const existing = await tx.payment.findUnique({ where: { idempotencyKey: key } }) ?? await tx.payment.findFirst({ where: { reservationId: reservation.id, proofFileId: proof.id } });
+      if (existing) {
+        if (existing.reservationId !== reservation.id || Number(existing.amount) !== body.amount || existing.mode !== body.mode || (existing.reference ?? '') !== (body.reference?.trim() ?? '') || existing.proofFileId !== proof.id) throw new BadRequestException('This proof or retry key belongs to a different payment.');
+        return { payment: existing, reservation, created: false };
+      }
+      if (['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(reservation.status) || ['CHECKED_OUT', 'CANCELLED', 'NO_SHOW'].includes(reservation.stayStatus)) throw new BadRequestException('Reservation is not payable');
+      if (body.amount > Number(reservation.balanceAmount)) throw new BadRequestException('Payment exceeds balance due');
       const pending = await tx.payment.findFirst({ where: { reservationId: reservation.id, verified: false } });
       if (pending) throw new BadRequestException('A payment proof is already awaiting admin approval.');
-      const created = await tx.payment.create({ data: { reservationId: reservation.id, amount: body.amount, mode: body.mode, provider: 'MANUAL', reference: body.reference?.trim() || null, proofFileId: proof.id, verified: false } });
+      const payment = await tx.payment.create({ data: { reservationId: reservation.id, amount: body.amount, mode: body.mode, provider: 'MANUAL', reference: body.reference?.trim() || null, proofFileId: proof.id, idempotencyKey: key, verified: false } });
       await tx.reservation.update({ where: { id: reservation.id }, data: { paymentStatus: 'PENDING' } });
-      return created;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      return { payment, reservation, created: true };
+    });
+    const result = await record().catch((error: unknown) => {
+      if ((error as { code?: string })?.code !== 'P2002') throw error;
+      return record();
+    });
+    const { payment, reservation } = result;
+    if (!result.created) return payment;
     await this.audit.log({ actorUserId: userId, action: 'PAYMENT_SUBMITTED_FOR_REVIEW', entityType: 'Payment', entityId: payment.id, after: { reference, amount: body.amount, mode: body.mode, proofFileId: proof.id } });
     if (this.mail) {
       const summary = `Offline payment proof submitted for reservation ${reference}. Guest: ${reservation.guestName}. Amount: INR ${Number(body.amount).toFixed(2)}. Mode: ${body.mode}.`;
@@ -343,15 +355,23 @@ export class PaymentsService {
     return this.webhook('MOCK', raw, { 'x-mock-signature': signature }, payload);
   }
 
-  async verify(paymentId: string, userId: string) {
-    const payment = await this.p.payment.findUnique({ where: { id: paymentId } });
-    if (!payment) throw new NotFoundException('Payment not found');
-    if (payment.verified) return payment;
-    const updated = await this.p.$transaction(async (tx) => {
-      const verified = await tx.payment.update({ where: { id: paymentId, verified: false }, data: { verified: true, verifiedById: userId, paidAt: new Date() } });
-      await this.recalculateTx(tx, payment.reservationId);
-      return verified;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  async verify(paymentId: string, userId: string, reference?: string) {
+    const actor = await getActorScope(this.p, userId);
+    if (!([UserRole.SUPER_ADMIN, UserRole.CORPORATE_ADMIN, UserRole.ADMIN, UserRole.ACCOUNTS] as UserRole[]).includes(actor.role)) throw new ForbiddenException('You cannot approve payments.');
+    const result = await serializable(this.p, async (tx) => {
+      const payment = await tx.payment.findUnique({ where: { id: paymentId }, include: { reservation: { select: { reference: true, hotelId: true, balanceAmount: true, status: true, stayStatus: true } } } });
+      if (!payment || (reference && payment.reservation.reference !== reference)) throw new NotFoundException('Payment not found for this reservation');
+      if (actor.role === UserRole.ADMIN && actor.hotelId !== payment.reservation.hotelId) throw new ForbiddenException('You cannot approve payments for another hotel.');
+      if (payment.verified) return { payment, changed: false };
+      if (['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(payment.reservation.status) || ['CHECKED_OUT', 'CANCELLED', 'NO_SHOW'].includes(payment.reservation.stayStatus)) throw new BadRequestException('Finalized stays cannot accept payment approval.');
+      if (Number(payment.amount) > Number(payment.reservation.balanceAmount)) throw new BadRequestException('Payment exceeds balance due');
+      const changed = await tx.payment.updateMany({ where: { id: paymentId, verified: false }, data: { verified: true, verifiedById: userId, paidAt: new Date() } });
+      if (changed.count) await this.recalculateTx(tx, payment.reservationId);
+      return { payment: await tx.payment.findUniqueOrThrow({ where: { id: paymentId } }), changed: changed.count === 1 };
+    });
+    const updated = result.payment;
+    if (!result.changed) return updated;
+    const payment = updated;
     await this.audit.log({ actorUserId: userId, action: 'PAYMENT_VERIFIED', entityType: 'Payment', entityId: paymentId });
     if (this.mail) {
       const reservation = await this.p.reservation.findUnique({ where: { id: payment.reservationId }, select: { email: true, reference: true, advanceAmount: true, balanceAmount: true } });

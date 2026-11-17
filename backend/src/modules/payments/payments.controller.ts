@@ -49,7 +49,7 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard, RolesGuard, FeatureGuard)
   @RequireFeature('payments')
   @Roles('SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'ACCOUNTS')
-  verify(@Param('paymentId') paymentId: string, @Body() _body: VerifyPaymentDto, @CurrentUser() user: any) { return this.s.verify(paymentId, user.id); }
+  verify(@Param('reference') reference: string, @Param('paymentId') paymentId: string, @Body() _body: VerifyPaymentDto, @CurrentUser() user: any) { return this.s.verify(paymentId, user.id, reference); }
 
   @Post(':reference/mock-complete')
   @UseGuards(OptionalJwtAuthGuard, ActiveAgentGuard)

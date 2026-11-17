@@ -285,6 +285,15 @@ export class ReservationsService {
       if (!hold) throw new BadRequestException('Hold expired or invalid');
       const authorizedAdmin = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN', 'RESERVATION'].includes(user?.role ?? '');
       if (hold.agentId && (!user || (user.id !== hold.agentId && !authorizedAdmin))) throw new ForbiddenException('This agent hold belongs to another agent.');
+      // A lost create response may be retried after the hold has been consumed.
+      // Only the owning agent's identical offline request may replay it.
+      if (hold.status === 'CONVERTED' && hold.convertedReservationId && user?.role === 'AGENT' && user.id === hold.agentId && body.offlinePayment === true && !body.onlinePayment) {
+        const existing = await tx.reservation.findUniqueOrThrow({ where: { id: hold.convertedReservationId }, include: { lines: { include: { nights: true, roomType: true, ratePlan: true } }, hotel: true } });
+        const same = existing.createdById === user.id && existing.source === 'AGENT' && body.source === 'AGENT' && existing.guestName === body.guestName && existing.email === body.email.toLowerCase() && existing.mobile === body.mobile &&
+          (['address', 'gstin', 'billingInstruction', 'internalRemark', 'specialRequest', 'corporateAccountId'] as const).every((field) => (existing[field] || '') === (body[field] || ''));
+        if (!same) throw new ConflictException('The converted hold belongs to different booking details.');
+        return existing;
+      }
       const lockRows = await this.holds.lockInventoryForLines(tx, hold.lines.map((line) => ({ roomTypeId: line.roomTypeId, checkIn: toDateOnly(line.checkIn), checkOut: toDateOnly(line.checkOut) })));
       const liveHold = await tx.inventoryHold.updateMany({ where: { id: hold.id, status: 'ACTIVE', expiresAt: { gt: new Date() } }, data: { status: 'CONVERTED' } });
       if (liveHold.count !== 1) throw new BadRequestException('Hold expired or already converted');
