@@ -2,8 +2,12 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight, CalendarDays, ChevronDown, RefreshCw } from 'lucide-react';
 import { apiRequest } from '../lib/api';
 import { useAdminProfile } from './AdminData';
+import { canAccessAdminRoute } from './Shell';
+import { useAdminFeatureAccess } from '../lib/admin-features';
+import { dashboardDrilldownHref } from '../lib/dashboard-drilldown';
 
 type Hotel = { id: string; name: string; timezoneName?: string };
 type Dashboard = {
@@ -22,10 +26,14 @@ const dateInZone = (timezone: string, value = new Date()) => {
   return `${values.year}-${values.month}-${values.day}`;
 };
 const shiftDate = (value: string, days: number) => { const date = new Date(`${value}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); };
-const money = (value: number) => `INR ${Number(value ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (value: unknown) => value == null ? '—' : `₹${Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const dateLabel = (value: string) => value ? new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${value.slice(0, 10)}T12:00:00Z`)) : '—';
+const presets = [['today', 'Today'], ['yesterday', 'Yesterday'], ['last7', 'Last 7 days'], ['month', 'This month']] as const;
+const sourceLabel = (value: string) => value.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 export function ManagementDashboard() {
   const { profile } = useAdminProfile();
+  const features = useAdminFeatureAccess();
   const canView = ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN'].includes(profile?.role ?? '');
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [hotelId, setHotelId] = useState('');
@@ -34,62 +42,92 @@ export function ManagementDashboard() {
   const [preset, setPreset] = useState('today');
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refresh, setRefresh] = useState(0);
+  const [hotelRetry, setHotelRetry] = useState(0);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [metric, setMetric] = useState<'roomRevenue' | 'occupancy'>('roomRevenue');
+  const [showDates, setShowDates] = useState(false);
+  const validRange = Boolean(from && to && from <= to);
+  const canOpen = (href: string, feature: string) => canAccessAdminRoute(profile?.role, href) && (profile?.role === 'SUPER_ADMIN' || (features.status === 'ready' && features.isEnabled(feature)));
 
   useEffect(() => {
     if (!canView) return;
+    let cancelled = false;
+    setLoading(true); setError('');
     apiRequest<Hotel[]>('/hotels').then((items) => {
+      if (cancelled) return;
       setHotels(items);
       if (items[0]) {
         const today = dateInZone(items[0].timezoneName ?? 'UTC');
         setHotelId(items[0].id); setFrom(today); setTo(today);
-      }
-    }).catch((reason: Error) => setError(reason.message));
-  }, [canView]);
+      } else setLoading(false);
+    }).catch((reason: Error) => { if (!cancelled) { setError(reason.message); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [canView, hotelRetry]);
 
-  const query = useMemo(() => new URLSearchParams({ ...(hotelId ? { hotelId } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) }).toString(), [hotelId, from, to]);
+  const query = useMemo(() => new URLSearchParams({ hotelId, from, to }).toString(), [hotelId, from, to]);
   useEffect(() => {
-    if (!canView || !hotelId || !from || !to) return;
+    if (!canView || !hotelId) return;
+    if (!validRange) { setLoading(false); return; }
+    let cancelled = false;
     setLoading(true); setError('');
-    apiRequest<Dashboard>(`/management/dashboard?${query}`).then(setData).catch((reason: Error) => { setData(null); setError(reason.message); }).finally(() => setLoading(false));
-  }, [canView, hotelId, from, to, query]);
+    apiRequest<Dashboard>(`/management/dashboard?${query}`).then((result) => {
+      if (!cancelled) { setData(result); setUpdatedAt(new Date()); }
+    }).catch((reason: Error) => { if (!cancelled) { setData(null); setError(reason.message); } }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [canView, hotelId, query, refresh, validRange]);
 
-  function selectPreset(value: string) {
+  function selectPreset(value: string, selectedHotel = hotelId) {
     setPreset(value);
-    const hotel = hotels.find((item) => item.id === hotelId) ?? hotels[0]; if (!hotel) return;
+    const hotel = hotels.find((item) => item.id === selectedHotel); if (!hotel) return;
     const today = dateInZone(hotel.timezoneName ?? 'UTC');
-    if (value === 'yesterday') { setFrom(shiftDate(today, -1)); setTo(shiftDate(today, -1)); }
-    else if (value === 'last7') { setFrom(shiftDate(today, -6)); setTo(today); }
-    else if (value === 'month') { setFrom(`${today.slice(0, 7)}-01`); setTo(today); }
-    else { setFrom(today); setTo(today); }
+    const nextFrom = value === 'yesterday' ? shiftDate(today, -1) : value === 'last7' ? shiftDate(today, -6) : value === 'month' ? `${today.slice(0, 7)}-01` : today;
+    const nextTo = value === 'yesterday' ? shiftDate(today, -1) : today;
+    if (from !== nextFrom || to !== nextTo || hotelId !== selectedHotel) { setData(null); setLoading(true); }
+    setFrom(nextFrom); setTo(nextTo);
   }
 
-  function changeHotel(value: string) {
-    setHotelId(value); const hotel = hotels.find((item) => item.id === value); if (!hotel) return;
-    const today = dateInZone(hotel.timezoneName ?? 'UTC'); setFrom(today); setTo(today); setPreset('today');
-  }
+  const k = data?.kpis;
+  const op = data?.operations;
+  const daily = data?.daily ?? [];
+  const maximum = Math.max(1, ...daily.map((day) => Number(day[metric])));
+  const magnitude = 10 ** Math.floor(Math.log10(maximum));
+  const chartMax = metric === 'occupancy' ? 100 : (Math.floor(maximum / magnitude) + 1) * magnitude;
+  const kpi = (key: string) => k?.[key] ?? '—';
+  const period = from === to ? dateLabel(from) : `${dateLabel(from)} – ${dateLabel(to)}`;
+  const financials = [['incidentalRevenue', 'Incidental revenue'], ['grossRevenue', 'Gross revenue'], ['operatingExpenses', 'Approved + paid expenses'], ['operatingContribution', 'Operating contribution'], ['paymentsReceived', 'Payments received']] as const;
+  const workspaceLink = (href: string, feature: string, label: string) => canOpen(href, feature) ? <Link className="dashTextLink" href={`${href}?hotelId=${encodeURIComponent(hotelId)}`}>{label}<ArrowRight size={14} aria-hidden="true" /></Link> : null;
+  function retry() { if (hotels.length) setRefresh((value) => value + 1); else setHotelRetry((value) => value + 1); }
 
-  const k = data?.kpis; const op = data?.operations;
-  const periodKpis = k ? [['occupancy', `${k.occupancy}%`, 'Occupancy'], ['adr', money(Number(k.adr)), 'ADR'], ['revpar', money(Number(k.revpar)), 'RevPAR'], ['roomRevenue', money(Number(k.roomRevenue)), 'Room revenue'], ['incidentalRevenue', money(Number(k.incidentalRevenue)), 'Incidental revenue'], ['grossRevenue', money(Number(k.grossRevenue)), 'Gross revenue'], ['operatingExpenses', money(Number(k.operatingExpenses)), 'Approved + paid expenses'], ['operatingContribution', money(Number(k.operatingContribution)), 'Operating contribution'], ['paymentsReceived', money(Number(k.paymentsReceived)), 'Payments received']] : [];
-  const periodEnd = k && op ? [['inHouse', k.inHouse, 'In house'], ['outstanding', money(Number(k.outstandingBalance)), 'Outstanding'], ['roomsAvailable', op.roomsAvailable, 'Available rooms'], ['dirtyRooms', op.dirtyRooms, 'Dirty'], ['cleaningRooms', op.cleaningRooms, 'Cleaning'], ['outOfOrderRooms', op.outOfOrderRooms, 'OOO'], ['maintenance', op.openMaintenanceTickets, 'Maintenance']] : [];
-  const operationalDestination = (key: string) => ({ inHouse: '/admin/in-house', roomsAvailable: '/admin/rooms-inventory', dirtyRooms: '/admin/housekeeping', cleaningRooms: '/admin/housekeeping', outOfOrderRooms: '/admin/maintenance', maintenance: '/admin/maintenance' } as Record<string, string>)[key];
+  if (!canView) return <section className="managementDashboard"><h1>Dashboard</h1><p className="hint">Management dashboard access is limited to management roles.</p></section>;
 
-  if (!canView) return <section className="managementDashboard"><p className="hint">Management dashboard access is limited to management roles.</p></section>;
-
-  return <section className="managementDashboard">
-    <section className="formCard managementFilters">
-      <div><span className="eyebrow">Hotel management</span><h1>Daily KPI dashboard</h1><p>Hotel-local operating metrics from nightly room revenue, posted folios, verified payments, and closed business-day snapshots.</p></div>
-      <div className="managementFilterGrid"><label>Hotel<select value={hotelId} onChange={(event) => changeHotel(event.target.value)}>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label><label>From date<input type="date" value={from} onChange={(event) => { setFrom(event.target.value); setPreset('custom'); }} /></label><label>To date<input type="date" value={to} onChange={(event) => { setTo(event.target.value); setPreset('custom'); }} /></label></div>
-      <div className="managementPresets">{[['today', 'Today'], ['yesterday', 'Yesterday'], ['last7', 'Last 7 days'], ['month', 'This month']].map(([value, label]) => <button key={value} type="button" className={`smallBtn ${preset === value ? '' : 'secondary'}`} onClick={() => selectPreset(value)}>{label}</button>)}</div>
-    </section>
-    {loading && <p className="loading">Loading hotel dashboard…</p>}
-    {error && <p className="error" role="alert">{error}</p>}
-    {data && k && op && <>
-      <section className="managementKpiGroup"><h2>Period performance</h2><div className="managementKpis">{periodKpis.map(([key, value, label]) => <div key={key}><strong>{value}</strong><span>{label}</span></div>)}</div></section>
-      <section className="managementPointInTime"><h2>Period-end status</h2><p>Point-in-time operational state at the end of the selected period; these values are not summed across days.</p><div className="managementStayStrip">{periodEnd.map(([key, value, label]) => { const href = operationalDestination(String(key)); const content = <><strong>{value}</strong><span>{label}{href && <small>Open workspace</small>}</span></>; return href ? <Link className="managementKpiLink" href={href} key={key}>{content}</Link> : <div key={key}>{content}</div>; })}</div></section>
-      <section className="managementSplit"><div className="panel"><h2>Revenue & occupancy trend</h2><div className="managementTrend">{data.daily.map((day) => <div key={day.date} className="managementTrendRow"><b>{day.date}</b><span><i style={{ width: `${Math.min(100, day.occupancy)}%` }} />{day.occupancy}%</span><em>{money(day.roomRevenue)} · RevPAR {money(day.revpar)}{day.legacyOccupancySemantics ? ' · legacy occupancy' : ''}</em></div>)}</div></div><div className="panel"><h2>KPI definitions</h2><p className="hint">Occupancy = occupied room nights ÷ sellable room nights. ADR = room revenue ÷ occupied room nights. RevPAR = room revenue ÷ sellable room nights. Historical sellable room nights use the Night Audit close-time snapshot.</p><p className="metric">{k.occupiedRoomNights} occupied room nights · {k.sellableRoomNights} sellable room nights</p></div></section>
-      <section className="managementSplit"><div className="panel"><h2>Booking source performance</h2><p className="mutedText">{data.sourceReservationSemantics === 'MIXED_UNIQUE_AND_LEGACY_DAILY_RESERVATIONS' ? 'Includes legacy daily reservation counts for older snapshots.' : 'Unique reservations represented by the selected room-night period.'}</p><div className="tableScroll"><table><thead><tr><th>Source</th><th>Reservations</th><th>Room nights</th><th>Room revenue</th></tr></thead><tbody>{data.sources.map((row) => <tr key={row.source}><td>{row.source}</td><td>{row.reservations}</td><td>{row.roomNights}</td><td>{money(row.roomRevenue)}</td></tr>)}{!data.sources.length && <tr><td colSpan={4} className="empty">No source activity for this period.</td></tr>}</tbody></table></div></div><div className="panel"><h2>Room type performance</h2><p className="mutedText">Occupancy is not fabricated without reliable room-type inventory denominators.</p><div className="tableScroll"><table><thead><tr><th>Room type</th><th>Room nights</th><th>Revenue</th><th>ADR</th></tr></thead><tbody>{data.roomTypes.map((row) => <tr key={row.roomTypeId}><td>{row.roomType}</td><td>{row.roomNights}</td><td>{money(row.roomRevenue)}</td><td>{money(row.adr)}</td></tr>)}{!data.roomTypes.length && <tr><td colSpan={4} className="empty">No room-type activity for this period.</td></tr>}</tbody></table></div></div></section>
-      <section className="managementFooterMeta"><small>{data.period.from} → {data.period.to}</small><span>{data.period.hotel.name} · {data.period.hotel.timezoneName}</span><span>{k.arrivals} arrivals · {k.departures} departures · {k.occupiedRoomNights} occupied room nights</span></section>
-    </>}
+  return <section className="managementDashboard rainwoodDashboard" aria-label="Hotel management dashboard">
+    <header className="dashHeading"><div><h1>Property overview</h1><p>Your rooms, revenue and operations at a glance.</p></div><div className="dashFreshness"><span role="status">{loading ? 'Updating dashboard…' : updatedAt ? `Updated ${updatedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : 'Hotel-local time'}</span><button className="dashIconButton" type="button" aria-label="Refresh dashboard" disabled={loading || !validRange} onClick={retry}><RefreshCw size={16} aria-hidden="true" /></button></div></header>
+    <div className="dashFilters"><label className="dashHotelLabel"><span>Property</span><select aria-label="Dashboard hotel" value={hotelId} disabled={!hotels.length} onChange={(event) => { const value = event.target.value; setHotelId(value); selectPreset(preset === 'custom' ? 'today' : preset, value); setData(null); }}>{!hotels.length && <option value="">{loading ? 'Loading properties…' : 'No properties available'}</option>}{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label><div className="dashPeriodControls"><div className="dashPresets" role="group" aria-label="Reporting period">{presets.map(([value, label]) => <button type="button" key={value} aria-pressed={preset === value} onClick={() => selectPreset(value)}>{label}</button>)}</div><button type="button" className="dashDateButton" aria-expanded={showDates} aria-controls="dashboard-dates" onClick={() => setShowDates(!showDates)}><CalendarDays size={15} aria-hidden="true" />{period}<ChevronDown size={14} aria-hidden="true" /></button></div></div>
+    {showDates && <div className="dashCustomDates" id="dashboard-dates"><label>From date<input type="date" value={from} max={to || undefined} onChange={(event) => { setFrom(event.target.value); setPreset('custom'); setData(null); setLoading(true); }} /></label><label>To date<input type="date" value={to} min={from || undefined} onChange={(event) => { setTo(event.target.value); setPreset('custom'); setData(null); setLoading(true); }} /></label><span>Dates follow the property’s local time.</span></div>}
+    {(!from || !to || !validRange) && hotelId && <p className="dashError" role="alert">Choose a start date and an end date on or after it.</p>}
+    {error && <div className="dashError" role="alert"><div><strong>Dashboard couldn’t load</strong><p>{error}</p></div><button type="button" className="dashDateButton" onClick={retry}>Try again</button></div>}
+    {!loading && !error && !hotels.length && <div className="dashEmpty">No hotels are assigned to this account. Contact your administrator to get started.</div>}
+    {!error && (loading || data) && <div className="dashData" aria-busy={loading}>
+      <section className="dashKpiStrip" aria-label="Period performance">{[
+        ['Room revenue', money(k?.roomRevenue), 'Room nights in the selected period'],
+        ['Occupancy', k ? `${Number(k.occupancy).toFixed(1)}%` : '—', `${kpi('occupiedRoomNights')} of ${kpi('sellableRoomNights')} sellable room nights`],
+        ['Average daily rate', money(k?.adr), 'Per occupied room night'],
+        ['RevPAR', money(k?.revpar), 'Revenue per sellable room night'],
+      ].map(([label, value, description], index) => <div key={label} className={index === 0 ? 'dashLeadKpi' : ''}><span>{label}</span><strong className={loading && !data ? 'dashSkeleton' : undefined}>{value}</strong><small>{description}</small></div>)}</section>
+      <section className="dashMovement" aria-label="Guest movement">{[
+        { label: 'Arrivals', value: kpi('arrivals'), note: 'During the period', href: '/admin/arrivals', feature: 'arrivals' },
+        { label: 'Departures', value: kpi('departures'), note: 'During the period', href: '/admin/front-desk', feature: 'frontDesk' },
+        { label: 'In house', value: kpi('inHouse'), note: 'At period end', href: '/admin/in-house', feature: 'inHouse' },
+        { label: 'Available rooms', value: op?.roomsAvailable ?? '—', note: 'At period end', href: '/admin/rooms-inventory', feature: 'roomsInventory' },
+      ].map((item) => { const content = <><div><span>{item.label}</span><small>{item.note}</small></div><strong>{item.value}</strong>{canOpen(item.href, item.feature) && <ArrowRight size={15} aria-hidden="true" />}</>; return canOpen(item.href, item.feature) ? <Link href={dashboardDrilldownHref(item.href, hotelId, from, to)} key={item.label}>{content}</Link> : <div key={item.label}>{content}</div>; })}</section>
+      <div className="dashMainGrid"><section className="dashPanel dashTrendPanel"><div className="dashPanelHeading"><h2>Performance trend</h2><div className="dashChartTabs" role="group" aria-label="Chart metric"><button type="button" aria-pressed={metric === 'roomRevenue'} onClick={() => setMetric('roomRevenue')}>Revenue</button><button type="button" aria-pressed={metric === 'occupancy'} onClick={() => setMetric('occupancy')}>Occupancy</button></div></div><div className="dashChart" aria-label={metric === 'roomRevenue' ? 'Daily room revenue' : 'Daily occupancy'}><div className="dashChartScale" aria-hidden="true">{[1, .5, 0].map((ratio) => <span key={ratio}>{metric === 'occupancy' ? `${chartMax * ratio}%` : `₹${(chartMax * ratio).toLocaleString('en-IN', { notation: 'compact', maximumFractionDigits: 1 })}`}</span>)}</div><div className="dashPlot"><div className="dashChartGrid" aria-hidden="true"><i /><i /><i /></div><div className="dashBars">{daily.map((day, index) => <div className="dashBarColumn" key={day.date} tabIndex={0} aria-label={`${dateLabel(day.date)}: ${metric === 'occupancy' ? `${day.occupancy}%` : money(day.roomRevenue)}`}><div className="dashBarArea"><span className="dashBar" style={{ height: `${Math.max(0, Math.min(100, Number(day[metric]) / chartMax * 100))}%` }} /><span className="dashBarTooltip">{dateLabel(day.date)} · {metric === 'occupancy' ? `${day.occupancy}%` : money(day.roomRevenue)}</span></div><small>{daily.length <= 7 || index % Math.ceil(daily.length / 7) === 0 ? dateLabel(day.date) : ''}</small></div>)}</div>{!daily.length && <p className="dashChartEmpty">{loading ? 'Loading performance…' : 'No room-night activity in this period.'}</p>}</div></div><div className="dashChartCaption"><span>{metric === 'roomRevenue' ? 'Room revenue' : 'Occupancy'} · {period}</span><span>{data?.period.days ?? '—'} {data?.period.days === 1 ? 'day' : 'days'}{daily.some((day) => day.legacyOccupancySemantics) ? ' · Includes legacy occupancy' : ''}</span></div></section>
+      <section className="dashPanel dashRoomPanel"><div className="dashPanelHeading"><h2>Room readiness</h2>{workspaceLink('/admin/housekeeping', 'housekeeping', 'Housekeeping')}</div><p className="dashPanelNote">Operational snapshot at period end</p><dl className="dashReadiness">{[['Dirty rooms', op?.dirtyRooms, '/admin/housekeeping', 'housekeeping'], ['Being cleaned', op?.cleaningRooms, '/admin/housekeeping', 'housekeeping'], ['Out of order', op?.outOfOrderRooms, '/admin/maintenance', 'maintenance'], ['Open maintenance tickets', op?.openMaintenanceTickets, '/admin/maintenance', 'maintenance']].map(([label, value, href, feature]) => <div key={String(label)}><dt>{canOpen(String(href), String(feature)) ? <Link href={`${href}?hotelId=${encodeURIComponent(hotelId)}`}>{label}<ArrowRight size={13} aria-hidden="true" /></Link> : label}</dt><dd>{value ?? '—'}</dd></div>)}</dl><div className="dashOutstanding"><span>Outstanding balance</span><strong>{money(k?.outstandingBalance)}</strong></div></section></div>
+      <section className="dashFinancials" aria-label="Revenue and collections">{financials.map(([key, label]) => <div key={key}><span>{label}</span><strong>{money(k?.[key])}</strong></div>)}</section>
+      <div className="dashTables"><section className="dashPanel"><div className="dashPanelHeading"><h2>Booking sources</h2><span className="dashPanelNote">{data?.sources.length ?? 0} channels</span></div><div className="dashTableScroll" tabIndex={0} role="region" aria-label="Booking source performance"><table><thead><tr><th scope="col">Source</th><th scope="col">Bookings</th><th scope="col">Nights</th><th scope="col">Room revenue</th></tr></thead><tbody>{data?.sources.map((row) => <tr key={row.source}><td>{sourceLabel(row.source)}</td><td>{row.reservations}</td><td>{row.roomNights}</td><td>{money(row.roomRevenue)}</td></tr>)}{!data?.sources.length && <tr><td colSpan={4} className="dashEmpty">{loading ? 'Loading booking sources…' : 'No bookings contributed room nights in this period.'}</td></tr>}</tbody></table></div><p className="dashTableNote">{data?.sourceReservationSemantics === 'MIXED_UNIQUE_AND_LEGACY_DAILY_RESERVATIONS' ? 'Includes legacy daily reservation counts.' : 'Unique bookings contributing room nights in this period.'}</p></section>
+      <section className="dashPanel"><div className="dashPanelHeading"><h2>Room categories</h2><span className="dashPanelNote">Revenue by room type</span></div><div className="dashTableScroll" tabIndex={0} role="region" aria-label="Room type performance"><table><thead><tr><th scope="col">Room type</th><th scope="col">Nights</th><th scope="col">Revenue</th><th scope="col"><abbr title="Average daily rate">ADR</abbr></th></tr></thead><tbody>{data?.roomTypes.map((row) => <tr key={row.roomTypeId}><td>{row.roomType}</td><td>{row.roomNights}</td><td>{money(row.roomRevenue)}</td><td>{money(row.adr)}</td></tr>)}{!data?.roomTypes.length && <tr><td colSpan={4} className="dashEmpty">{loading ? 'Loading room categories…' : 'No room-category activity in this period.'}</td></tr>}</tbody></table></div><p className="dashTableNote">Average daily rate is based on occupied room nights.</p></section></div>
+      <footer className="dashFooter"><span>{data?.period.hotel.name ?? 'Loading property'} · {data?.period.hotel.timezoneName ?? 'Property local time'}</span><details><summary>How these figures are calculated</summary><p>Occupancy = occupied room nights ÷ sellable room nights. ADR = room revenue ÷ occupied room nights. RevPAR = room revenue ÷ sellable room nights. Historical inventory uses Night Audit close-time snapshots. Operational counts show the period-end state and are not summed across days.</p></details></footer>
+    </div>}
   </section>;
 }

@@ -31,3 +31,8 @@ test('hotel override reset is blocked while another feature draft is dirty', () 
   assert.equal(canResetFeatureOverride(true), false);
   assert.equal(canResetFeatureOverride(false), true);
 });
+
+test('feature settings retain Rate Import even without a sidebar destination', () => {
+  const row = rowsFor(orderFeatureRows([{ key: 'rateImport', enabled: false, source: 'HOTEL' }]), 'rateImport');
+  assert.deepEqual(row, { key: 'rateImport', label: 'Rate Import', group: 'Revenue', enabled: false, source: 'HOTEL' });
+});

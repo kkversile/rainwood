@@ -1,0 +1,195 @@
+/* The same RainWood workspace language for partner and service teams. */
+:is(.rainwoodPortalShell,.rainwoodPortalLogin,.staffLoginPage,.adminLoginPage){
+  --navy:#14545b;--navy2:#087f80;--ink:#20332f;--muted:#5b7069;
+  --line:#dfe8e3;--soft:#f3f7f5;--white:#fff;--green:#267349;--red:#a4373c;
+  --shadow:none;font-family:'IBM Plex Sans',Arial,sans-serif;color:var(--ink);
+  background:var(--soft);font-size:14px;line-height:1.5;
+}
+.rainwoodPortalShell{min-height:100dvh}
+.rainwoodPortalShell .rwPortalDrawerClose{display:flex;align-items:center;justify-content:center;align-self:flex-end;flex:0 0 40px;width:40px;min-height:40px;margin:0 0 8px auto;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);cursor:pointer}
+.rainwoodPortalShell :is(h1,h2,h3){color:var(--ink);font-family:inherit;letter-spacing:-.015em}
+.rainwoodPortalShell h1{font-size:26px;font-weight:600;line-height:1.25}
+.rainwoodPortalShell h2{font-size:18px;font-weight:600;line-height:1.35}
+.rainwoodPortalShell h3{font-size:15px;font-weight:600}
+.rainwoodPortalShell :is(button,a,input,select,textarea,summary){font-family:inherit;touch-action:manipulation}
+.rainwoodPortalShell :is(button,a,input,select,textarea,summary):focus-visible{outline:2px solid var(--navy2)!important;outline-offset:3px;box-shadow:none!important}
+.rainwoodPortalShell :is(label,.field label){font-family:inherit;font-size:12px;font-weight:500;color:var(--muted);text-transform:none;letter-spacing:0}
+.rainwoodPortalShell :is(input,select,textarea){font-family:inherit;font-size:13px;font-weight:400;min-width:0;background:#fff;color:var(--ink);border:1px solid #b8c8bf;border-radius:6px;box-shadow:none}
+.rainwoodPortalShell :is(input:not([type=checkbox]):not([type=radio]):not([type=file]),select){min-height:38px;padding:8px 10px}
+.rainwoodPortalShell :is(input[type=checkbox],input[type=radio]){accent-color:var(--navy2)}
+.rainwoodPortalShell :is(.btn,.smallBtn,.staffButton,.staffSearch button){min-height:38px;padding:8px 13px;font-size:13px;font-weight:600;background:var(--navy2);background-image:none;border:1px solid var(--navy2);border-radius:6px;box-shadow:none;color:#fff;cursor:pointer}
+.rainwoodPortalShell :is(.btn,.smallBtn,.staffButton,.staffSearch button):hover{background:#086c6b}
+.rainwoodPortalShell :is(.btn.secondary,.smallBtn.secondary,.staffButton.secondary){background:#fff;border-color:#b8c8bf;color:var(--navy)}
+.rainwoodPortalShell :is(.panel,.formCard,.card,.summary,.staffStayCard,.staffChargeCard,.housekeepingRoomCard,.staffEmpty,.staffConfirm,.staffTotals){background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:none;color:var(--ink);background-image:none}
+.rainwoodPortalShell :is(.panel,.formCard,.card,.summary){padding:18px}
+.rainwoodPortalShell :is(.metrics>div,.agentMetricCard){background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:none;padding:16px}
+.rainwoodPortalShell .metrics b{font-size:26px;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums}
+.rainwoodPortalShell .metrics span{font-size:12px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted)}
+.rainwoodPortalShell :is(.eyebrow,.staffEyebrow,.pageTitle>div>span){font-size:12px;letter-spacing:0;font-weight:500;text-transform:none;color:var(--muted)}
+.rainwoodPortalShell table{font-family:inherit;font-size:13px;font-variant-numeric:tabular-nums;background:#fff}
+.rainwoodPortalShell th{background:transparent!important;color:var(--muted)!important;font-size:12px;font-weight:500;letter-spacing:0;text-transform:none;border-bottom:1px solid var(--line);padding:11px 12px}
+.rainwoodPortalShell td{padding:12px;border-color:var(--line);font-size:13px;color:var(--ink)}
+.rainwoodPortalShell :is(.tableScroll,.tableWrap,.staffTableWrap){max-width:100%;overflow-x:auto}
+.rainwoodPortalShell :is(.status,.badge){font-size:11px;font-weight:500;border-radius:5px}
+.rainwoodPortalShell :is(.error,.staffError){background:#fff0f0;color:#973a40;border-radius:6px;font-size:13px}
+.rainwoodPortalShell :is(.hint,.notice){background:#eef5f0;color:#375e4c;border-radius:6px;font-size:13px}
+.rainwoodAgentWorkspace .legacyAgentHeader{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:18px;height:56px;min-height:56px;padding:0 20px;background:#f0f5f2;border:0;box-shadow:none;color:var(--ink)}
+.rainwoodAgentWorkspace .legacyAgentBrand{width:224px;min-width:224px;display:flex;align-items:center;gap:8px;color:var(--ink);height:auto;padding:0;border:0}
+.rainwoodAgentWorkspace .legacyAgentLogo{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;padding:0;margin:0;background:var(--navy2);border-radius:9px;color:#fff;font-size:12px;font-weight:600;letter-spacing:0;box-shadow:none}
+.rainwoodAgentWorkspace .legacyAgentBrand b{display:block;color:var(--ink);font-size:16px;letter-spacing:.06em}
+.rainwoodAgentWorkspace .legacyAgentBrand small{color:var(--muted);font-size:10px}
+.rainwoodAgentWorkspace .legacyAgentGreeting{font-size:13px;font-weight:500;color:var(--ink)}
+.rainwoodAgentWorkspace .legacyAgentGreeting>span{font-size:12px;font-weight:400;padding:0;background:transparent;color:var(--muted)}
+.rainwoodAgentWorkspace .legacyAgentHeaderLinks{margin-left:auto;display:flex;gap:16px}
+.rainwoodAgentWorkspace .legacyAgentHeaderLinks :is(a,button){font-size:12px;font-weight:400;color:var(--muted);background:transparent;border:0;min-height:36px;display:inline-flex;align-items:center}
+.rainwoodAgentWorkspace .legacyAgentNav{position:fixed;top:56px;bottom:0;left:0;width:244px;height:auto;min-height:0;max-height:none;padding:18px 12px;display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:4px;flex-wrap:nowrap;overflow-y:auto;background:#f0f5f2;border:0;z-index:50}
+.rainwoodAgentWorkspace .legacyAgentNav>a,.rainwoodAgentWorkspace .legacyAgentDropdown>summary{display:flex;align-items:center;justify-content:space-between;min-height:40px;padding:10px 12px;font-size:13px;font-weight:500;line-height:1.4;border:0;border-radius:6px;color:var(--muted);background:transparent;white-space:normal;cursor:pointer}
+.rainwoodAgentWorkspace .legacyAgentNav>a:hover,.rainwoodAgentWorkspace .legacyAgentDropdown>summary:hover{background:#e0eae4;color:var(--ink)}
+.rainwoodAgentWorkspace .legacyAgentNav>a.active,.rainwoodAgentWorkspace .legacyAgentDropdown.active>summary{background:#dce9e2;color:#164f49}
+.rainwoodAgentWorkspace .legacyAgentDropdown{position:static;display:block;background:transparent}
+.rainwoodAgentWorkspace .legacyAgentDropdownMenu{position:static;display:grid!important;gap:2px;min-width:0;margin:4px 0 8px 13px;padding:2px 0 2px 8px;border:0;border-left:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none}
+.rainwoodAgentWorkspace .legacyAgentDropdown:not([open])>.legacyAgentDropdownMenu{display:none!important}
+.rainwoodAgentWorkspace .legacyAgentDropdownMenu a{display:flex;align-items:center;min-height:36px;padding:8px 12px;color:var(--muted);font-size:12px;font-weight:400;border-radius:5px;background:transparent}
+.rainwoodAgentWorkspace .legacyAgentDropdownMenu a:hover{background:#e0eae4;color:var(--ink)}
+.rainwoodAgentWorkspace .legacyAgentDropdownMenu a.active{background:#dce9e2;color:#164f49;font-weight:500}
+.rainwoodAgentWorkspace .agentLockedLink{padding:10px 12px;color:var(--muted);font-size:13px;opacity:1;background:transparent;border:0}
+.rainwoodAgentWorkspace .agentLockedLink svg{vertical-align:middle;margin-left:6px}
+.rainwoodAgentWorkspace .agentLockedLink small{font-size:11px;color:var(--muted)}
+.rainwoodAgentWorkspace .legacyAgentSectionTitle{display:none}
+.rainwoodAgentWorkspace .legacyAgentContent{margin:0 0 0 244px;width:calc(100% - 244px);max-width:none;min-width:0;min-height:calc(100dvh - 56px);padding:24px;background:var(--soft);overflow:visible}
+.rainwoodAgentWorkspace .legacyAgentPageTitle{margin:0 0 20px;padding:0;max-width:none;text-align:left}
+.rainwoodAgentWorkspace .legacyAgentPageTitle h1{font-size:26px;font-weight:600;color:var(--ink);margin:4px 0}
+.rainwoodAgentWorkspace .legacyAgentPageTitle p{color:var(--muted);font-size:13px;margin:4px 0 0}
+.rwAgentContext{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:18px;padding:16px 18px;background:#fff;border:1px solid var(--line);border-radius:8px}
+.rwAgentContext span{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+.rwAgentContext strong{font-size:15px;color:var(--ink);font-weight:500}
+.rainwoodAgentWorkspace .toolbar .btn.secondary{background:#fff!important;color:var(--navy)!important;border:1px solid #b8c8bf!important}
+.rainwoodAgentWorkspace .rwAgentReservations table{min-width:940px}
+.rainwoodAgentWorkspace .rwAgentReservations :is(th,td):nth-child(4){white-space:nowrap}
+.rainwoodAgentWorkspace .rwAgentReservations :is(th,td):last-child{text-align:right;white-space:nowrap}
+.rainwoodAgentWorkspace .legacyAgentContent>.pageTitle:has(~ section h1),.rainwoodAgentWorkspace .legacyAgentContent>.pageTitle:has(~ div h1){display:none}
+.rainwoodAgentWorkspace:has(.agentBookingFlow) .legacyAgentContent>.legacyAgentPageTitle{display:flex!important}
+.rainwoodAgentWorkspace .agentBookingFlow{max-width:none;padding:0;background:transparent;min-width:0}
+.rainwoodAgentWorkspace .agentHotelSelection{background:transparent;gap:16px;grid-template-columns:220px minmax(0,1fr)}
+.rainwoodAgentWorkspace .agentHotelFilters{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px;min-height:0}
+.rainwoodAgentWorkspace .agentHotelCatalog{background:transparent;padding:0;min-width:0}
+.rainwoodAgentWorkspace .agentHotelCatalogToolbar{background:transparent;gap:12px;flex-wrap:wrap;border:0;padding:0 0 16px}
+.rainwoodAgentWorkspace .agentHotelRibbon{background:transparent;color:var(--ink);font-size:15px;font-weight:600;padding:0;text-transform:none}
+.rainwoodAgentWorkspace .agentHotelRibbon::after,.rainwoodAgentWorkspace .agentHotelRibbon::before{display:none}
+.rainwoodAgentWorkspace .agentHotelCard{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden;box-shadow:none}
+.rainwoodAgentWorkspace .agentHotelCardImage{height:220px;min-height:0}
+.rainwoodAgentWorkspace .agentHotelCardBody{padding:16px}
+.rainwoodAgentWorkspace .agentHotelSearch{min-width:0}
+.rainwoodAgentWorkspace .legacyAgentContent :is(.agentSettingsPage,.agentReportsPage,.agentReportPage,.agentRatePlansPage){min-width:0;max-width:100%}
+.rwPortalToggle,.rwPortalBackdrop{display:none}
+.rainwoodStaffWorkspace.staffPage{max-width:none;width:100%;min-height:100dvh;padding:0 0 32px;background:var(--soft)}
+.rainwoodStaffWorkspace .staffHeader{height:56px;min-height:56px;position:sticky;top:0;z-index:90;display:flex;align-items:center;gap:16px;padding:0 24px;background:#f0f5f2;border:0;box-shadow:none;color:var(--ink)}
+.rainwoodStaffWorkspace .staffBrand{gap:10px;font-size:15px;color:var(--ink)}
+.rainwoodStaffWorkspace .staffBrand span{background:var(--navy2);color:#fff;border-radius:9px;font-size:12px}
+.rainwoodStaffWorkspace .staffLogout{margin-left:auto;font-size:12px;font-weight:400;color:var(--muted);border:0;background:transparent;min-height:40px}
+.rwStaffSidebar{position:fixed;inset:0 auto 0 0;z-index:80;display:flex;flex-direction:column;width:244px;padding:0 12px 16px;background:#f0f5f2;overflow-y:auto}
+.rainwoodStaffWorkspace .rwStaffSidebar>.staffBrand{display:flex;align-items:center;gap:10px;flex-shrink:0;min-height:72px;padding:12px 8px;color:var(--ink)}
+.rainwoodStaffWorkspace .rwStaffSidebar>.staffBrand>span{display:grid;place-items:center;width:34px;height:34px;flex:0 0 34px;font-size:12px;font-weight:600}
+.rwStaffSidebar .staffBrand b{font-size:15px;line-height:1.3;letter-spacing:.06em;font-weight:600}
+.rwStaffSidebar .staffBrand small{display:block;color:var(--muted);font-size:11px;letter-spacing:0;font-weight:400}
+.rwStaffSidebarScope{padding:12px 12px 24px}
+.rwStaffSidebarScope>span{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+.rwStaffSidebarScope>strong{display:block;color:var(--ink);font-size:13px;font-weight:500;line-height:1.5}
+.rwStaffSidebarNav{display:flex;flex-direction:column;align-items:stretch;gap:4px;font-weight:500}
+.rwStaffSidebarNav>a{display:flex;align-items:center;gap:10px;min-height:42px;padding:10px 12px;border-radius:6px;font-size:13px;color:var(--muted)}
+.rwStaffSidebarNav>a[aria-current=page],.rwStaffSidebarNav>a:hover{color:#164f49;background:#dce9e2}
+.rwStaffSidebarNav>a svg{flex-shrink:0}
+.rwStaffSidebarIdentity{margin-top:auto;padding:24px 12px 4px}
+.rwStaffSidebarIdentity strong{display:block;color:var(--ink);font-size:13px;font-weight:500}
+.rwStaffSidebarIdentity span{display:block;color:var(--muted);font-size:12px;margin-top:4px}
+.rwStaffMain{width:calc(100% - 244px);margin-left:244px;min-width:0}
+.rwStaffHeaderScope{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted)}
+.rwStaffHeaderScope strong{font-weight:500;color:var(--ink)}
+.rwStaffSidebarToggle,.rwStaffSidebarBackdrop,.rainwoodStaffWorkspace .rwStaffMobileBrand{display:none}
+.rwStaffBody{padding:24px;min-width:0}
+.rainwoodStaffWorkspace .staffContent{width:100%;max-width:none;margin:0;padding:0 0 24px}
+.rainwoodStaffWorkspace .staffContent>.staffSheet{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;width:100%;max-width:820px;padding:20px;margin:0;border:1px solid var(--line);border-radius:8px;background:#fff;box-shadow:none}
+.rainwoodStaffWorkspace .staffContent>.staffSheet>label{margin:0;min-width:0}
+.rainwoodStaffWorkspace .staffContent>.staffSheet>label:first-child,.rainwoodStaffWorkspace .staffContent>.staffSheet>label:nth-child(2),.rainwoodStaffWorkspace .staffContent>.staffSheet>label:last-of-type,.rainwoodStaffWorkspace .staffContent>.staffSheet>.staffButton{grid-column:1/-1}
+.rainwoodStaffWorkspace .rwStaffBody>.staffBack{display:inline-flex;align-items:center;min-height:32px;max-width:100%;margin:0 0 16px;padding:0;color:var(--navy2);font-size:13px}
+.rainwoodStaffWorkspace .staffWelcome{padding:0 0 18px;background:transparent;border:0;border-radius:0;box-shadow:none}
+.rainwoodStaffWorkspace .staffWelcome h1{font-size:26px;color:var(--ink);margin:5px 0}
+.rainwoodStaffWorkspace .staffWelcome p{font-size:13px;color:var(--muted)}
+.rainwoodStaffWorkspace .housekeepingTabs{gap:6px;padding:4px;background:#e9f0eb;width:max-content;max-width:100%;border-radius:7px;overflow-x:auto}
+.rainwoodStaffWorkspace .housekeepingTabs button{padding:8px 12px;min-height:38px;background:transparent;border:0;border-radius:5px;color:var(--muted);font-size:13px;font-weight:500;white-space:nowrap}
+.rainwoodStaffWorkspace .housekeepingTabs button.active{background:#fff;color:var(--ink)}
+.rainwoodStaffWorkspace .housekeepingRoomNumber{color:var(--ink)!important;font-size:20px!important;font-weight:600}
+.rainwoodStaffWorkspace .staffFolioTotal,.rainwoodStaffWorkspace .staffTotal{background:#eaf2ed;border-radius:7px;color:var(--muted);box-shadow:none}
+.rainwoodStaffWorkspace .staffFolioTotal strong{color:var(--ink);font-variant-numeric:tabular-nums;font-weight:600}
+.rainwoodStaffWorkspace :is(.staffChargeForm,.staffGuestInfo,.staffSection,.staffChargeList,.staffCharges){border-color:var(--line);border-radius:8px;box-shadow:none}
+:is(.rainwoodPortalLogin,.staffLoginPage,.adminLoginPage){min-height:100dvh;display:grid;place-items:center;padding:32px 16px;background:#f0f5f2}
+:is(.rainwoodPortalLogin,.staffLoginPage,.adminLoginPage) :is(.formCard,.staffLoginCard,.adminLoginCard){width:min(460px,100%);padding:32px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:none}
+:is(.rainwoodPortalLogin,.staffLoginPage,.adminLoginPage) h1{font-size:28px;font-weight:600;line-height:1.2;letter-spacing:-.025em;color:var(--ink);margin:8px 0 12px}
+:is(.rainwoodPortalLogin,.staffLoginPage,.adminLoginPage) p{font-size:14px;line-height:1.6;color:var(--muted)}
+:is(.rainwoodPortalLogin,.staffLoginPage,.adminLoginPage) label{font-size:13px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--ink)}
+:is(.rainwoodPortalLogin,.staffLoginPage,.adminLoginPage) :is(input,select,textarea){font:400 16px 'IBM Plex Sans',Arial,sans-serif;min-height:44px;padding:10px 12px;border:1px solid #b8c8bf;border-radius:6px;box-shadow:none;color:var(--ink)}
+:is(.rainwoodPortalLogin,.staffLoginPage,.adminLoginPage) :is(.btn,.staffButton){min-height:44px;border:0;border-radius:6px;background:var(--navy2);color:#fff;font-family:inherit;font-size:14px;font-weight:600;box-shadow:none}
+:is(.rainwoodPortalLogin,.staffLoginPage,.adminLoginPage) :is(input,button,a):focus-visible{outline:2px solid var(--navy2);outline-offset:3px}
+:is(.staffLoginPage,.adminLoginPage) .loginRoleLinks{background:var(--soft);border:0;border-radius:6px;font-size:13px}
+:is(.staffLoginPage,.adminLoginPage) .loginRoleLinks a.active{background:#dce9e2;color:#164f49}
+:is(.staffLoginPage,.adminLoginPage) .demoLoginTools{background:#f4f7f5;border:1px solid var(--line);border-radius:6px}
+:is(.staffLoginPage,.adminLoginPage) .demoLoginTools span{font-size:12px;font-weight:400;text-transform:none;letter-spacing:0}
+body:has(.rainwoodPortalShell) .dialogCard{font-family:'IBM Plex Sans',Arial,sans-serif;border:1px solid #dfe8e3;border-radius:12px;background:#fff;color:#20332f;box-shadow:0 20px 70px #123c2c26}
+.adminLoginPage{display:flex;flex-direction:column;gap:0;padding:24px 16px;min-height:100dvh}
+.adminLoginPage .adminLoginHeader{height:auto;min-height:0;padding:0 0 24px;background:transparent;border:0;box-shadow:none}
+.adminLoginPage .adminLoginHeader img{width:170px;height:auto;max-height:48px;object-fit:contain}
+.adminLoginPage .adminLoginBody{display:grid;place-items:center;flex:1;width:100%;padding:0;background:transparent}
+.adminLoginPage .adminLoginEyebrow{font-size:12px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--muted)}
+@media(max-width:1000px){
+  .rainwoodAgentWorkspace .legacyAgentGreeting{display:none}
+  .rainwoodAgentWorkspace .legacyAgentContent{padding:20px}
+}
+@media(max-width:820px){
+  .rwStaffMain{width:100%;margin-left:0}
+  .rwStaffSidebar{display:none;inset:56px auto 0 0;width:260px;padding-top:12px}
+  .rwStaffSidebar.is-open{display:flex}
+  .rainwoodStaffWorkspace .rwStaffSidebar>.staffBrand{display:none}
+  .rainwoodStaffWorkspace .rwStaffSidebarToggle{display:grid;place-items:center;flex:0 0 40px;width:40px;height:40px;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}
+  .rainwoodStaffWorkspace .rwStaffMobileBrand{display:flex;align-items:center;min-width:0;gap:8px}
+  .rainwoodStaffWorkspace .rwStaffMobileBrand>span{display:grid;place-items:center;width:32px;height:32px;flex:0 0 32px}
+  .rainwoodStaffWorkspace .staffHeader{gap:10px;padding:0 16px}
+  .rwStaffHeaderScope{display:none}
+  .rwStaffSidebarBackdrop{display:block;position:fixed;inset:56px 0 0;z-index:70;border:0;background:#20332b35;cursor:pointer}
+  .rwStaffBody{padding:20px 16px}
+  .rwStaffSidebarNav>a{min-height:44px}
+  .rainwoodAgentWorkspace .legacyAgentHeader{gap:12px;padding:0 16px}
+  .rainwoodAgentWorkspace .legacyAgentBrand{width:auto;min-width:0;margin-right:auto}
+  .rainwoodAgentWorkspace .legacyAgentBrand small{display:none}
+  .rainwoodAgentWorkspace .legacyAgentHeaderLinks{gap:8px;margin:0}
+  .rainwoodAgentWorkspace .legacyAgentHeaderLinks a{display:none}
+  .rainwoodAgentWorkspace .rwPortalToggle{display:grid;place-items:center;width:40px;height:40px;flex-shrink:0;border:0;border-radius:6px;background:transparent;color:var(--muted)}
+  .rainwoodAgentWorkspace .legacyAgentNav{display:none;top:56px;width:260px;z-index:55;padding:16px 12px}
+  .rainwoodAgentWorkspace .legacyAgentNav.is-open{display:flex}
+  .rainwoodAgentWorkspace .rwPortalBackdrop{display:block;position:fixed;inset:56px 0 0;z-index:52;background:#20332b35;border:0}
+  .rainwoodAgentWorkspace .legacyAgentContent{margin:0;width:100%;padding:20px 16px;min-height:calc(100dvh - 56px)}
+  .rainwoodPortalShell :is(.metrics,.reportGrid){grid-template-columns:repeat(2,minmax(0,1fr))}
+  .rainwoodPortalShell .legacyAgentPageTitle{align-items:flex-start;flex-wrap:wrap}
+}
+@media(max-width:600px){
+  .rainwoodPortalShell h1,.rainwoodAgentWorkspace .legacyAgentPageTitle h1,.rainwoodStaffWorkspace .staffWelcome h1{font-size:23px}
+  .rainwoodPortalShell :is(.panel,.formCard,.card,.summary){padding:16px}
+  .rainwoodPortalShell :is(.two,.three,.grid){grid-template-columns:minmax(0,1fr)}
+  .rainwoodAgentWorkspace .agentHotelSelection{grid-template-columns:minmax(0,1fr)}
+  .rainwoodAgentWorkspace .agentHotelCatalogToolbar{flex-direction:column;align-items:stretch}
+  .rainwoodAgentWorkspace .agentHotelSearch{display:flex;width:100%;gap:8px}
+  .rainwoodAgentWorkspace .agentHotelSearch input{min-width:0;flex:1}
+  .rwAgentContext{grid-template-columns:minmax(0,1fr);gap:12px}
+  .rwAgentContext>div{display:flex;align-items:baseline;justify-content:space-between;gap:16px}
+  .rwAgentContext span{margin:0}
+  .rainwoodPortalShell :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:16px;min-height:44px}
+  .rainwoodPortalShell :is(.btn,.smallBtn,.staffButton,.staffSearch button){min-height:44px}
+  .rainwoodAgentWorkspace .legacyAgentNav>a,.rainwoodAgentWorkspace .legacyAgentDropdown>summary,.rainwoodAgentWorkspace .legacyAgentDropdownMenu a{min-height:44px}
+  .rainwoodStaffWorkspace .staffContent{padding:0 0 24px}
+  .rainwoodStaffWorkspace .staffContent>.staffSheet{grid-template-columns:minmax(0,1fr);padding:16px}
+  .rainwoodStaffWorkspace .staffHeader{padding:0 16px}
+  .rainwoodStaffWorkspace .housekeepingRoomCard{padding:16px;grid-template-columns:minmax(0,1fr)}
+  .rainwoodStaffWorkspace .staffSearch{display:flex;gap:8px}
+  .rainwoodStaffWorkspace .staffSearch input{min-width:0;flex:1}
+  :is(.rainwoodPortalLogin,.staffLoginPage,.adminLoginPage) :is(.formCard,.staffLoginCard,.adminLoginCard){padding:24px}
+}
+@media(prefers-reduced-motion:reduce){.rainwoodPortalShell *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

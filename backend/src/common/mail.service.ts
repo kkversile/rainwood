@@ -8,7 +8,7 @@ export type MailAttachment = { filename: string; content: Buffer; contentType?: 
 export type MailMessage = { to: string | string[]; subject: string; text: string; html?: string; attachments?: MailAttachment[]; attachmentFileIds?: string[] };
 
 function escapeHtml(value: string) {
-  return value.replace(/[&<>'\"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '\"': '&quot;' })[character] ?? character);
+  return value.replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character] ?? character);
 }
 
 function renderLines(text: string) {

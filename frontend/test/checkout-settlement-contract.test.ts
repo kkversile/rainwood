@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildFinalFolioPrintHtml, escapeHtml } from '../src/components/CheckoutSettlementDialog';
+import { buildFinalFolioPrintHtml, escapeHtml, normalizeCheckoutResult } from '../src/components/CheckoutSettlementDialog';
+
+test('initial and saved checkout responses retain settlement status and tax-inclusive totals', () => {
+  const response = { reference: 'RW-DEMO-SVC', stayStatus: 'CHECKED_OUT', finalFolioNumber: 'DEMO-FOLIO', settlement: { status: 'SETTLED', grossAmount: 315, incidentalAmount: 315, paidAmount: 315, balanceAmount: 0, settledAt: '2026-11-18T00:00:00Z' }, snapshot: { status: 'SETTLED', charges: { taxAmount: 15 } } };
+  const normalized = normalizeCheckoutResult(response);
+  assert.equal(normalized.status, 'SETTLED');
+  assert.equal(normalized.settlement, response.settlement);
+  assert.equal(normalized.snapshot, response.snapshot);
+  assert.equal(normalizeCheckoutResult({ ...response, status: 'SETTLED' }).status, 'SETTLED');
+  assert.throws(() => normalizeCheckoutResult({ ...response, settlement: { ...response.settlement, status: undefined }, snapshot: {} }), /incomplete/);
+});
 
 test('final folio print values escape HTML metacharacters', () => {
   assert.equal(escapeHtml('Aarav <script>alert(1)</script>'), 'Aarav &lt;script&gt;alert(1)&lt;/script&gt;');

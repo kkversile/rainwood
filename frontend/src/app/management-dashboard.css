@@ -1,0 +1,229 @@
+@font-face{font-family:'IBM Plex Sans';src:url('../../public/fonts/ibm-plex-sans.ttf') format('truetype');font-weight:100 900;font-style:normal;font-display:swap}
+
+/* Framed sheet: 228px navigation + remaining workspace. The sheet has 24px
+   equal gutters; the two-column rows always sum to 100% minus the 16px gap. */
+.rainwoodWorkspaceShell{
+  --dash-frame:#f1f5f4;--dash-surface:#fff;--dash-ink:#202c2b;
+  --dash-muted:#5c6c69;--dash-rule:#e6ece9;--dash-control:#acb9b4;
+  --dash-accent:#087f80;--dash-active:#e3eae7;--dash-raised:#f6f8f7;
+  --dash-warning:#885414;--dash-warning-bg:#fcf4e8;
+  --rw-sidebar-bg:var(--dash-frame);--rw-sidebar-submenu:var(--dash-frame);
+  --rw-sidebar-active:var(--dash-active);--rw-sidebar-indicator:transparent;
+  --rw-sidebar-text:var(--dash-ink);--rw-sidebar-subtext:var(--dash-muted);
+  --rw-sidebar-icon:var(--dash-muted);--rw-sidebar-hover:var(--dash-active);
+  --rw-sidebar-separator:var(--dash-rule);--rw-sidebar-focus:var(--dash-accent);
+  background:var(--dash-frame);color:var(--dash-ink);font-family:'IBM Plex Sans',Arial,sans-serif;
+}
+.rainwoodWorkspaceShell *{box-sizing:border-box}
+.rainwoodWorkspaceShell .adminSidebar{width:228px;background:var(--dash-frame)!important;border:0!important;box-shadow:none!important;padding:18px 12px}
+.rainwoodWorkspaceShell .adminSidebarMain{margin-left:228px;width:calc(100% - 228px)}
+.rainwoodWorkspaceShell .adminSidebarBrand{padding:0 10px 22px;color:var(--dash-ink);border-bottom:0}
+.rainwoodWorkspaceShell .adminSidebarBrandText b{font-size:16px;letter-spacing:.08em;color:var(--dash-ink)}
+.rainwoodWorkspaceShell .adminSidebarBrandText small{color:var(--dash-muted);font-size:11px}
+.rainwoodWorkspaceShell .legacyAgentLogo{background:var(--dash-accent)!important;color:#fff!important;border-radius:10px;box-shadow:none!important}
+.rainwoodWorkspaceShell .adminSidebarSearch{display:none}
+.rainwoodWorkspaceShell .adminSidebarNav{gap:3px}
+.rainwoodWorkspaceShell .adminSidebarNav>a,.rainwoodWorkspaceShell .adminSidebar .adminNavGroupButton{min-height:42px;color:var(--dash-muted)!important;background:transparent!important;border:0!important;box-shadow:none!important;border-radius:7px;font-size:14px;font-weight:400;padding:10px 12px}
+.rainwoodWorkspaceShell .adminSidebarNav>a.active,.rainwoodWorkspaceShell .adminSidebar .adminNavGroupButton.active{background:var(--dash-active)!important;color:var(--dash-ink)!important;font-weight:600}
+.rainwoodWorkspaceShell .adminSidebarNav>a:hover,.rainwoodWorkspaceShell .adminSidebar .adminNavGroupButton:hover{background:var(--dash-active)!important;color:var(--dash-ink)!important}
+.rainwoodWorkspaceShell .adminNavIcon,.rainwoodWorkspaceShell .adminNavIcon svg,.rainwoodWorkspaceShell .adminNavChevron{color:inherit!important}
+.rainwoodWorkspaceShell .adminNavGroupIcon,.rainwoodWorkspaceShell .adminNavChevronIcon{color:var(--dash-muted)!important}
+.rainwoodWorkspaceShell .adminSidebar .adminNavDropdown{border:0!important;background:transparent!important}
+.rainwoodWorkspaceShell .adminSidebar .adminNavDropdown a{color:var(--dash-muted)!important;background:transparent!important;font-size:13px;font-weight:400;min-height:36px;display:flex;align-items:center}
+.rainwoodWorkspaceShell .adminSidebar .adminNavDropdown a:hover,.rainwoodWorkspaceShell .adminSidebar .adminNavDropdown a.active{background:var(--dash-active)!important;color:var(--dash-ink)!important}
+.rainwoodWorkspaceShell .adminSidebarTopbar{min-height:56px;background:var(--dash-frame);border:0;padding:0 24px;gap:12px;z-index:45}
+.rainwoodWorkspaceShell .adminSidebarToggle{width:36px;height:36px;background:transparent;color:var(--dash-muted);border-radius:6px}
+.rainwoodWorkspaceShell .adminSidebarToggle:hover{color:var(--dash-ink);background:var(--dash-active)}
+.rainwoodWorkspaceShell .adminSidebarGreeting{font-weight:500;color:var(--dash-ink);font-size:13px}
+.rainwoodWorkspaceShell .adminSidebarGreeting span{background:transparent;color:var(--dash-muted);padding:0;font-size:12px;font-weight:400}
+.rainwoodWorkspaceShell .adminSidebarHeaderLinks a,.rainwoodWorkspaceShell .adminSidebarHeaderLinks button{color:var(--dash-muted);font-family:inherit;font-size:12px;font-weight:400;min-height:36px}
+.rainwoodWorkspaceShell .legacyAgentSectionTitle{display:none}
+.rainwoodWorkspaceShell .operationsCommandBar{padding:6px 24px 14px;background:var(--dash-frame);border:0;gap:8px;flex-wrap:nowrap}
+.rainwoodWorkspaceShell .operationsCommandBar label{margin:0}
+.rainwoodWorkspaceShell .operationsCommandBar label:first-child{flex:1 1 240px;min-width:120px}
+.rainwoodWorkspaceShell .operationsCommandBar label:nth-child(2){width:150px}
+.rainwoodWorkspaceShell .operationsCommandBar label:nth-child(3){width:135px}
+.rainwoodWorkspaceShell .operationsCommandBar input,.rainwoodWorkspaceShell .operationsCommandBar select{height:36px;min-height:36px;padding:7px 10px;border:1px solid var(--dash-control);border-radius:6px;font-family:inherit;font-size:12px;font-weight:400;color:var(--dash-ink);background:var(--dash-surface);box-shadow:none}
+.rainwoodWorkspaceShell .operationsCommandBar .smallBtn{height:36px;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;padding:7px 12px;border-radius:6px;background:var(--dash-ink);font:500 12px 'IBM Plex Sans',Arial,sans-serif;color:var(--dash-surface);border:1px solid var(--dash-ink);box-shadow:none}
+.rainwoodWorkspaceShell .operationsCommandBar button.smallBtn{background:transparent;color:var(--dash-ink);border-color:var(--dash-control)}
+.rainwoodWorkspaceShell .adminTopContent{background:var(--dash-surface);border:1px solid var(--dash-rule);border-radius:16px;min-height:calc(100vh - 120px);padding:24px;margin:0 8px 8px 0}
+.rainwoodWorkspaceShell .adminTopContent>.pageTitle{display:none}
+.rainwoodWorkspaceShell :is(button,a,input,select,summary,[tabindex]):focus-visible{outline:2px solid var(--dash-accent)!important;outline-offset:3px;box-shadow:none!important}
+.rainwoodWorkspaceShell :is(button,a,summary){touch-action:manipulation}
+.rainwoodDashboard{max-width:none;margin:0;color:var(--dash-ink);font-size:14px;line-height:1.5;font-variant-numeric:tabular-nums}
+.rainwoodDashboard h1,.rainwoodDashboard h2,.rainwoodDashboard p{margin:0}
+.rainwoodDashboard h1{color:var(--dash-ink)!important;font-size:24px;font-weight:600;letter-spacing:-.025em;line-height:1.25}
+.rainwoodDashboard h2{color:var(--dash-ink)!important;font-size:16px;font-weight:600;letter-spacing:-.01em;line-height:1.3}
+.dashHeading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}
+.dashHeading p{color:var(--dash-muted);font-size:14px;margin-top:5px}
+.dashFreshness{display:flex;align-items:center;gap:8px;color:var(--dash-muted);font-size:12px;white-space:nowrap}
+.dashIconButton{display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--dash-rule);border-radius:6px;color:var(--dash-muted);background:var(--dash-surface);cursor:pointer}
+.dashIconButton:disabled{cursor:wait;color:var(--dash-muted)}
+.dashFilters{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+.dashHotelLabel{display:flex;align-items:center;gap:10px;margin:0;min-width:0;color:var(--dash-muted);font-size:12px;font-weight:400;text-transform:none;letter-spacing:0}
+.dashHotelLabel select{height:36px;max-width:250px;min-width:160px;margin:0;padding:7px 28px 7px 10px;background:var(--dash-surface);border:1px solid var(--dash-control);border-radius:6px;color:var(--dash-ink);font:500 13px 'IBM Plex Sans',Arial,sans-serif}
+.dashPeriodControls{display:flex;align-items:center;gap:12px}
+.dashPresets,.dashChartTabs{display:flex;gap:2px;padding:3px;background:var(--dash-raised);border-radius:7px}
+.dashPresets button,.dashChartTabs button{border:0;background:transparent;padding:5px 10px;border-radius:4px;color:var(--dash-muted);font:400 12px 'IBM Plex Sans',Arial,sans-serif;white-space:nowrap;min-height:30px;cursor:pointer}
+.dashPresets button[aria-pressed=true],.dashChartTabs button[aria-pressed=true]{color:var(--dash-ink);background:var(--dash-active);font-weight:500}
+.dashDateButton{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--dash-surface);border:1px solid var(--dash-control);border-radius:6px;padding:7px 10px;min-height:36px;font:400 12px 'IBM Plex Sans',Arial,sans-serif;color:var(--dash-ink);cursor:pointer;white-space:nowrap}
+.dashCustomDates{display:flex;align-items:end;gap:16px;background:var(--dash-raised);padding:14px 16px;border-radius:8px;margin:-8px 0 20px}
+.dashCustomDates label{margin:0;font-size:12px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--dash-ink)}
+.dashCustomDates input{display:block;width:160px;height:36px;margin:5px 0 0;border:1px solid var(--dash-control);border-radius:6px;font:400 13px 'IBM Plex Sans',Arial,sans-serif;color:var(--dash-ink)}
+.dashCustomDates>span{font-size:12px;color:var(--dash-muted);padding-bottom:8px}
+.dashData{display:grid;gap:16px}
+.dashKpiStrip{display:grid;grid-template-columns:1.18fr 1fr 1fr 1fr;border:1px solid var(--dash-rule);border-radius:9px;padding:18px 0}
+.dashKpiStrip>div{padding:0 20px;min-width:0;border-left:1px solid var(--dash-rule)}
+.dashKpiStrip>div:first-child{border-left:0}
+.dashKpiStrip span{display:block;color:var(--dash-muted);font-size:13px}
+.dashKpiStrip strong{display:block;font-size:26px;line-height:1.4;letter-spacing:-.03em;font-weight:400;color:var(--dash-ink);margin:4px 0}
+.dashKpiStrip .dashLeadKpi strong{font-size:34px;font-weight:500;line-height:1.07;margin:8px 0}
+.dashKpiStrip small{display:block;font-size:12px;color:var(--dash-muted);line-height:1.4}
+.dashMovement{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.dashMovement>a,.dashMovement>div{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--dash-raised);border-radius:7px;color:var(--dash-ink);min-width:0;text-decoration:none}
+.dashMovement>a:hover{background:var(--dash-active)}
+.dashMovement span{font-size:13px;font-weight:500}
+.dashMovement small{display:block;font-size:11px;color:var(--dash-muted)}
+.dashMovement strong{margin-left:auto;font-size:22px;font-weight:400}
+.dashMovement svg{color:var(--dash-muted);flex-shrink:0}
+.dashMainGrid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);gap:16px}
+.dashPanel{min-width:0;padding:18px 20px;background:var(--dash-surface);border:1px solid var(--dash-rule);border-radius:9px;box-shadow:none}
+.dashPanelHeading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.dashPanelNote{font-size:12px;color:var(--dash-muted)}
+.dashTextLink{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:400;color:var(--dash-ink);text-decoration:none;white-space:nowrap;min-height:28px}
+.dashTextLink:hover{text-decoration:underline}
+.dashChartTabs{padding:2px}
+.dashChartTabs button{font-size:11px;padding:3px 8px;min-height:26px}
+.dashChart{display:flex;height:164px;gap:10px;padding-top:8px}
+.dashChartScale{display:flex;flex-direction:column;justify-content:space-between;min-width:40px;height:calc(100% - 26px);font-size:11px;color:var(--dash-muted);text-align:right;line-height:1}
+.dashPlot{position:relative;flex:1;min-width:0}
+.dashChartGrid{position:absolute;inset:0 0 26px;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}
+.dashChartGrid i{border-top:1px dashed var(--dash-rule);width:100%}
+.dashBars{position:relative;display:flex;justify-content:space-around;gap:6px;height:100%;padding:0 5px}
+.dashBarColumn{display:flex;flex-direction:column;align-items:center;flex:1;min-width:0;max-width:80px;outline-offset:1px!important}
+.dashBarArea{position:relative;display:flex;align-items:end;justify-content:center;width:100%;height:calc(100% - 26px)}
+.dashBar{display:block;width:65%;max-width:38px;background:var(--dash-accent);border-radius:2px 2px 0 0}
+.dashBarColumn>small{height:26px;padding-top:9px;font-size:11px;white-space:nowrap;color:var(--dash-muted)}
+.dashBarTooltip{position:absolute;z-index:3;bottom:calc(100% + 5px);left:50%;transform:translateX(-50%);display:none;padding:6px 9px;background:var(--dash-ink);color:var(--dash-surface);border-radius:5px;white-space:nowrap;font-size:12px;pointer-events:none}
+.dashBarColumn:hover .dashBarTooltip,.dashBarColumn:focus .dashBarTooltip{display:block}
+.dashBarColumn:first-child .dashBarTooltip{left:0;transform:none}
+.dashBarColumn:last-child .dashBarTooltip{left:auto;right:0;transform:none}
+.dashChartEmpty{position:absolute;inset:40px 0 auto;text-align:center;font-size:12px;color:var(--dash-muted)}
+.dashChartCaption{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--dash-muted);margin-top:9px}
+.dashReadiness{margin:10px 0}
+.dashReadiness>div{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:31px}
+.dashReadiness dt{font-size:13px;color:var(--dash-ink)}
+.dashReadiness dt a{display:inline-flex;align-items:center;gap:7px;text-decoration:none;color:inherit}
+.dashReadiness dt a:hover{text-decoration:underline}
+.dashReadiness dt svg{color:var(--dash-muted)}
+.dashReadiness dd{margin:0;font-size:14px;font-weight:500}
+.dashOutstanding{display:flex;justify-content:space-between;gap:12px;padding:12px;margin-top:8px;background:var(--dash-raised);border-radius:6px;font-size:12px;color:var(--dash-muted)}
+.dashOutstanding strong{font-weight:500;color:var(--dash-ink)}
+.dashFinancials{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;padding:15px 0;border-block:1px solid var(--dash-rule)}
+.dashFinancials span{font-size:12px;color:var(--dash-muted);display:block}
+.dashFinancials strong{display:block;font-size:16px;font-weight:500;letter-spacing:-.01em;margin-top:5px}
+.dashTables{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.dashTableScroll{max-width:100%;overflow-x:auto}
+.rainwoodDashboard table{min-width:360px;width:100%;font-size:12px;font-variant-numeric:tabular-nums}
+.rainwoodDashboard th{background:transparent!important;color:var(--dash-muted)!important;letter-spacing:0;text-transform:none;font-size:11px;font-weight:400;padding:10px 8px;white-space:nowrap}
+.rainwoodDashboard td{padding:12px 8px;border-bottom:1px solid var(--dash-rule);color:var(--dash-ink);font-size:12px;background:transparent!important}
+.rainwoodDashboard th:first-child,.rainwoodDashboard td:first-child{padding-left:0;text-align:left}
+.rainwoodDashboard th:not(:first-child),.rainwoodDashboard td:not(:first-child){text-align:right;white-space:nowrap}
+.rainwoodDashboard th:last-child,.rainwoodDashboard td:last-child{padding-right:0}
+.rainwoodDashboard td.dashEmpty{padding:23px 0;text-align:center;color:var(--dash-muted);font-size:12px;white-space:normal}
+.dashTableNote{font-size:11px;color:var(--dash-muted);padding-top:10px}
+.dashFooter{display:flex;align-items:start;justify-content:space-between;gap:20px;color:var(--dash-muted);font-size:11px;padding:2px 0;background:transparent;border:0;flex-direction:row}
+.dashFooter details{max-width:460px;text-align:right}
+.dashFooter summary{cursor:pointer;min-height:24px}
+.dashFooter details p{font-size:12px;line-height:1.6;margin-top:8px;text-align:left}
+.dashError{display:flex;justify-content:space-between;gap:16px;padding:16px;background:var(--dash-warning-bg);color:var(--dash-warning);border-radius:8px;font-size:14px;margin:16px 0}
+.dashError p{margin-top:4px}
+.dashEmpty{padding:24px;color:var(--dash-muted);font-size:14px;text-align:center}
+.dashSkeleton{background:var(--dash-rule);color:transparent!important;border-radius:4px;width:70%}
+.rainwoodWorkspaceShell button,.rainwoodWorkspaceShell a{transition:background-color .15s ease,color .15s ease}
+.dashNavigationBackdrop{position:fixed;inset:0;z-index:70;border:0;background:#20332b35;cursor:pointer}
+@media(min-width:821px){
+  .rainwoodWorkspaceShell.is-sidebar-collapsed .adminSidebar{width:76px}
+  .rainwoodWorkspaceShell.is-sidebar-collapsed .adminSidebarMain{margin-left:76px;width:calc(100% - 76px)}
+}
+@media(max-width:1200px){
+  .dashFilters{align-items:start;flex-wrap:wrap}
+  .dashPeriodControls{margin-left:auto}
+  .dashKpiStrip>div{padding-inline:14px}
+  .dashKpiStrip strong{font-size:22px}
+  .dashKpiStrip .dashLeadKpi strong{font-size:29px}
+  .rainwoodWorkspaceShell .operationsCommandBar label:nth-child(2),.rainwoodWorkspaceShell .operationsCommandBar label:nth-child(3){display:none}
+  .dashMovement{gap:8px}
+  .dashMovement>a,.dashMovement>div{padding:10px;gap:6px}
+  .dashPanel{padding:16px}
+  .dashFinancials{gap:12px}
+}
+@media(max-width:1000px){
+  .dashMainGrid{grid-template-columns:1.3fr 1fr}
+  .dashTables{grid-template-columns:1fr}
+  .dashPanelHeading{gap:6px;flex-wrap:wrap}
+  .dashFinancials{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:16px}
+}
+@media(max-width:820px){
+  .rainwoodWorkspaceShell .adminSidebar{width:260px;z-index:80}
+  .rainwoodWorkspaceShell .adminSidebarMain,.rainwoodWorkspaceShell.is-sidebar-collapsed .adminSidebarMain{width:100%;margin-left:0}
+  .rainwoodWorkspaceShell .adminSidebarTopbar{padding:0 16px}
+  .rainwoodWorkspaceShell .operationsCommandBar{padding:4px 16px 12px}
+  .rainwoodWorkspaceShell .adminTopContent{margin:0;border:0;border-radius:0;padding:20px 16px}
+  .rainwoodWorkspaceShell.is-mobile-nav-open .adminSidebar{padding-top:64px;box-shadow:12px 0 35px #20332b20!important}
+  .rainwoodWorkspaceShell.is-mobile-nav-open .adminSidebarToggle{position:fixed;left:16px;top:10px;z-index:100;background:var(--dash-active)}
+  .rainwoodWorkspaceShell.is-mobile-nav-open .adminSidebarTopbar{z-index:90}
+  .rainwoodWorkspaceShell .adminSidebarGreeting span{display:none}
+  .rainwoodWorkspaceShell .adminSidebarToggle{width:40px;height:40px}
+  .dashPeriodControls{margin-left:0;flex:1;justify-content:space-between}
+}
+@media(max-width:600px){
+  .dashHeading{align-items:start;margin-bottom:18px;gap:8px}
+  .rainwoodDashboard h1{font-size:22px}
+  .dashHeading p{font-size:13px;max-width:240px}
+  .dashFreshness>span{display:none}
+  .dashIconButton{width:40px;height:40px}
+  .dashFilters{gap:10px;margin-bottom:16px}
+  .dashHotelLabel{width:100%}
+  .dashHotelLabel>span{width:47px;flex-shrink:0}
+  .dashHotelLabel select{max-width:none;flex:1;width:100%;height:40px;font-size:14px}
+  .dashPeriodControls{flex-wrap:wrap;gap:8px}
+  .dashPresets{flex:1;justify-content:space-between}
+  .dashPresets button{padding:6px 8px;min-height:38px;font-size:12px}
+  .dashDateButton{min-height:40px;font-size:12px}
+  .dashKpiStrip{grid-template-columns:repeat(2,minmax(0,1fr));padding:0}
+  .dashKpiStrip>div{padding:14px 16px;min-height:106px}
+  .dashKpiStrip>div:nth-child(3){border-left:0}
+  .dashKpiStrip>div:nth-child(n+3){border-top:1px solid var(--dash-rule)}
+  .dashKpiStrip strong{font-size:24px}
+  .dashKpiStrip .dashLeadKpi strong{font-size:30px}
+  .dashKpiStrip small{font-size:11px}
+  .dashMovement{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dashMovement>a,.dashMovement>div{padding:12px;min-height:68px}
+  .dashMovement span{font-size:12px}
+  .dashMovement small{font-size:11px}
+  .dashMainGrid{grid-template-columns:1fr}
+  .dashPanel{padding:16px}
+  .dashPanelHeading{min-height:32px}
+  .dashChartTabs button{min-height:36px;font-size:12px}
+  .dashChart{height:170px}
+  .dashBarColumn>small{font-size:11px}
+  .dashFinancials{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+  .dashFinancials>div:last-child{grid-column:1/-1}
+  .dashFinancials strong{font-size:18px}
+  .dashCustomDates{align-items:stretch;gap:10px;flex-wrap:wrap}
+  .dashCustomDates label{flex:1;min-width:125px}
+  .dashCustomDates input{width:100%;height:44px;font-size:16px}
+  .dashCustomDates>span{width:100%;padding:0}
+  .dashFooter{flex-direction:column;gap:8px}
+  .dashFooter details{text-align:left}
+  .dashTextLink{min-height:40px}
+  .dashReadiness>div{min-height:40px}
+  .rainwoodWorkspaceShell .operationsCommandBar{gap:6px}
+  .rainwoodWorkspaceShell .operationsCommandBar label:first-child{flex-basis:0}
+  .rainwoodWorkspaceShell .operationsCommandBar input{height:40px;min-height:40px}
+  .rainwoodWorkspaceShell .operationsCommandBar button.smallBtn{display:none}
+  .rainwoodWorkspaceShell .operationsCommandBar a.smallBtn{height:40px;font-size:11px;padding:7px 9px}
+  .rainwoodWorkspaceShell .operationsCommandBar input::placeholder{font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){.rainwoodWorkspaceShell *{transition:none!important;animation:none!important}}

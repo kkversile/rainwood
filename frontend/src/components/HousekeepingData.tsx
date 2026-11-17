@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiRequest } from '../lib/api';
+import { useNavigationDialog } from '../lib/use-navigation-dialog';
 
 export type HousekeepingProfile = { id: string; name: string; role: string; department: string | null; jobTitle: string | null; hotel: { id: string; name: string } };
 type Task = { id: string; status: 'PENDING' | 'ACCEPTED' | 'CLEANING' | 'COMPLETED' | 'CANCELLED'; assignedTo: { id: string; name: string } | null; createdAt: string; acceptedAt: string | null; cleaningStartedAt: string | null; completedAt: string | null; issueNote: string | null; issueReportedAt: string | null };
@@ -18,26 +19,32 @@ export function HousekeepingData({ profile: initialProfile }: { profile?: Housek
   const [busy, setBusy] = useState('');
   const [issueTask, setIssueTask] = useState<Task | null>(null);
   const [issueNote, setIssueNote] = useState('');
+  const requestRef = useRef(0);
+  const issueDialogRef = useRef<HTMLElement>(null); const issueTriggerRef = useRef<HTMLButtonElement>(null);
+  useNavigationDialog(Boolean(issueTask), issueDialogRef, issueTriggerRef, () => { if (!busy) setIssueTask(null); });
 
   async function load(nextTab = tab) {
+    const request = ++requestRef.current;
     setLoading(true); setError('');
     try {
       const [me, rows] = await Promise.all([
         profile ? Promise.resolve(profile) : apiRequest<HousekeepingProfile>('/staff/me'),
         apiRequest<Room[]>('/staff/housekeeping/rooms'),
       ]);
+      if (request !== requestRef.current) return;
       setProfile(me);
       if (nextTab === 'MY') {
         const tasks = await apiRequest<Array<Task & { room: { id: string; roomNumber: string; floor: string | null; wing: string | null; status: string; roomType: { id: string; name: string } } }>>('/staff/housekeeping/tasks');
+        if (request !== requestRef.current) return;
         setRooms(tasks.filter((task) => task.assignedTo?.id === me.id).map((task) => ({ roomId: task.room.id, roomNumber: task.room.roomNumber, floor: task.room.floor, wing: task.room.wing, roomType: task.room.roomType, roomStatus: task.room.status, task })));
       } else {
         setRooms(rows.filter((room) => room.roomStatus === nextTab));
       }
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load housekeeping rooms.'); }
-    finally { setLoading(false); }
+    } catch (reason) { if (request === requestRef.current) setError(reason instanceof Error ? reason.message : 'Could not load housekeeping rooms.'); }
+    finally { if (request === requestRef.current) setLoading(false); }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); return () => { requestRef.current += 1; }; }, []);
 
   async function act(task: Task | null, action: 'accept' | 'start' | 'complete') {
     if (!task) return;
@@ -59,9 +66,9 @@ export function HousekeepingData({ profile: initialProfile }: { profile?: Housek
   if (profile && profile.department !== 'HOUSEKEEPING') return <section className="staffContent"><div className="staffEmpty"><strong>Housekeeping access is not enabled</strong><span>Your staff department does not have housekeeping permissions.</span></div></section>;
   return <section className="staffContent housekeepingPwa">
     <div className="staffWelcome"><span className="staffEyebrow">Housekeeping</span><h1>{profile?.hotel.name ?? 'Hotel operations'}</h1><p>Hi, <strong>{profile?.name ?? 'Housekeeper'}</strong>{profile?.jobTitle ? ` · ${profile.jobTitle}` : ''}</p></div>
-    <nav className="housekeepingTabs" aria-label="Housekeeping views">{(['DIRTY', 'MY', 'CLEANING'] as const).map((item) => <button type="button" className={tab === item ? 'active' : ''} key={item} onClick={() => { setTab(item); void load(item); }}>{item === 'MY' ? 'My Rooms' : item === 'DIRTY' ? 'Dirty' : 'Cleaning'}</button>)}</nav>
-    {error && <p className="staffError" role="alert">{error}</p>}
-    {loading ? <p className="staffLoading">Loading {title.toLowerCase()}…</p> : !rooms.length ? <div className="staffEmpty"><strong>No {title.toLowerCase()} found</strong><span>Room tasks will appear here when the hotel operation changes a room.</span></div> : <div className="housekeepingRoomList">{rooms.map((room) => { const task = room.task; const mine = task?.assignedTo?.id === profile?.id; return <article className="housekeepingRoomCard" key={room.roomId}><div className="housekeepingRoomMain"><span className="housekeepingRoomNumber">ROOM {room.roomNumber}</span><strong>{room.roomType.name}</strong><span>Floor {room.floor || '—'}{room.wing ? ` · ${room.wing}` : ''}</span></div><div className="housekeepingRoomState"><b className={`housekeepingStatus ${room.roomStatus}`}>{room.roomStatus.replace(/_/g, ' ')}</b>{task && <span>{task.status === 'ACCEPTED' && mine ? `Assigned to you · accepted ${timeLabel(task.acceptedAt)}` : task.status === 'CLEANING' && mine ? `Started ${timeLabel(task.cleaningStartedAt)}` : task.status}</span>}{task?.issueNote && <small className="housekeepingIssue">Issue: {task.issueNote}</small>}</div><div className="housekeepingRoomActions">{task?.status === 'PENDING' && <button className="staffButton" type="button" disabled={busy === task.id} onClick={() => void act(task, 'accept')}>Accept Room</button>}{task?.status === 'ACCEPTED' && mine && <button className="staffButton" type="button" disabled={busy === task.id} onClick={() => void act(task, 'start')}>Start Cleaning</button>}{task?.status === 'CLEANING' && mine && <><button className="staffButton" type="button" disabled={busy === task.id} onClick={() => void act(task, 'complete')}>Mark Ready</button><button className="staffButton secondary" type="button" onClick={() => { setIssueTask(task); setIssueNote(''); }}>Report Issue</button></>}{task?.status === 'ACCEPTED' && !mine && <span className="mutedText">Assigned to {task.assignedTo?.name}</span>}</div></article>; })}</div>}
-    {issueTask && <div className="staffSheetBackdrop" role="presentation"><section className="staffSheet" role="dialog" aria-modal="true" aria-labelledby="housekeeping-issue-title"><div className="staffSheetHeader"><div><span className="staffEyebrow">Room {rooms.find((room) => room.task?.id === issueTask.id)?.roomNumber}</span><h2 id="housekeeping-issue-title">Report issue</h2></div><button className="staffClose" type="button" aria-label="Close issue dialog" onClick={() => setIssueTask(null)}>×</button></div><form onSubmit={(event) => { event.preventDefault(); void reportIssue(); }}><label>Issue notes<textarea required minLength={2} maxLength={500} value={issueNote} onChange={(event) => setIssueNote(event.target.value)} placeholder="e.g. AC leaking" /></label><button className="staffButton full" disabled={busy === issueTask.id}>{busy === issueTask.id ? 'Saving…' : 'Report issue'}</button></form></section></div>}
+    <nav className="housekeepingTabs" aria-label="Housekeeping views">{(['DIRTY', 'MY', 'CLEANING'] as const).map((item) => <button type="button" className={tab === item ? 'active' : ''} aria-pressed={tab === item} key={item} onClick={() => { setTab(item); void load(item); }}>{item === 'MY' ? 'My Rooms' : item === 'DIRTY' ? 'Dirty' : 'Cleaning'}</button>)}</nav>
+    {error && <p className="staffError" role="alert">{error} <button type="button" className="staffButton secondary" onClick={() => void load()}>Try again</button></p>}
+    {loading ? <p className="staffLoading">Loading {title.toLowerCase()}…</p> : !rooms.length ? <div className="staffEmpty"><strong>No {title.toLowerCase()} found</strong><span>Room tasks will appear here when the hotel operation changes a room.</span></div> : <div className="housekeepingRoomList">{rooms.map((room) => { const task = room.task; const mine = task?.assignedTo?.id === profile?.id; return <article className="housekeepingRoomCard" key={room.roomId}><div className="housekeepingRoomMain"><span className="housekeepingRoomNumber">ROOM {room.roomNumber}</span><strong>{room.roomType.name}</strong><span>Floor {room.floor || '—'}{room.wing ? ` · ${room.wing}` : ''}</span></div><div className="housekeepingRoomState"><b className={`housekeepingStatus ${room.roomStatus}`}>{room.roomStatus.replace(/_/g, ' ')}</b>{task && <span>{task.status === 'ACCEPTED' && mine ? `Assigned to you · accepted ${timeLabel(task.acceptedAt)}` : task.status === 'CLEANING' && mine ? `Started ${timeLabel(task.cleaningStartedAt)}` : task.status}</span>}{task?.issueNote && <small className="housekeepingIssue">Issue: {task.issueNote}</small>}</div><div className="housekeepingRoomActions">{task?.status === 'PENDING' && <button className="staffButton" type="button" disabled={busy === task.id} onClick={() => void act(task, 'accept')}>Accept Room</button>}{task?.status === 'ACCEPTED' && mine && <button className="staffButton" type="button" disabled={busy === task.id} onClick={() => void act(task, 'start')}>Start Cleaning</button>}{task?.status === 'CLEANING' && mine && <><button className="staffButton" type="button" disabled={busy === task.id} onClick={() => void act(task, 'complete')}>Mark Ready</button><button className="staffButton secondary" type="button" onClick={(event) => { issueTriggerRef.current = event.currentTarget; setIssueTask(task); setIssueNote(''); }}>Report Issue</button></>}{task?.status === 'ACCEPTED' && !mine && <span className="mutedText">Assigned to {task.assignedTo?.name}</span>}</div></article>; })}</div>}
+    {issueTask && <div className="staffSheetBackdrop" role="presentation"><section ref={issueDialogRef} className="staffSheet" role="dialog" aria-modal="true" aria-labelledby="housekeeping-issue-title"><div className="staffSheetHeader"><div><span className="staffEyebrow">Room {rooms.find((room) => room.task?.id === issueTask.id)?.roomNumber}</span><h2 id="housekeeping-issue-title">Report issue</h2></div><button className="staffClose" type="button" aria-label="Close issue dialog" disabled={Boolean(busy)} onClick={() => setIssueTask(null)}>×</button></div><form onSubmit={(event) => { event.preventDefault(); void reportIssue(); }}><label>Issue notes<textarea required minLength={2} maxLength={500} value={issueNote} onChange={(event) => setIssueNote(event.target.value)} placeholder="e.g. AC leaking" /></label><button className="staffButton full" disabled={busy === issueTask.id}>{busy === issueTask.id ? 'Saving…' : 'Report issue'}</button></form></section></div>}
   </section>;
 }

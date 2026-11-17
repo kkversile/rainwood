@@ -72,12 +72,11 @@ test("grouped admin navigation keeps the requested information architecture", ()
       "Yield Rules",
       "Rate Simulator",
       "Promotions",
-      "Rate Import",
     ],
   );
   assert.deepEqual(
     groups[3].items.map((item) => item.label),
-    ["Guests", "Agent Rate Slabs", "Corporates", "Inquiries"],
+    ["Guests", "Corporates", "Inquiries"],
   );
   assert.deepEqual(
     groups[4].items.map((item) => item.label),
@@ -95,6 +94,21 @@ test("grouped admin navigation keeps the requested information architecture", ()
       "Audit Logs",
     ],
   );
+});
+
+test("every admin destination is reachable through a standalone link or navigation group", () => {
+  const standaloneKeys = ['dashboard', 'manageHotels', 'rates', 'agents', 'agentMappings'];
+  const groupedKeys = buildNavigationGroups(asAdminLinks('SUPER_ADMIN')).flatMap((group) => group.items.map((item) => item.key));
+  assert.deepEqual([...standaloneKeys, ...groupedKeys].sort(), adminLinks.map((item) => item.key).sort());
+  assert.equal(new Set(adminLinks.map((item) => item.href)).size, adminLinks.length);
+  for (const [key, href, label] of [
+    ['rates', '/admin/rates', 'Rate Master'],
+    ['agents', '/admin/agents', 'Agents'],
+    ['agentMappings', '/admin/agent-mappings', 'Agent Mappings'],
+  ]) {
+    assert.ok(adminLinks.some((item) => item.key === key && item.href === href && item.label === label));
+  }
+  assert.equal(adminLinks.some((item) => item.href === '/admin/base-rate-import' || item.href === '/admin/agent-rate-slabs'), false);
 });
 
 test("role filtering is fail-closed and groups only allowed links", () => {

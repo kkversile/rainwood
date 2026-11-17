@@ -121,7 +121,7 @@ describe('reservation detail projection', () => {
 
 describe('reservation guest folio charges', () => {
   const actor = { id: 'admin-1' };
-  const baseReservation = () => ({ id: 'reservation-folio-1', reference: 'RW-FOLIO-1', status: 'CONFIRMED', currency: 'INR', totalAmount: new Prisma.Decimal(1000), advanceAmount: new Prisma.Decimal(200), balanceAmount: new Prisma.Decimal(800) });
+  const baseReservation = () => ({ id: 'reservation-folio-1', reference: 'RW-FOLIO-1', status: 'CONFIRMED', currency: 'INR', totalAmount: new Prisma.Decimal(1000), advanceAmount: new Prisma.Decimal(200), balanceAmount: new Prisma.Decimal(800), payments: [{ amount: new Prisma.Decimal(200), verified: true }] });
   const charge = (status: 'POSTED' | 'VOIDED', amount: number, id = `charge-${status.toLowerCase()}`) => ({ id, category: 'MINIBAR', description: 'Minibar water', quantity: new Prisma.Decimal(1), unitAmount: new Prisma.Decimal(amount), taxableAmount: new Prisma.Decimal(amount), taxAmount: new Prisma.Decimal(0), totalAmount: new Prisma.Decimal(amount), postingDate: new Date('2026-09-27T00:00:00.000Z'), note: null, status, postedBy: { id: 'admin-1', name: 'Admin' }, voidedAt: status === 'VOIDED' ? new Date() : null, voidedBy: status === 'VOIDED' ? { id: 'admin-1', name: 'Admin' } : null, voidReason: status === 'VOIDED' ? 'Duplicate posting' : null, createdAt: new Date() });
 
   function setup(rows: any[] = [], status = 'CONFIRMED') {
@@ -172,6 +172,18 @@ describe('reservation guest folio charges', () => {
     expect(result.totals.incidentalCharges).toBe(125);
     expect(result.totals.incidentalBalance).toBe(125);
     expect(result.totals.totalOutstanding).toBe(925);
+  });
+
+  it.each([0, 100, 315])('deducts verified service payments of %s without counting pending payments', async (paid) => {
+    const { service, prisma } = setup();
+    prisma.reservation.findUnique.mockResolvedValue({
+      ...baseReservation(), totalAmount: new Prisma.Decimal(0), advanceAmount: new Prisma.Decimal(0), balanceAmount: new Prisma.Decimal(0),
+      payments: [{ amount: new Prisma.Decimal(paid), verified: true }, { amount: new Prisma.Decimal(999), verified: false }],
+      folioCharges: [charge('POSTED', 252), charge('POSTED', 63, 'room-service'), charge('VOIDED', 50)],
+    });
+    const result = await service.getFolio('RW-FOLIO-1');
+    expect(result.totalOutstanding).toBe(315 - paid);
+    expect(result.totals).toEqual(expect.objectContaining({ reservationBalance: 0, incidentalCharges: 315, incidentalPayments: paid, incidentalBalance: 315 - paid, totalOutstanding: 315 - paid }));
   });
 
   it('requires a reason, voids rather than deletes, and audits the operation', async () => {

@@ -1,3 +1,9 @@
+import { portalLoginPath } from './portal-session';
+
+export class ApiRequestError extends Error {
+  constructor(message: string, public readonly status: number) { super(message); this.name = 'ApiRequestError'; }
+}
+
 export const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 
 export function apiAssetUrl(value?: string | null) {
@@ -38,8 +44,8 @@ function redirectToLoginAfterUnauthorized() {
   if (typeof window === 'undefined') return;
   clearAccessToken();
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
-  const loginPath = `${basePath}/login?next=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
-  if (!window.location.pathname.startsWith(`${basePath}/login`)) window.location.replace(loginPath);
+  const loginPath = portalLoginPath(window.location.pathname, window.location.search, basePath);
+  if (![`${basePath}/login`, `${basePath}/agent/login`, `${basePath}/staff/login`].includes(window.location.pathname)) window.location.replace(loginPath);
 }
 
 async function readBody(response: Response) {
@@ -87,7 +93,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, retry 
   if (response.status === 401 && !path.startsWith('/auth/')) redirectToLoginAfterUnauthorized();
   const body = await readBody(response);
   if (!response.ok) {
-    throw new Error(friendlyApiError(response.status, body, path));
+    throw new ApiRequestError(friendlyApiError(response.status, body, path), response.status);
   }
   return body as T;
 }

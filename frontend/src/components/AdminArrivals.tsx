@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { apiRequest } from '../lib/api';
 import { todayInHotelTimezone } from '../lib/hotel-date-time';
 import { ArrivalDetailsModal } from './ArrivalDetailsModal';
+import { useSearchParams } from 'next/navigation';
 
 type Hotel = { id: string; name: string; city?: string };
 type RoomType = { id: string; name: string; rooms: number };
@@ -23,14 +24,15 @@ type Filters = { from: string; to: string; hotelIds: string[]; statuses: string[
 
 const sourceOptions = ['WEBSITE', 'DIRECT', 'PHONE', 'EMAIL', 'WHATSAPP', 'WALK_IN', 'AGENT', 'COMPANY', 'OTA'];
 const statusOptions = [{ value: 'CONFIRMED', label: 'Confirmed' }, { value: 'TENTATIVE', label: 'Tentative' }, { value: 'PENDING_PAYMENT', label: 'Pending Payment' }];
-function defaultFilters(): Filters { const date = todayInHotelTimezone(); return { from: date, to: date, hotelIds: [], statuses: ['CONFIRMED', 'TENTATIVE'], source: '', includeWaitlist: false, reconfirmedOnly: false, showRemarks: false }; }
+function defaultFilters(params?: { get: (key: string) => string | null }): Filters { const date = todayInHotelTimezone(); const from = params?.get('from') || date; return { from, to: params?.get('to') || from, hotelIds: params?.get('hotelId') ? [params.get('hotelId')!] : [], statuses: ['CONFIRMED', 'TENTATIVE'], source: '', includeWaitlist: false, reconfirmedOnly: false, showRemarks: false }; }
 function money(value: number) { return `INR ${Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
 function dateLabel(value: string | null) { return value ? new Date(`${value}T00:00:00Z`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—'; }
 function csvValue(value: unknown) { return `"${String(value ?? '').replace(/"/g, '""')}"`; }
 
 export function AdminArrivals() {
-  const [filters, setFilters] = useState<Filters>(() => defaultFilters());
-  const [applied, setApplied] = useState<Filters>(() => defaultFilters());
+  const params = useSearchParams();
+  const [filters, setFilters] = useState<Filters>(() => defaultFilters(params));
+  const [applied, setApplied] = useState<Filters>(() => defaultFilters(params));
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [data, setData] = useState<ArrivalResponse | null>(null);
   const [page, setPage] = useState(1);

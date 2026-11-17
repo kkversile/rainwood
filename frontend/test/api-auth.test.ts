@@ -53,3 +53,26 @@ test('login errors preserve the account-specific message instead of saying the s
     globalThis.fetch = originalFetch;
   }
 });
+
+test('expired agent and staff requests redirect to their own login with a return link', async () => {
+  const originalWindow = (globalThis as { window?: unknown }).window;
+  const originalFetch = globalThis.fetch;
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+  const values = new Map<string, string>();
+  const location = { pathname: '', search: '?view=current', href: '', replace(value: string) { this.href = value; } };
+  (globalThis as { window?: unknown }).window = { localStorage: { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => values.delete(key) }, dispatchEvent: () => true, location };
+  globalThis.fetch = async () => new Response(JSON.stringify({ message: 'Unauthorized' }), { status: 401 });
+  try {
+    for (const portal of ['agent', 'staff']) {
+      location.pathname = `${basePath}/${portal}/bookings`;
+      setAccessToken('expired-token');
+      await assert.rejects(apiRequest(`/${portal}/protected`), /session has expired/i);
+      assert.equal(location.href, `${basePath}/${portal}/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`);
+      assert.equal(values.has('rainwood_access_token'), false);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalWindow) (globalThis as { window?: unknown }).window = originalWindow;
+    else delete (globalThis as { window?: unknown }).window;
+  }
+});

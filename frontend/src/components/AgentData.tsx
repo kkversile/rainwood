@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { apiRequest, clearAccessToken, setAccessToken } from '../lib/api';
+import { apiRequest, ApiRequestError, clearAccessToken } from '../lib/api';
+import { portalLoginPath } from '../lib/portal-session';
 import { canPendingAgentVisit, type AgentKycSummary, type AgentOnboardingStatus } from '../lib/agent-onboarding';
 import { AgentPortalShell } from './AgentPortalShell';
 
@@ -28,21 +29,14 @@ export function AgentWorkspace({ title, children }: { title: string; children: (
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<AgentUser | null>(null);
+  const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let mounted = true;
     setUser(null);
-    const loadProfile = async () => {
-      try {
-        return await apiRequest<AgentProfileAccess>('/agents/me/profile');
-      } catch {
-        const session = await apiRequest<{ accessToken: string; user: { role: string } }>('/auth/refresh', { method: 'POST' });
-        if (session.user.role !== 'AGENT') throw new Error('NOT_AGENT');
-        setAccessToken(session.accessToken, session.user.role);
-        return apiRequest<AgentProfileAccess>('/agents/me/profile');
-      }
-    };
-    loadProfile()
+    setError('');
+    apiRequest<AgentProfileAccess>('/agents/me/profile')
       .then(async (profile) => {
         if (!mounted) return;
         if (profile.onboardingStatus === 'DEACTIVATED') {
@@ -60,11 +54,13 @@ export function AgentWorkspace({ title, children }: { title: string; children: (
         }
         setUser(profile);
       })
-      .catch(() => {
-        if (mounted) router.replace('/agent/login');
+      .catch((reason) => {
+        if (!mounted) return;
+        if (reason instanceof ApiRequestError && [401, 403].includes(reason.status)) window.location.replace(portalLoginPath(window.location.pathname, window.location.search, process.env.NEXT_PUBLIC_BASE_PATH ?? ''));
+        else setError(reason instanceof Error ? reason.message : 'Could not load your agent account.');
       });
     return () => { mounted = false; };
-  }, [pathname, router]);
+  }, [pathname, router, retry]);
 
   async function logout() {
     await apiRequest('/auth/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => undefined);
@@ -72,7 +68,7 @@ export function AgentWorkspace({ title, children }: { title: string; children: (
     router.replace('/agent/login');
   }
 
-  if (!user) return <main className="page"><p className="loading">Loading agent portal...</p></main>;
+  if (!user) return <main className="page">{error ? <div className="error" role="alert"><p>{error}</p><button className="btn" type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button></div> : <p className="loading">Loading agent portal...</p>}</main>;
   return <AgentPortalShell title={title} user={user} onLogout={() => void logout()}>{children(user)}</AgentPortalShell>;
 }
 
@@ -82,5 +78,5 @@ export function AgentReservations() {
   useEffect(() => { apiRequest<AgentReservation[]>('/reservations/mine').then(setRows).catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load bookings')); }, []);
   if (error) return <p className="error">{error}</p>;
   if (!rows) return <p className="loading">Loading bookings...</p>;
-  return <section className="panel"><h2>My bookings</h2>{!rows.length ? <p className="empty">No agent bookings yet.</p> : <div className="tableScroll"><table><thead><tr><th>Reference</th><th>Guest</th><th>Hotel / Room</th><th>Stay</th><th>Status</th><th>Balance</th></tr></thead><tbody>{rows.map((row) => <tr key={row.reference}><td><b>{row.reference}</b></td><td>{row.guestName}</td><td>{row.hotel.name} / {row.lines.map((line) => line.roomType.name).join(', ')}</td><td>{row.checkIn.slice(0, 10)} - {row.checkOut.slice(0, 10)}</td><td>{row.status} / {row.paymentStatus}</td><td>INR {Number(row.balanceAmount).toFixed(2)}</td></tr>)}</tbody></table></div>}</section>;
+  return <section className="panel rwAgentReservations"><h2>My bookings</h2>{!rows.length ? <p className="empty">No agent bookings yet.</p> : <div className="tableScroll"><table><thead><tr><th>Reference</th><th>Guest</th><th>Hotel / Room</th><th>Stay</th><th>Status</th><th>Balance</th></tr></thead><tbody>{rows.map((row) => <tr key={row.reference}><td><b>{row.reference}</b></td><td>{row.guestName}</td><td>{row.hotel.name} / {row.lines.map((line) => line.roomType.name).join(', ')}</td><td>{row.checkIn.slice(0, 10)} - {row.checkOut.slice(0, 10)}</td><td>{row.status} / {row.paymentStatus}</td><td>INR {Number(row.balanceAmount).toFixed(2)}</td></tr>)}</tbody></table></div>}</section>;
 }

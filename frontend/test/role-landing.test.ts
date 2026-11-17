@@ -35,3 +35,13 @@ test('post-login deep links fail closed to the role landing route', () => {
 test('post-login deep links normalize the deployed base path', () => {
   assert.equal(getSafePostLoginRoute('ADMIN', '/rainwood/admin/agents?edit=demo&step=8'), '/admin/agents?edit=demo&step=8');
 });
+
+test('management dashboard deep links fall back to the operational role landing', () => {
+  for (const role of ['RESERVATION', 'ACCOUNTS', 'VIEWER']) {
+    assert.equal(isRoleRouteAllowed(role, '/admin/dashboard'), false);
+    assert.equal(getSafePostLoginRoute(role, '/rainwood/admin/dashboard?hotelId=other-property'), getDefaultRouteForRole(role));
+  }
+  for (const role of ['SUPER_ADMIN', 'CORPORATE_ADMIN', 'ADMIN']) {
+    assert.equal(isRoleRouteAllowed(role, '/admin/dashboard'), true);
+  }
+});

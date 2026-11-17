@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiRequest } from '../lib/api';
+import { useNavigationDialog } from '../lib/use-navigation-dialog';
 
 type PaymentMode = 'GATEWAY' | 'WALLET' | 'UPI' | 'BANK_TRANSFER' | 'CASH' | 'COMPANY_CREDIT';
 type CheckoutPreview = {
@@ -11,7 +12,15 @@ type CheckoutPreview = {
   settlement: { grossAmount: number | string; paidAmount: number | string; outstandingAmount: number | string; status: string; finalFolioNumber: string | null };
   stay: { stayStatus: string; checkIn: string; checkOut: string; assignedRooms: { id: string; roomNumber: string; roomType: string | null; status: string }[] };
 };
-type CheckoutResult = { reference: string; stayStatus: string; status: string; finalFolioNumber: string; settlement: { grossAmount: number; incidentalAmount: number; paidAmount: number; balanceAmount: number; settledAt: string }; snapshot: any };
+type CheckoutResult = { reference: string; stayStatus: string; status: string; finalFolioNumber: string; settlement: { status?: string; grossAmount: number; incidentalAmount: number; paidAmount: number; balanceAmount: number; settledAt: string }; snapshot: any };
+type CheckoutResponse = Omit<CheckoutResult, 'status'> & { status?: string };
+
+export function normalizeCheckoutResult(result: CheckoutResponse): CheckoutResult {
+  // Initial checkout returns status within settlement; saved folios also expose it at the top level.
+  const status = result.status ?? result.settlement.status ?? result.snapshot?.status;
+  if (typeof status !== 'string' || !status) throw new Error('The final folio response is incomplete. Reopen checkout to retrieve the saved folio.');
+  return { ...result, status };
+}
 
 function money(value: number | string) { return `INR ${Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
 function dateLabel(value?: string | null) { return value ? new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—'; }
@@ -26,7 +35,7 @@ export function buildFinalFolioPrintHtml(folio: CheckoutResult) {
   const charges = (snapshot.charges?.incidentals ?? []).map((charge: any) => `<tr><td>${escapeHtml(charge.description)}</td><td>${escapeHtml(label(charge.category))}</td><td>${money(charge.totalAmount)}</td></tr>`).join('');
   const payments = (snapshot.payments ?? []).map((payment: any) => `<tr><td>${escapeHtml(label(payment.mode))}</td><td>${escapeHtml(payment.reference)}</td><td>${money(payment.amount)}</td></tr>`).join('');
   const override = snapshot.override?.authorizedBy?.name ?? snapshot.authorizedBy;
-  return `<html><head><title>${escapeHtml(folio.finalFolioNumber)}</title><style>body{font:14px Arial;color:#12344d;padding:32px}h1{margin:0 0 6px}h2{border-bottom:1px solid #d6e3e8;padding-bottom:6px}table{width:100%;border-collapse:collapse;margin-top:16px}td,th{padding:9px;border-bottom:1px solid #d6e3e8;text-align:left}.total{font-size:18px;font-weight:700}</style></head><body><h1>${escapeHtml(hotelName)}</h1><p>Final Folio: <strong>${escapeHtml(folio.finalFolioNumber)}</strong></p><p>Reservation: ${escapeHtml(folio.reference)} · Guest: ${escapeHtml(guest.name)} · Email: ${escapeHtml(guest.email)} · Mobile: ${escapeHtml(guest.mobile)} · GSTIN: ${escapeHtml(guest.gstin)}</p><h2>Stay</h2><ul>${rooms}</ul><h2>Charges</h2><table><thead><tr><th>Description</th><th>Category</th><th>Total</th></tr></thead><tbody><tr><td>Reservation stay</td><td>Room</td><td>${money(folio.settlement.grossAmount - folio.settlement.incidentalAmount)}</td></tr>${charges}</tbody></table><h2>Payments</h2><table><thead><tr><th>Mode</th><th>Reference</th><th>Amount</th></tr></thead><tbody>${payments}</tbody></table><p class="total">Gross: ${money(folio.settlement.grossAmount)} · Paid: ${money(folio.settlement.paidAmount)} · Balance: ${money(folio.settlement.balanceAmount)}</p>${snapshot.overrideReason ? `<p>Override reason: ${escapeHtml(snapshot.overrideReason)}</p>` : ''}${override ? `<p>Authorized by: ${escapeHtml(override)}</p>` : ''}${snapshot.notes ? `<p>Note: ${escapeHtml(snapshot.notes)}</p>` : ''}<p>Settled at: ${escapeHtml(new Date(folio.settlement.settledAt).toLocaleString('en-IN'))}</p></body></html>`;
+  return `<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(folio.finalFolioNumber)}</title><style>body{font:14px Arial;color:#12344d;padding:32px;overflow-wrap:anywhere}.printHint{color:#526774}@media print{.printHint{display:none}}h1{margin:0 0 6px}h2{border-bottom:1px solid #d6e3e8;padding-bottom:6px}table{width:100%;border-collapse:collapse;margin-top:16px}td,th{padding:9px;border-bottom:1px solid #d6e3e8;text-align:left}.total{font-size:18px;font-weight:700}</style></head><body><p class="printHint">Use your browser’s Print command to print or save this final folio.</p><h1>${escapeHtml(hotelName)}</h1><p>Final Folio: <strong>${escapeHtml(folio.finalFolioNumber)}</strong></p><p>Reservation: ${escapeHtml(folio.reference)} · Guest: ${escapeHtml(guest.name)} · Email: ${escapeHtml(guest.email)} · Mobile: ${escapeHtml(guest.mobile)} · GSTIN: ${escapeHtml(guest.gstin)}</p><h2>Stay</h2><ul>${rooms}</ul><h2>Charges</h2><table><thead><tr><th>Description</th><th>Category</th><th>Total</th></tr></thead><tbody><tr><td>Reservation stay</td><td>Room</td><td>${money(folio.settlement.grossAmount - folio.settlement.incidentalAmount)}</td></tr>${charges}</tbody></table><h2>Payments</h2><table><thead><tr><th>Mode</th><th>Reference</th><th>Amount</th></tr></thead><tbody>${payments}</tbody></table><p class="total">Gross: ${money(folio.settlement.grossAmount)} · Paid: ${money(folio.settlement.paidAmount)} · Balance: ${money(folio.settlement.balanceAmount)}</p>${snapshot.overrideReason ? `<p>Override reason: ${escapeHtml(snapshot.overrideReason)}</p>` : ''}${override ? `<p>Authorized by: ${escapeHtml(override)}</p>` : ''}${snapshot.notes ? `<p>Note: ${escapeHtml(snapshot.notes)}</p>` : ''}<p>Settled at: ${escapeHtml(new Date(folio.settlement.settledAt).toLocaleString('en-IN'))}</p></body></html>`;
 }
 
 export function CheckoutSettlementDialog({ reference, onClose }: { reference: string; onClose: () => void }) {
@@ -42,12 +51,30 @@ export function CheckoutSettlementDialog({ reference, onClose }: { reference: st
   const [overrideReason, setOverrideReason] = useState('');
   const [currentRole, setCurrentRole] = useState('');
   const [note, setNote] = useState('');
+  const [folioHtml, setFolioHtml] = useState('');
+  const [folioDownloadUrl, setFolioDownloadUrl] = useState('');
+  useEffect(() => {
+    if (!folioHtml) { setFolioDownloadUrl(''); return; }
+    const url = URL.createObjectURL(new Blob([folioHtml], { type: 'text/html;charset=utf-8' }));
+    setFolioDownloadUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [folioHtml]);
+  const dialogRef = useRef<HTMLElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const requestClose = () => { if (!busy) onClose(); };
+  useEffect(() => { triggerRef.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null; }, []);
+  useNavigationDialog(true, dialogRef, triggerRef, requestClose, true);
 
   async function loadPreview() {
     setLoading(true); setError('');
     try {
       const body = await apiRequest<CheckoutPreview>(`/reservations/${encodeURIComponent(reference)}/checkout-preview`);
       setPreview(body);
+      if (body.stay.stayStatus === 'CHECKED_OUT') {
+        const saved = await apiRequest<CheckoutResponse>(`/reservations/${encodeURIComponent(reference)}/final-folio`);
+        setResult(normalizeCheckoutResult(saved));
+        setSuccess('Checkout finalized. The final folio is now immutable.');
+      }
       const outstanding = Number(body.settlement.outstandingAmount);
       setPaymentAmount(outstanding > 0 ? outstanding.toFixed(2) : '');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to load checkout preview.'); }
@@ -61,7 +88,7 @@ export function CheckoutSettlementDialog({ reference, onClose }: { reference: st
   const canPay = Number.isFinite(amount) && amount > 0 && amount <= outstanding + 0.005;
   const canAuthorizeOverride = ['ADMIN', 'SUPER_ADMIN'].includes(currentRole);
   const overrideReady = Boolean(canAuthorizeOverride && overrideReason);
-  const canCheckout = outstanding <= 0.005 || overrideReady;
+  const canCheckout = preview?.stay.stayStatus === 'CHECKED_IN' && (outstanding <= 0.005 || overrideReady);
   const totalLabel = useMemo(() => preview ? `${money(preview.settlement.grossAmount)} gross · ${money(preview.settlement.paidAmount)} paid` : '', [preview]);
 
   async function recordPayment(event: React.FormEvent<HTMLFormElement>) {
@@ -79,25 +106,26 @@ export function CheckoutSettlementDialog({ reference, onClose }: { reference: st
     if (!canCheckout) { setError('Record the outstanding balance or select an authorized override reason.'); return; }
     setBusy(true); setError(''); setSuccess('');
     try {
-      const body = await apiRequest<CheckoutResult>(`/reservations/${encodeURIComponent(reference)}/check-out`, { method: 'POST', body: JSON.stringify({ allowOutstanding: outstanding > 0.005, overrideReason: outstanding > 0.005 ? overrideReason : undefined, note: note.trim() || undefined }) });
-      setResult(body); setSuccess('Checkout finalized. The final folio is now immutable.');
+      const body = await apiRequest<CheckoutResponse>(`/reservations/${encodeURIComponent(reference)}/check-out`, { method: 'POST', body: JSON.stringify({ allowOutstanding: outstanding > 0.005, overrideReason: outstanding > 0.005 ? overrideReason : undefined, note: note.trim() || undefined }) });
+      setResult(normalizeCheckoutResult(body)); setSuccess('Checkout finalized. The final folio is now immutable.');
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not finalize checkout.'); }
     finally { setBusy(false); }
   }
 
   async function printFolio() {
     if (!result) return;
-    const folio = await apiRequest<CheckoutResult>(`/reservations/${encodeURIComponent(reference)}/final-folio`);
-    const popup = window.open('', '_blank', 'noopener,noreferrer,width=900,height=720');
-    if (!popup) { setError('Allow pop-ups to print the final folio.'); return; }
-    popup.document.open();
-    popup.document.write(buildFinalFolioPrintHtml(folio));
-    popup.document.close(); popup.focus(); popup.print();
+    setError('');
+    try {
+      const folio = await apiRequest<CheckoutResult>(`/reservations/${encodeURIComponent(reference)}/final-folio`);
+      setFolioHtml(buildFinalFolioPrintHtml(folio));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not load the final folio.');
+    }
   }
 
-  return <div className="arrivalFolioDialogBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="arrivalFolioDialog checkoutDialog" role="dialog" aria-modal="true" aria-labelledby="checkout-settlement-title">
-      <header><div><span className="eyebrow">Front Desk Settlement</span><h3 id="checkout-settlement-title">Checkout settlement</h3><p>{reference}</p></div><button className="uiModalClose" type="button" aria-label="Close checkout settlement" onClick={onClose}>×</button></header>
+  return <div className="arrivalFolioDialogBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
+    <section ref={dialogRef} className="arrivalFolioDialog checkoutDialog" role="dialog" aria-modal="true" aria-labelledby="checkout-settlement-title">
+      <header><div><span className="eyebrow">Front Desk Settlement</span><h3 id="checkout-settlement-title">Checkout settlement</h3><p>{reference}</p></div><button className="uiModalClose" type="button" disabled={busy} aria-label="Close checkout settlement" onClick={requestClose}>×</button></header>
       <div className="checkoutDialogBody">
         {loading && <div className="arrivalFolioEmpty" role="status">Loading checkout preview…</div>}
         {!loading && error && <p className="arrivalFolioError" role="alert">{error}</p>}
@@ -111,8 +139,9 @@ export function CheckoutSettlementDialog({ reference, onClose }: { reference: st
           {success && <p className="arrivalDetailsSuccess" role="status">{success}</p>}
         </>}
         {result && <div className="checkoutComplete"><p className="checkoutPaidMessage">{success}</p><h4>Final folio created</h4><p><strong>{result.finalFolioNumber}</strong></p><div className="checkoutTotals"><div><span>Status</span><strong>{label(result.status)}</strong></div><div><span>Gross total</span><strong>{money(result.settlement.grossAmount)}</strong></div><div><span>Paid</span><strong>{money(result.settlement.paidAmount)}</strong></div><div><span>Balance</span><strong>{money(result.settlement.balanceAmount)}</strong></div></div><p>Assigned rooms are now DIRTY and housekeeping tasks have been created. Further folio postings are blocked.</p></div>}
+        {result && folioHtml && <section aria-label="Final folio preview"><h4>Final folio preview</h4><iframe title="Final folio preview" sandbox="allow-same-origin allow-modals" srcDoc={folioHtml} style={{ width: '100%', height: 520, border: '1px solid #d6e3e8', background: '#fff' }} />{folioDownloadUrl && <a className="smallBtn secondary" download={`${result.finalFolioNumber}.html`} href={folioDownloadUrl}>Download printable folio</a>}</section>}
       </div>
-      <footer className="checkoutDialogFooter"><button className="smallBtn secondary" type="button" onClick={onClose}>{result ? 'Close' : 'Cancel'}</button>{result ? <button className="smallBtn" type="button" onClick={() => void printFolio()}>Print Final Folio</button> : <button className="smallBtn" type="button" disabled={busy || loading || !preview || !canCheckout} onClick={() => void completeCheckout()}>{busy ? 'Finalizing…' : 'Complete checkout'}</button>}</footer>
+      <footer className="checkoutDialogFooter"><button className="smallBtn secondary" type="button" disabled={busy} onClick={requestClose}>{result ? 'Close' : 'Cancel'}</button>{result ? <button className="smallBtn" type="button" onClick={() => void printFolio()}>View final folio</button> : <button className="smallBtn" type="button" disabled={busy || loading || !preview || !canCheckout} onClick={() => void completeCheckout()}>{busy ? 'Finalizing…' : 'Complete checkout'}</button>}</footer>
     </section>
   </div>;
 }

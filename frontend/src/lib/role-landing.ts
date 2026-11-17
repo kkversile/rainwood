@@ -13,9 +13,9 @@ const rolePrefixes: Record<string, string[]> = {
   SUPER_ADMIN: ['/admin/'],
   CORPORATE_ADMIN: ['/admin/'],
   ADMIN: ['/admin/'],
-  RESERVATION: ['/admin/dashboard', '/admin/reservations', '/admin/front-desk', '/admin/room-rack', '/admin/logbook', '/admin/arrivals', '/admin/in-house', '/admin/lost-found', '/admin/guests', '/admin/payments', '/admin/reports', '/admin/inquiries', '/admin/cashier', '/admin/tax-invoices', '/admin/groups', '/admin/banquets', '/admin/banquets/calendar', '/admin/function-spaces'],
-  ACCOUNTS: ['/admin/dashboard', '/admin/payments', '/admin/reports', '/admin/expenses', '/admin/corporates', '/admin/lost-found', '/admin/cashier', '/admin/tax-settings', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds', '/admin/logbook', '/admin/groups', '/admin/banquets', '/admin/banquets/calendar', '/admin/function-spaces'],
-  VIEWER: ['/admin/dashboard', '/admin/reports', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds', '/admin/logbook', '/admin/groups', '/admin/banquets', '/admin/banquets/calendar', '/admin/function-spaces'],
+  RESERVATION: ['/admin/reservations', '/admin/front-desk', '/admin/room-rack', '/admin/logbook', '/admin/arrivals', '/admin/in-house', '/admin/lost-found', '/admin/guests', '/admin/payments', '/admin/reports', '/admin/inquiries', '/admin/cashier', '/admin/tax-invoices', '/admin/groups', '/admin/banquets', '/admin/banquets/calendar', '/admin/function-spaces'],
+  ACCOUNTS: ['/admin/payments', '/admin/reports', '/admin/expenses', '/admin/corporates', '/admin/lost-found', '/admin/cashier', '/admin/tax-settings', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds', '/admin/logbook', '/admin/groups', '/admin/banquets', '/admin/banquets/calendar', '/admin/function-spaces'],
+  VIEWER: ['/admin/reports', '/admin/tax-invoices', '/admin/credit-notes', '/admin/tds', '/admin/logbook', '/admin/groups', '/admin/banquets', '/admin/banquets/calendar', '/admin/function-spaces'],
   SERVICE_STAFF: ['/staff'],
   AGENT: ['/agent'],
 };
@@ -37,5 +37,6 @@ export function getSafePostLoginRoute(role: string, requestedPath?: string | nul
   const rawPath = requestedPath ?? '';
   const [rawPathname, query = ''] = rawPath.split('?');
   const pathname = rawPathname === '/rainwood' ? '/' : rawPathname.startsWith('/rainwood/') ? rawPathname.slice('/rainwood'.length) : rawPathname;
+  if (['/agent/login', '/agent/register', '/staff/login', '/login'].includes(pathname)) return getDefaultRouteForRole(role);
   return isRoleRouteAllowed(role, pathname) ? `${pathname}${query ? `?${query}` : ''}` : getDefaultRouteForRole(role);
 }

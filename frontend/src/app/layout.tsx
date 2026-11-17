@@ -16,6 +16,9 @@ import './amenities-semantic-icons.css';
 import './amenities-stitch-icons.css';
 import './hotel-map.css';
 import './images-media.css';
+import './management-dashboard.css';
+import './rainwood-workspace.css';
+import './rainwood-portals.css';
 import { Shell } from '../components/Shell';
 import { DialogProvider } from '../components/ReactDialog';
 

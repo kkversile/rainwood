@@ -12,7 +12,7 @@ export default function AgentOnboarding({ user }: { user: AgentUser }) {
     <div className="agentOnboardingHero">
       <span className={`status ${statusClass}`}>{onboardingStatusLabel(user.onboardingStatus)}</span>
       <h2>Welcome{user.companyName ? `, ${user.companyName}` : ''}</h2>
-      <p>{user.onboardingStatus === 'KYC_PENDING' ? 'Complete your onboarding so our team can review and enable hotel and booking access.' : 'Your onboarding documents are with our team. You can update your profile while your application is being reviewed.'}</p>
+      <p>{user.onboardingStatus === 'ACTIVE' ? 'Your account is active. You can view assigned rates and create bookings.' : user.onboardingStatus === 'KYC_PENDING' ? 'Complete your onboarding so our team can review and enable hotel and booking access.' : 'Your onboarding documents are with our team. You can update your profile while your application is being reviewed.'}</p>
     </div>
     <div className="agentOnboardingSteps">
       <div className="agentOnboardingStep done"><b>✓</b><span>Registration details</span></div>

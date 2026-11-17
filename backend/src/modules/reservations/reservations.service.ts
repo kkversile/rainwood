@@ -566,6 +566,7 @@ export class ReservationsService {
         totalAmount: true,
         advanceAmount: true,
         balanceAmount: true,
+        payments: { select: { amount: true, verified: true } },
         folioCharges: {
           orderBy: [{ postingDate: 'desc' }, { createdAt: 'desc' }],
           include: {
@@ -577,18 +578,22 @@ export class ReservationsService {
     });
     if (!reservation) throw new NotFoundException('Reservation not found');
     const activeCharges = reservation.folioCharges.filter((charge) => charge.status === 'POSTED');
-    const incidentalCharges = activeCharges.reduce((sum, charge) => sum + Number(charge.totalAmount), 0);
-    const reservationBalance = Number(reservation.balanceAmount);
+    const totals = calculateSettlementTotals({ ...reservation, folioCharges: activeCharges });
+    const incidentalCharges = totals.incidentalAmount;
+    const reservationPaid = Math.min(totals.paidAmount, totals.reservationAmount);
+    const reservationBalance = Math.max(totals.reservationAmount - reservationPaid, 0);
+    const incidentalPayments = Math.min(Math.max(totals.paidAmount - reservationPaid, 0), incidentalCharges);
+    const incidentalBalance = Math.max(incidentalCharges - incidentalPayments, 0);
     return {
       reference: reservation.reference,
       currency: reservation.currency,
       status: reservation.status,
       reservationAmount: Number(reservation.totalAmount),
-      reservationPaid: Number(reservation.advanceAmount),
+      reservationPaid,
       reservationBalance,
-      incidentalPayments: 0,
-      incidentalBalance: incidentalCharges,
-      totalOutstanding: reservationBalance + incidentalCharges,
+      incidentalPayments,
+      incidentalBalance,
+      totalOutstanding: totals.outstandingAmount,
       charges: reservation.folioCharges.map((charge) => ({
         id: charge.id,
         category: charge.category,
@@ -609,12 +614,12 @@ export class ReservationsService {
       })),
       totals: {
         reservationAmount: Number(reservation.totalAmount),
-        reservationPaid: Number(reservation.advanceAmount),
+        reservationPaid,
         reservationBalance,
         incidentalCharges,
-        incidentalPayments: 0,
-        incidentalBalance: incidentalCharges,
-        totalOutstanding: reservationBalance + incidentalCharges,
+        incidentalPayments,
+        incidentalBalance,
+        totalOutstanding: totals.outstandingAmount,
       },
     };
   }
